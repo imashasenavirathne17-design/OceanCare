@@ -1,0 +1,24 @@
+{
+  "name": "health-tracker",
+  "version": "1.0.0",
+  "description": "MERN app. Health Officer role.",
+  "main": "index.js",
+  "scripts": {
+  "dev": "concurrently \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
+  "test": "echo \"Error: no test specified\" && exit 1"
+   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/imashasenavirathne17-design/health-tracker-ship-crew.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/imashasenavirathne17-design/health-tracker-ship-crew/issues"
+  },
+  "homepage": "https://github.com/imashasenavirathne17-design/health-tracker-ship-crew#readme",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
