@@ -1,0 +1,132 @@
+/* Minimal shared header styles for active/hover states without overriding layout */
+
+/* Active link highlight across pages */
+header nav a.active,
+header nav a:hover {
+  color: var(--accent, #f4a261);
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+/* Auth buttons: indicate current page (e.g., /register) */
+.auth-buttons .btn.current {
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.5) inset, 0 0 0 2px rgba(255,255,255,0.5);
+}
+
+/* Better hover for buttons */
+.auth-buttons .btn.btn-outline:hover {
+  background: #fff;
+  color: var(--primary, #1a4b8c);
+}
+.auth-buttons .btn.btn-primary:hover {
+  background: #e76f51; /* matches accent hover used elsewhere */
+  border-color: #e76f51;
+}
+
+/* Standardize header sizing and alignment across all public pages */
+header {
+  min-height: 64px;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  /* Shared gradient and text color applied uniformly across public pages */
+  background: linear-gradient(135deg, var(--primary, #1a4b8c) 0%, #0a2a5e 100%);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+header .container {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+header .header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 64px; /* consistent bar height */
+}
+
+/* Logo: consistent icon and text sizes */
+header .logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  line-height: 1;
+  text-decoration: none;
+  height: auto;          /* prevent global .logo rules from App.css affecting it */
+  padding: 0;            /* neutralize external padding */
+}
+
+header .logo i {
+  font-size: 28px; /* slightly larger for better presence */
+  color: var(--accent, #f4a261);
+  line-height: 1;      /* crisp vertical alignment */
+}
+
+header .logo h1 {
+  font-size: 22px; /* slightly larger text */
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+  line-height: 1;      /* crisp vertical alignment */
+}
+
+/* Nav layout */
+header nav ul {
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 2.2vw, 28px); /* slightly looser spacing */
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+header nav a {
+  display: inline-block;
+  padding: 8px 10px;
+  color: rgba(255,255,255,0.9);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+/* Auth buttons area */
+header .auth-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+header .auth-buttons .btn {
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+/* Consistent header auth buttons across all public pages */
+header .auth-buttons .btn.btn-outline {
+  background: transparent;
+  color: #fff;
+  border: 2px solid #fff;
+}
+
+header .auth-buttons .btn.btn-primary {
+  background: var(--accent, #f4a261);
+  color: #fff;
+  border: 2px solid var(--accent, #f4a261);
+}
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+  header .header-content {
+    gap: 12px;
+  }
+  header .logo h1 { font-size: 20px; }
+  header .logo i { font-size: 26px; }
+}
+
+@media (max-width: 720px) {
+  header .auth-buttons .btn { padding: 8px 10px; }
+  header nav a { padding: 6px 8px; }
+}

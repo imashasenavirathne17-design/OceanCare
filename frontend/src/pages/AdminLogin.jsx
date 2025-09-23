@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import './healthOfficerLogin.css';
+import './adminLogin.css';
 import { loginUser } from '../lib/auth';
 import { saveSession } from '../lib/token';
 
-function HealthOfficerLogin() {
+function AdminLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({ email: '', password: '', remember: false });
   const navigate = useNavigate();
@@ -39,43 +39,42 @@ function HealthOfficerLogin() {
   };
 
   return (
-    <div className="health-login">
+    <div className="admin-login">
       <div className="container">
         <div className="auth-header">
           <div className="logo">
-            <i className="fas fa-user-md" aria-hidden="true"></i>
-            <h1>OCEANCARE HEALTH OFFICER</h1>
+            <i className="fas fa-cog" aria-hidden="true"></i>
+            <h1>OCEANCARE ADMINISTRATOR</h1>
           </div>
-          <p>Login to monitor crew health and provide medical support</p>
+          <p>Login to manage system configuration and user access</p>
         </div>
 
         <div className="auth-container">
           <div className="auth-welcome">
-            <h2>Welcome Health Officer</h2>
+            <h2>Welcome Administrator</h2>
             <p>
-              Access the medical dashboard to monitor crew health, review reports, and provide telemedicine
-              services to crew members.
+              Access the system administration panel to manage users, configure settings, and monitor overall
+              system performance.
             </p>
             <ul className="feature-list">
-              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Monitor crew health status</li>
-              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Review medical reports and records</li>
-              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Provide telemedicine consultations</li>
-              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Manage medical treatments</li>
-              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Track health trends across the vessel</li>
+              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Manage user accounts and permissions</li>
+              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Configure system settings</li>
+              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Monitor system performance and usage</li>
+              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Generate system-wide reports</li>
+              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Manage security and access controls</li>
             </ul>
           </div>
 
           <div className="auth-form-container">
-            <h2 className="form-title">Health Officer Login</h2>
-
+            <h2 className="form-title">Administrator Login</h2>
             <form id="loginForm" onSubmit={onSubmit}>
               <div className="form-group">
-                <label htmlFor="email">Professional Email Address</label>
+                <label htmlFor="email">Administrator Email Address</label>
                 <input
                   type="email"
                   id="email"
                   className="form-control"
-                  placeholder="medical.officer@example.com"
+                  placeholder="admin@example.com"
                   value={form.email}
                   onChange={onChange}
                   required
@@ -117,7 +116,7 @@ function HealthOfficerLogin() {
               </div>
 
               <div className="form-group">
-                <button type="submit" className="btn btn-primary">Login to Medical Dashboard</button>
+                <button type="submit" className="btn btn-primary">Login to Admin Panel</button>
               </div>
 
               <div className="form-footer">
@@ -126,7 +125,7 @@ function HealthOfficerLogin() {
             </form>
 
             <div className="role-switch">
-              Not a Health Officer? <Link to="/login">Select different role</Link>
+              Not an Administrator? <Link to="/login">Select different role</Link>
             </div>
           </div>
         </div>
@@ -135,4 +134,4 @@ function HealthOfficerLogin() {
   );
 }
 
-export default HealthOfficerLogin;
+export default AdminLogin;

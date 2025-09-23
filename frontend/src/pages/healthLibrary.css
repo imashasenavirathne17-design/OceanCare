@@ -1,0 +1,103 @@
+:root {
+  --primary: #1a4b8c;
+  --secondary: #2a9d8f;
+  --accent: #f4a261;
+  --light: #f8f9fa;
+  --dark: #343a40;
+  --danger: #e76f51;
+  --success: #2a9d8f;
+}
+
+/* Scope to page */
+.healthlib-page { width: 100%; color: #333; background: #f0f8ff; line-height: 1.6; }
+.healthlib-page * { box-sizing: border-box; }
+.healthlib-page .container { width: 100%; max-width: 100%; margin: 0 auto; padding: 0 20px; }
+
+/* Header & Navigation styles are centralized in components/header.css to ensure uniformity across public pages */
+
+/* Buttons */
+.healthlib-page .btn { padding: 8px 20px; border-radius: 50px; text-decoration: none; font-weight: 600; transition: all .3s; display: inline-block; }
+.healthlib-page .btn-outline { border: 2px solid #fff; color: #fff; background: transparent; }
+.healthlib-page .btn-outline:hover { background: #fff; color: var(--primary); }
+.healthlib-page .btn-primary { background: var(--accent); color: #fff; border: 2px solid var(--accent); }
+.healthlib-page .btn-primary:hover { background: #e76f51; border-color: #e76f51; }
+
+/* Page Header */
+.healthlib-page .page-header { background: linear-gradient(rgba(26,75,140,.9), rgba(26,75,140,.9)), url('https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80'); background-size: cover; background-position: center; color: #fff; padding: 80px 0; text-align: center; }
+.healthlib-page .page-header h2 { font-size: 2.8rem; margin-bottom: 20px; font-weight: 800; }
+.healthlib-page .page-header p { font-size: 1.2rem; max-width: 700px; margin: 0 auto; }
+
+/* Search */
+.healthlib-page .search-section { padding: 60px 0; background: #fff; text-align: center; }
+.healthlib-page .search-box { max-width: 600px; margin: 0 auto; position: relative; }
+.healthlib-page .search-box input { width: 100%; padding: 15px 20px; border: 2px solid var(--primary); border-radius: 50px; font-size: 1.1rem; }
+.healthlib-page .search-box button { position: absolute; right: 5px; top: 5px; background: var(--primary); color: #fff; border: none; border-radius: 50px; padding: 10px 20px; cursor: pointer; }
+
+/* Health Topics */
+.healthlib-page .health-topics { padding: 80px 0; background: #fff; }
+.healthlib-page .section-title { text-align: center; margin-bottom: 50px; }
+.healthlib-page .section-title h2 { font-size: 2.5rem; color: var(--primary); margin-bottom: 15px; }
+.healthlib-page .section-title p { color: var(--dark); max-width: 700px; margin: 0 auto; }
+.healthlib-page .topics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px; }
+.healthlib-page .topic-card { background: var(--light); border-radius: 10px; padding: 30px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,.05); transition: transform .3s; position: relative; overflow: hidden; }
+.healthlib-page .topic-card:hover { transform: translateY(-10px); }
+.healthlib-page .topic-card i { font-size: 40px; color: var(--secondary); margin-bottom: 20px; }
+.healthlib-page .topic-card h3 { font-size: 1.5rem; margin-bottom: 15px; color: var(--primary); }
+
+/* Articles */
+.healthlib-page .articles { padding: 80px 0; background: var(--light); }
+.healthlib-page .articles-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 30px; }
+.healthlib-page .article-card { background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,.05); transition: transform .3s; }
+.healthlib-page .article-card:hover { transform: translateY(-10px); }
+.healthlib-page .article-image { height: 200px; background-size: cover; background-position: center; }
+.healthlib-page .article-content { padding: 25px; }
+.healthlib-page .article-content h3 { color: var(--primary); margin-bottom: 15px; font-size: 1.4rem; }
+.healthlib-page .article-meta { display: flex; justify-content: space-between; color: #777; font-size: .9rem; margin-bottom: 15px; }
+.healthlib-page .read-more { display: inline-block; color: var(--secondary); font-weight: 600; text-decoration: none; margin-top: 15px; }
+.healthlib-page .read-more:hover { text-decoration: underline; }
+
+/* Guides */
+.healthlib-page .guides { padding: 80px 0; background: #fff; }
+.healthlib-page .guide { display: flex; align-items: center; gap: 50px; margin-bottom: 60px; background: var(--light); border-radius: 10px; padding: 30px; flex-wrap: wrap; }
+.healthlib-page .guide.reverse { flex-direction: row-reverse; }
+.healthlib-page .guide-content { flex: 1; min-width: 280px; }
+.healthlib-page .guide-image { flex: 1; min-width: 280px; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.1); }
+.healthlib-page .guide-image img { width: 100%; height: auto; display: block; }
+.healthlib-page .guide-content h3 { font-size: 1.8rem; color: var(--primary); margin-bottom: 20px; }
+.healthlib-page .guide-content p { margin-bottom: 20px; font-size: 1.1rem; }
+.healthlib-page .step-list { list-style: none; counter-reset: step-counter; padding-left: 0; }
+.healthlib-page .step-list li { margin-bottom: 15px; padding-left: 40px; position: relative; }
+.healthlib-page .step-list li:before { content: counter(step-counter); counter-increment: step-counter; position: absolute; left: 0; top: 0; width: 30px; height: 30px; background: var(--secondary); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+
+/* FAQ */
+.healthlib-page .faq { padding: 80px 0; background: var(--light); }
+.healthlib-page .faq-item { margin-bottom: 20px; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,.05); }
+.healthlib-page .faq-question { width: 100%; padding: 20px; background: var(--primary); color: #fff; font-weight: 600; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border: 0; text-align: left; }
+.healthlib-page .faq-answer { padding: 0 20px; max-height: 0; overflow: hidden; transition: max-height .3s ease, padding .3s ease; }
+.healthlib-page .faq-answer.active { padding: 20px; max-height: 300px; }
+
+/* Footer */
+.healthlib-page footer { background: var(--dark); color: #fff; padding: 60px 0 30px; }
+.healthlib-page .footer-content { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 40px; margin-bottom: 40px; }
+.healthlib-page .footer-column h3 { font-size: 1.3rem; margin-bottom: 20px; color: var(--accent); }
+.healthlib-page .footer-column ul { list-style: none; }
+.healthlib-page .footer-column ul li { margin-bottom: 10px; }
+.healthlib-page .footer-column a { color: #ddd; text-decoration: none; transition: color .3s; }
+.healthlib-page .footer-column a:hover { color: var(--accent); }
+.healthlib-page .social-links { display: flex; gap: 15px; margin-top: 20px; }
+.healthlib-page .social-links a { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; background: rgba(255,255,255,.1); border-radius: 50%; transition: all .3s; }
+.healthlib-page .social-links a:hover { background: var(--accent); transform: translateY(-5px); }
+.healthlib-page .copyright { text-align: center; padding-top: 30px; border-top: 1px solid rgba(255,255,255,.1); color: #aaa; font-size: .9rem; }
+
+/* Responsive */
+@media (max-width: 968px) {
+  .healthlib-page .guide,
+  .healthlib-page .guide.reverse { flex-direction: column; }
+  .healthlib-page .guide-image { margin-top: 30px; }
+}
+@media (max-width: 768px) {
+  .healthlib-page .header-content { flex-direction: column; gap: 15px; }
+  .healthlib-page nav ul { gap: 15px; justify-content: center; }
+  .healthlib-page .page-header h2 { font-size: 2.2rem; }
+  .healthlib-page .page-header p { font-size: 1rem; }
+}

@@ -1,0 +1,59 @@
+/* Administrator Login Page Styles (scoped) */
+.admin-login {
+  min-height: 100vh;
+  background-color: #f0f8ff;
+  color: #333;
+  display: flex;
+  align-items: center;
+  padding: 20px 0;
+}
+
+.admin-login .container { width: 100%; max-width: 1000px; margin: 0 auto; padding-left: clamp(12px, 2vw, 20px); padding-right: clamp(12px, 2vw, 20px); }
+
+/* Header */
+.admin-login .auth-header { text-align: center; margin-bottom: 30px; }
+.admin-login .logo { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 20px; }
+.admin-login .logo i { font-size: 42px; color: var(--admin, #8338ec); }
+.admin-login .logo h1 { font-size: 32px; font-weight: 700; color: var(--admin, #8338ec); }
+.admin-login .auth-header p { font-size: 1.1rem; color: var(--dark, #343a40); max-width: 600px; margin: 0 auto; }
+
+/* Auth Container */
+.admin-login .auth-container { display: flex; background: #fff; border-radius: 15px; overflow: hidden; box-shadow: 0 15px 40px rgba(0,0,0,.15); }
+.admin-login .auth-welcome { flex: 1; background: linear-gradient(135deg, var(--admin, #8338ec) 0%, #5a2ca5 100%); color: #fff; padding: 40px; display: flex; flex-direction: column; justify-content: center; }
+.admin-login .auth-welcome h2 { font-size: 2rem; margin-bottom: 20px; }
+.admin-login .auth-welcome p { margin-bottom: 25px; font-size: 1.1rem; line-height: 1.6; }
+.admin-login .feature-list { list-style: none; margin-top: 30px; }
+.admin-login .feature-list li { margin-bottom: 15px; display: flex; align-items: center; gap: 12px; }
+.admin-login .feature-list i { color: rgba(255, 255, 255, 0.9); font-size: 20px; }
+
+.admin-login .auth-form-container { flex: 1; padding: 40px; }
+
+/* Form */
+.admin-login .form-title { font-size: 1.8rem; color: var(--admin, #8338ec); margin-bottom: 25px; text-align: center; }
+.admin-login .form-group { margin-bottom: 20px; }
+.admin-login .form-group label { display: block; margin-bottom: 8px; font-weight: 600; color: var(--dark, #343a40); }
+.admin-login .form-control { width: 100%; padding: 14px 16px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; transition: border-color .3s; }
+.admin-login .form-control:focus { outline: none; border-color: var(--admin, #8338ec); box-shadow: 0 0 0 3px rgba(131,56,236,.1); }
+
+.admin-login .password-toggle { position: relative; }
+.admin-login .password-toggle .toggle-icon { position: absolute; right: 15px; top: 14px; color: #777; cursor: pointer; }
+
+.admin-login .btn { padding: 14px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; transition: all .3s; display: inline-block; width: 100%; text-align: center; border: none; cursor: pointer; font-size: 1rem; }
+.admin-login .btn-primary { background: var(--admin, #8338ec); color: #fff; }
+.admin-login .btn-primary:hover { background: #5a2ca5; }
+
+.admin-login .form-footer { text-align: center; margin-top: 25px; color: #777; }
+.admin-login .form-footer a { color: var(--admin, #8338ec); text-decoration: none; font-weight: 600; }
+.admin-login .form-footer a:hover { text-decoration: underline; }
+
+.admin-login .role-switch { text-align: center; margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 8px; }
+.admin-login .role-switch a { color: var(--admin, #8338ec); font-weight: 600; }
+
+/* Responsive */
+@media (max-width: 900px) {
+  .admin-login .auth-container { flex-direction: column; }
+  .admin-login .auth-welcome { padding: 30px; }
+}
+@media (max-width: 576px) {
+  .admin-login .auth-form-container { padding: 25px; }
+}

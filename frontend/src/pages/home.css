@@ -1,0 +1,398 @@
+:root {
+  --primary: #1a4b8c;
+  --secondary: #2a9d8f;
+  --accent: #f4a261;
+  --light: #f8f9fa;
+  --dark: #343a40;
+  --danger: #e76f51;
+  --success: #2a9d8f;
+  --header-h: 64px;
+}
+
+/* Medium screens: stack or center items sooner to avoid overflow */
+@media (max-width: 1100px) {
+  .header-content {
+    row-gap: 12px;
+  }
+  nav ul {
+    justify-content: center;
+  }
+  .auth-buttons {
+    justify-content: center;
+    width: 100%;
+  }
+}
+
+html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto; /* single scrollbar managed by browser */
+}
+
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: visible; /* avoid nested scrollbars on body */
+  margin: 0;
+  padding: 0;
+}
+
+#root,
+#root > * {
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: visible; /* avoid nested vertical scrollbars */
+}
+
+.page {
+  width: 100%;
+  max-width: 100%;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+*::before,
+*::after {
+  box-sizing: inherit;
+}
+
+/* Ensure structural blocks align to the layout width without 100vw gutter issues */
+header, section, footer {
+  width: 100%;
+}
+
+/* Prevent child media from causing overflow */
+img, video, canvas, svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+body {
+  background-color: #f0f8ff;
+  color: #333;
+  line-height: 1.6;
+}
+
+.container {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  padding-left: clamp(12px, 2vw, 20px);
+  padding-right: clamp(12px, 2vw, 20px);
+}
+
+/* Header & Navigation styles are centralized in components/header.css to ensure uniformity */
+
+.btn {
+  padding: 8px 20px;
+  border-radius: 50px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.3s;
+  display: inline-block;
+}
+
+.btn-outline {
+  border: 2px solid white;
+  color: white;
+  background: transparent;
+}
+
+.btn-outline:hover {
+  background: white;
+  color: var(--primary);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  border: 2px solid var(--accent);
+}
+
+.btn-primary:hover {
+  background: #e76f51;
+  border-color: #e76f51;
+}
+
+/* Ensure the hero CTA uses the accent orange explicitly */
+.hero .btn.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border: 2px solid var(--accent);
+}
+
+.hero .btn.btn-primary:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Hero Section */
+.hero {
+  position: relative;
+  color: white;
+  padding: 56px 0;
+  text-align: center;
+  width: 100%;
+  margin: 0;
+  /* Avoid forcing viewport height which can create nested scrolling */
+  min-height: unset;
+  display: flex;
+  align-items: center;
+  overflow: hidden; /* only for the background pseudo-element */
+}
+
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(rgba(26, 75, 140, 0.8), rgba(26, 75, 140, 0.9)), url('https://images.unsplash.com/photo-1516321318423-f06f85e504b3?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80');
+  background-size: cover;
+  background-position: center;
+  z-index: 0;
+}
+
+/* Make hero content full-bleed across the viewport while keeping inner padding */
+.hero .container {
+  max-width: 100%;
+  padding-left: 20px;
+  padding-right: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.hero h2 {
+  font-size: 3rem;
+  margin-bottom: 20px;
+  font-weight: 800;
+}
+
+.hero p {
+  font-size: 1.2rem;
+  max-width: 700px;
+  margin: 0 auto 30px;
+}
+
+/* Features Section */
+.features {
+  padding: 80px 0;
+  background: white;
+  width: 100%;
+}
+
+.section-title {
+  text-align: center;
+  margin-bottom: 50px;
+}
+
+.section-title h2 {
+  font-size: 2.5rem;
+  color: var(--primary);
+  margin-bottom: 15px;
+}
+
+.section-title p {
+  color: var(--dark);
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 30px;
+}
+
+.feature-card {
+  background: var(--light);
+  border-radius: 10px;
+  padding: 30px;
+  text-align: center;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s;
+}
+
+.feature-card:hover {
+  transform: translateY(-10px);
+}
+
+.feature-card i {
+  font-size: 40px;
+  color: var(--secondary);
+  margin-bottom: 20px;
+}
+
+.feature-card h3 {
+  font-size: 1.5rem;
+  margin-bottom: 15px;
+  color: var(--primary);
+}
+
+/* Emergency Section */
+.emergency {
+  background: linear-gradient(135deg, var(--danger) 0%, #d64d2d 100%);
+  color: white;
+  padding: 80px 0;
+  text-align: center;
+  width: 100%;
+}
+
+.emergency h2 {
+  font-size: 2.5rem;
+  margin-bottom: 20px;
+}
+
+.emergency p {
+  max-width: 700px;
+  margin: 0 auto 30px;
+  font-size: 1.2rem;
+}
+
+.emergency-btn {
+  background: white;
+  color: var(--danger);
+  font-size: 1.2rem;
+  padding: 15px 40px;
+}
+
+.emergency-btn:hover {
+  background: #ffe6df;
+}
+
+/* Health Tips Section */
+.health-tips {
+  padding: 80px 0;
+  background: var(--light);
+  width: 100%;
+}
+
+.tips-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 30px;
+}
+
+.tip-card {
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+}
+
+.tip-img {
+  height: 200px;
+  background-size: cover;
+  background-position: center;
+}
+
+.tip-content {
+  padding: 25px;
+}
+
+.tip-content h3 {
+  color: var(--primary);
+  margin-bottom: 15px;
+}
+
+/* Footer */
+footer {
+  background: var(--dark);
+  color: white;
+  padding: 60px 0 30px;
+  width: 100%;
+}
+
+.footer-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 40px;
+  margin-bottom: 40px;
+}
+
+.footer-column h3 {
+  font-size: 1.3rem;
+  margin-bottom: 20px;
+  color: var(--accent);
+}
+
+.footer-column ul {
+  list-style: none;
+}
+
+.footer-column ul li {
+  margin-bottom: 10px;
+}
+
+.footer-column a {
+  color: #ddd;
+  text-decoration: none;
+  transition: color 0.3s;
+}
+
+.footer-column a:hover {
+  color: var(--accent);
+}
+
+.social-links {
+  display: flex;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.social-links a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  transition: all 0.3s;
+}
+
+.social-links a:hover {
+  background: var(--accent);
+  transform: translateY(-5px);
+}
+
+.copyright {
+  text-align: center;
+  padding-top: 30px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  color: #aaa;
+  font-size: 0.9rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .header-content {
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  nav ul {
+    gap: 15px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .hero h2 {
+    font-size: 2.2rem;
+  }
+
+  .hero p {
+    font-size: 1rem;
+  }
+
+  .hero {
+    padding: 40px 0;
+    min-height: unset;
+  }
+}

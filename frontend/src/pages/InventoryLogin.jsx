@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import './healthOfficerLogin.css';
+import './inventoryLogin.css';
 import { loginUser } from '../lib/auth';
 import { saveSession } from '../lib/token';
 
-function HealthOfficerLogin() {
+function InventoryLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({ email: '', password: '', remember: false });
   const navigate = useNavigate();
@@ -39,35 +39,34 @@ function HealthOfficerLogin() {
   };
 
   return (
-    <div className="health-login">
+    <div className="inventory-login">
       <div className="container">
         <div className="auth-header">
           <div className="logo">
-            <i className="fas fa-user-md" aria-hidden="true"></i>
-            <h1>OCEANCARE HEALTH OFFICER</h1>
+            <i className="fas fa-pills" aria-hidden="true"></i>
+            <h1>OCEANCARE INVENTORY MANAGER</h1>
           </div>
-          <p>Login to monitor crew health and provide medical support</p>
+          <p>Login to manage medical supplies and inventory</p>
         </div>
 
         <div className="auth-container">
           <div className="auth-welcome">
-            <h2>Welcome Health Officer</h2>
+            <h2>Welcome Inventory Manager</h2>
             <p>
-              Access the medical dashboard to monitor crew health, review reports, and provide telemedicine
-              services to crew members.
+              Access the inventory management system to track medical supplies, manage stock levels, and ensure
+              adequate medical resources are available.
             </p>
             <ul className="feature-list">
-              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Monitor crew health status</li>
-              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Review medical reports and records</li>
-              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Provide telemedicine consultations</li>
-              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Manage medical treatments</li>
-              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Track health trends across the vessel</li>
+              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Track medical inventory levels</li>
+              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Manage supply orders and replenishment</li>
+              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Monitor medication expiration dates</li>
+              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Generate inventory reports</li>
+              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Coordinate with health officers on supply needs</li>
             </ul>
           </div>
 
           <div className="auth-form-container">
-            <h2 className="form-title">Health Officer Login</h2>
-
+            <h2 className="form-title">Inventory Manager Login</h2>
             <form id="loginForm" onSubmit={onSubmit}>
               <div className="form-group">
                 <label htmlFor="email">Professional Email Address</label>
@@ -75,7 +74,7 @@ function HealthOfficerLogin() {
                   type="email"
                   id="email"
                   className="form-control"
-                  placeholder="medical.officer@example.com"
+                  placeholder="inventory.manager@example.com"
                   value={form.email}
                   onChange={onChange}
                   required
@@ -117,7 +116,7 @@ function HealthOfficerLogin() {
               </div>
 
               <div className="form-group">
-                <button type="submit" className="btn btn-primary">Login to Medical Dashboard</button>
+                <button type="submit" className="btn btn-primary">Login to Inventory Dashboard</button>
               </div>
 
               <div className="form-footer">
@@ -126,7 +125,7 @@ function HealthOfficerLogin() {
             </form>
 
             <div className="role-switch">
-              Not a Health Officer? <Link to="/login">Select different role</Link>
+              Not an Inventory Manager? <Link to="/login">Select different role</Link>
             </div>
           </div>
         </div>
@@ -135,4 +134,4 @@ function HealthOfficerLogin() {
   );
 }
 
-export default HealthOfficerLogin;
+export default InventoryLogin;

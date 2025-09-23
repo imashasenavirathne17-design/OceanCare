@@ -1,0 +1,101 @@
+:root {
+  --primary: #1a4b8c;
+  --secondary: #2a9d8f;
+  --accent: #f4a261;
+  --light: #f8f9fa;
+  --dark: #343a40;
+  --danger: #e76f51;
+  --warning: #e9c46a;
+  --success: #2a9d8f;
+}
+
+.emergency-page { width: 100%; color: #333; background: #f0f8ff; line-height: 1.6; }
+.emergency-page * { box-sizing: border-box; }
+.emergency-page .container { width: 100%; max-width: 100%; margin: 0 auto; padding: 0 20px; }
+
+/* Header & Navigation styles are centralized in components/header.css to ensure uniformity across public pages */
+
+/* Buttons */
+.emergency-page .btn { padding:8px 20px; border-radius:50px; text-decoration:none; font-weight:600; transition:all .3s; display:inline-block; }
+.emergency-page .btn-outline { border:2px solid #fff; color:#fff; background:transparent; }
+.emergency-page .btn-outline:hover { background:#fff; color:var(--primary); }
+.emergency-page .btn-primary { background:var(--accent); color:#fff; border:2px solid var(--accent); }
+.emergency-page .btn-primary:hover { background:#e76f51; border-color:#e76f51; }
+.emergency-page .btn-emergency { background: var(--danger); color:#fff; border:2px solid var(--danger); font-size:1.2rem; padding:15px 30px; animation: pulse 2s infinite; }
+.emergency-page .btn-emergency:hover { background:#c53d1d; border-color:#c53d1d; }
+@keyframes pulse { 0%{transform:scale(1)} 50%{transform:scale(1.05)} 100%{transform:scale(1)} }
+
+/* Page Header */
+.emergency-page .page-header { background: linear-gradient(rgba(230,111,81,.9), rgba(230,111,81,.9)), url('https://images.unsplash.com/photo-1583309219338-a582f1f9ca6b?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80'); background-size:cover; background-position:center; color:#fff; padding:80px 0; text-align:center; }
+.emergency-page .page-header h2 { font-size:2.8rem; margin-bottom:20px; font-weight:800; }
+.emergency-page .page-header p { font-size:1.2rem; max-width:700px; margin:0 auto; }
+
+/* Emergency Alert */
+.emergency-page .emergency-alert { background: var(--danger); color:#fff; padding:20px 0; text-align:center; }
+.emergency-page .alert-content { display:flex; justify-content:center; align-items:center; gap:20px; flex-wrap:wrap; }
+
+/* Procedures */
+.emergency-page .emergency-procedures { padding:80px 0; background:#fff; }
+.emergency-page .section-title { text-align:center; margin-bottom:50px; }
+.emergency-page .section-title h2 { font-size:2.5rem; color:var(--primary); margin-bottom:15px; }
+.emergency-page .section-title p { color:var(--dark); max-width:700px; margin:0 auto; }
+.emergency-page .procedures-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); gap:30px; }
+.emergency-page .procedure-card { background: var(--light); border-radius:10px; padding:30px; box-shadow:0 5px 15px rgba(0,0,0,.05); transition: transform .3s; border-left:5px solid var(--danger); }
+.emergency-page .procedure-card:hover { transform: translateY(-10px); }
+.emergency-page .procedure-card i { font-size:40px; color:var(--danger); margin-bottom:20px; }
+.emergency-page .procedure-card h3 { font-size:1.5rem; margin-bottom:15px; color:var(--primary); }
+.emergency-page .step-list { list-style:none; counter-reset: step-counter; padding-left: 0; }
+.emergency-page .step-list li { margin-bottom:12px; padding-left:40px; position: relative; }
+.emergency-page .step-list li:before { content: counter(step-counter); counter-increment: step-counter; position:absolute; left:0; top:0; width:30px; height:30px; background: var(--danger); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; }
+
+/* First Aid Guides */
+.emergency-page .first-aid { padding:80px 0; background: var(--light); }
+.emergency-page .aid-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(300px,1fr)); gap:30px; }
+.emergency-page .aid-card { background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 5px 15px rgba(0,0,0,.05); transition: transform .3s; }
+.emergency-page .aid-card:hover { transform: translateY(-10px); }
+.emergency-page .aid-image { height:200px; background-size:cover; background-position:center; }
+.emergency-page .aid-content { padding:25px; }
+.emergency-page .aid-content h3 { color: var(--primary); margin-bottom:15px; font-size:1.4rem; }
+
+/* Contacts */
+.emergency-page .emergency-contacts { padding:80px 0; background:#fff; }
+.emergency-page .contacts-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(250px,1fr)); gap:30px; }
+.emergency-page .contact-card { background: var(--light); border-radius:10px; padding:30px; text-align:center; box-shadow:0 5px 15px rgba(0,0,0,.05); transition: transform .3s; }
+.emergency-page .contact-card:hover { transform: translateY(-10px); }
+.emergency-page .contact-card i { font-size:40px; color: var(--secondary); margin-bottom:20px; }
+.emergency-page .contact-card h3 { font-size:1.5rem; margin-bottom:15px; color: var(--primary); }
+.emergency-page .contact-info { font-size:1.2rem; font-weight:600; color: var(--danger); margin: 10px 0; }
+
+/* Emergency Kit */
+.emergency-page .emergency-kit { padding:80px 0; background: var(--light); }
+.emergency-page .kit-content { display:flex; align-items:center; gap:50px; background:#fff; border-radius:10px; padding:30px; box-shadow:0 5px 15px rgba(0,0,0,.05); flex-wrap: wrap; }
+.emergency-page .kit-list { flex:1; min-width: 280px; }
+.emergency-page .kit-image { flex:1; min-width: 280px; border-radius:10px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,.1); }
+.emergency-page .kit-image img { width:100%; height:auto; display:block; }
+.emergency-page .kit-list h3 { font-size:1.8rem; color:var(--primary); margin-bottom:20px; }
+.emergency-page .kit-list ul { list-style:none; }
+.emergency-page .kit-list li { margin-bottom:12px; display:flex; align-items:flex-start; gap:10px; }
+.emergency-page .kit-list i { color:var(--success); font-size:18px; margin-top:4px; }
+
+/* Footer */
+.emergency-page footer { background: var(--dark); color:#fff; padding:60px 0 30px; }
+.emergency-page .footer-content { display:grid; grid-template-columns: repeat(auto-fit, minmax(250px,1fr)); gap:40px; margin-bottom:40px; }
+.emergency-page .footer-column h3 { font-size:1.3rem; margin-bottom:20px; color: var(--accent); }
+.emergency-page .footer-column ul { list-style:none; }
+.emergency-page .footer-column ul li { margin-bottom:10px; }
+.emergency-page .footer-column a { color:#ddd; text-decoration:none; transition: color .3s; }
+.emergency-page .footer-column a:hover { color: var(--accent); }
+.emergency-page .social-links { display:flex; gap:15px; margin-top:20px; }
+.emergency-page .social-links a { display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; background: rgba(255,255,255,.1); border-radius:50%; transition: all .3s; }
+.emergency-page .social-links a:hover { background: var(--accent); transform: translateY(-5px); }
+.emergency-page .copyright { text-align:center; padding-top:30px; border-top:1px solid rgba(255,255,255,.1); color:#aaa; font-size:.9rem; }
+
+/* Responsive */
+@media (max-width: 968px) { .emergency-page .kit-content { flex-direction: column; } }
+@media (max-width: 768px) {
+  .emergency-page .header-content { flex-direction: column; gap: 15px; }
+  .emergency-page nav ul { gap:15px; justify-content:center; }
+  .emergency-page .page-header h2 { font-size:2.2rem; }
+  .emergency-page .page-header p { font-size:1rem; }
+  .emergency-page .alert-content { flex-direction: column; gap:10px; }
+}

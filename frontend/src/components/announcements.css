@@ -1,0 +1,8 @@
+.announcement-bar { background: #133a73; color: #fff; padding: 10px 0; }
+.announcement-bar .container { max-width: 100%; padding: 0 20px; margin: 0 auto; }
+.announcement-content { display: flex; align-items: center; gap: 12px; }
+.announcement-content i { color: #f4a261; }
+.announcement-items { display: flex; gap: 16px; flex-wrap: wrap; }
+.announcement-item a, .announcement-item span { color: #fff; text-decoration: none; }
+.announcement-item a:hover { text-decoration: underline; }
+.announcement-close { margin-left: auto; background: transparent; border: none; color: #fff; cursor: pointer; font-size: 18px; }

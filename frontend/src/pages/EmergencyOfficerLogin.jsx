@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import './healthOfficerLogin.css';
+import './emergencyOfficerLogin.css';
 import { loginUser } from '../lib/auth';
 import { saveSession } from '../lib/token';
 
-function HealthOfficerLogin() {
+function EmergencyOfficerLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({ email: '', password: '', remember: false });
   const navigate = useNavigate();
@@ -39,34 +39,34 @@ function HealthOfficerLogin() {
   };
 
   return (
-    <div className="health-login">
+    <div className="emergency-login">
       <div className="container">
         <div className="auth-header">
           <div className="logo">
-            <i className="fas fa-user-md" aria-hidden="true"></i>
-            <h1>OCEANCARE HEALTH OFFICER</h1>
+            <i className="fas fa-plus-circle" aria-hidden="true"></i>
+            <h1>OCEANCARE EMERGENCY OFFICER</h1>
           </div>
-          <p>Login to monitor crew health and provide medical support</p>
+          <p>Login to manage emergency responses and protocols</p>
         </div>
 
         <div className="auth-container">
           <div className="auth-welcome">
-            <h2>Welcome Health Officer</h2>
+            <h2>Welcome Emergency Officer</h2>
             <p>
-              Access the medical dashboard to monitor crew health, review reports, and provide telemedicine
-              services to crew members.
+              Access the emergency management system to coordinate responses, manage evacuations, and
+              ensure crew safety during critical situations.
             </p>
             <ul className="feature-list">
-              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Monitor crew health status</li>
-              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Review medical reports and records</li>
-              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Provide telemedicine consultations</li>
-              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Manage medical treatments</li>
-              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Track health trends across the vessel</li>
+              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Coordinate emergency responses</li>
+              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Manage evacuation procedures</li>
+              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Access emergency protocols</li>
+              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Monitor critical situations</li>
+              <li><i className="fas fa-check-circle" aria-hidden="true"></i> Coordinate with external emergency services</li>
             </ul>
           </div>
 
           <div className="auth-form-container">
-            <h2 className="form-title">Health Officer Login</h2>
+            <h2 className="form-title">Emergency Officer Login</h2>
 
             <form id="loginForm" onSubmit={onSubmit}>
               <div className="form-group">
@@ -75,7 +75,7 @@ function HealthOfficerLogin() {
                   type="email"
                   id="email"
                   className="form-control"
-                  placeholder="medical.officer@example.com"
+                  placeholder="emergency.officer@example.com"
                   value={form.email}
                   onChange={onChange}
                   required
@@ -117,7 +117,7 @@ function HealthOfficerLogin() {
               </div>
 
               <div className="form-group">
-                <button type="submit" className="btn btn-primary">Login to Medical Dashboard</button>
+                <button type="submit" className="btn btn-primary">Login to Emergency Dashboard</button>
               </div>
 
               <div className="form-footer">
@@ -126,7 +126,7 @@ function HealthOfficerLogin() {
             </form>
 
             <div className="role-switch">
-              Not a Health Officer? <Link to="/login">Select different role</Link>
+              Not an Emergency Officer? <Link to="/login">Select different role</Link>
             </div>
           </div>
         </div>
@@ -135,4 +135,4 @@ function HealthOfficerLogin() {
   );
 }
 
-export default HealthOfficerLogin;
+export default EmergencyOfficerLogin;

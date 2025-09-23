@@ -1,0 +1,62 @@
+/* Sidebar styles for Inventory Manager Dashboard (scoped) */
+.inventory-dashboard .sidebar {
+  width: 250px;
+  background: linear-gradient(135deg, var(--primary) 0%, #d8802a 100%);
+  color: white;
+  padding: 20px 0;
+  transition: all 0.3s;
+}
+
+.inventory-dashboard .logo {
+  display: flex;
+  align-items: center;
+  padding: 0 20px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 20px;
+}
+
+.inventory-dashboard .logo i { font-size: 28px; margin-right: 10px; }
+.inventory-dashboard .logo h1 { font-size: 20px; font-weight: 700; }
+
+.inventory-dashboard .sidebar-menu { list-style: none; }
+.inventory-dashboard .sidebar-menu li { margin-bottom: 5px; }
+
+.inventory-dashboard .sidebar-menu a,
+.inventory-dashboard .sidebar-menu .linklike {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: none;
+  transition: all 0.3s;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  line-height: 1.4;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.inventory-dashboard .sidebar-menu a:hover,
+.inventory-dashboard .sidebar-menu a.active,
+.inventory-dashboard .sidebar-menu .linklike:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+  border-left: 4px solid white;
+}
+
+.inventory-dashboard .sidebar-menu i { margin-right: 10px; font-size: 18px; }
+
+/* Responsive adjustments */
+@media (max-width: 992px) {
+  .inventory-dashboard .sidebar { width: 100%; height: auto; }
+  .inventory-dashboard .sidebar-menu { display: flex; overflow-x: auto; }
+  .inventory-dashboard .sidebar-menu li { margin-bottom: 0; margin-right: 10px; }
+  .inventory-dashboard .sidebar-menu a, .inventory-dashboard .sidebar-menu .linklike { padding: 10px 15px; border-left: none; border-bottom: 3px solid transparent; }
+  .inventory-dashboard .sidebar-menu a:hover, .inventory-dashboard .sidebar-menu a.active, .inventory-dashboard .sidebar-menu .linklike:hover { border-left: none; border-bottom: 3px solid white; }
+}
