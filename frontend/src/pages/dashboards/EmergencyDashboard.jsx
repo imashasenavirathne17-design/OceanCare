@@ -1,419 +1,430 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { clearSession, getUser } from '../../lib/token';
-import './emergencyOfficerDashboard.css';
 import EmergencySidebar from './EmergencySidebar';
+import { getUser, clearSession } from '../../lib/token';
 
 export default function EmergencyDashboard() {
-  const navigate = useNavigate();
   const user = getUser();
-
-  // Demo alert list (deduplicated by id)
+  const navigate = useNavigate();
+  // Stats and alerts state to match the provided template exactly
+  const [activeAlerts, setActiveAlerts] = useState(3);
   const [alerts, setAlerts] = useState([
-    { id: 'A-1001', crew: 'John Doe', crewId: 'CR-1001', location: 'Deck B - Cabin 12', issue: 'High BP detected', time: new Date().toISOString(), status: 'new', priority: 'urgent' },
-    { id: 'A-1002', crew: 'Jane Smith', crewId: 'CR-1002', location: 'Engine Room', issue: 'Low O2 saturation', time: new Date().toISOString(), status: 'new', priority: 'critical' },
+    {
+      type: 'danger',
+      icon: 'fas fa-heartbeat',
+      person: 'John Davis - Cardiac Emergency',
+      location: 'Engine Room • Heart Rate: 145 bpm',
+      time: 'Triggered: 10:24 AM | Last reading: 10:28 AM',
+      actions: [
+        { cls: 'btn btn-primary', icon: 'fas fa-eye', label: 'Details' },
+        { cls: 'btn btn-danger', icon: 'fas fa-play', label: 'Protocol' },
+      ],
+    },
+    {
+      type: 'warning',
+      icon: 'fas fa-lungs',
+      person: 'Maria Rodriguez - Respiratory Distress',
+      location: 'Medical Bay • SpO2: 88%',
+      time: 'Triggered: 09:45 AM | Last reading: 10:15 AM',
+      actions: [
+        { cls: 'btn btn-primary', icon: 'fas fa-eye', label: 'Details' },
+        { cls: 'btn btn-warning', icon: 'fas fa-play', label: 'Protocol' },
+      ],
+    },
+    {
+      type: 'info',
+      icon: 'fas fa-thermometer-full',
+      person: 'Robert Chen - Elevated Temperature',
+      location: 'Crew Quarters B • Temperature: 39.2°C',
+      time: 'Triggered: 08:15 AM | Status: Monitoring',
+      actions: [
+        { cls: 'btn btn-primary', icon: 'fas fa-eye', label: 'Details' },
+        { cls: 'btn btn-primary', icon: 'fas fa-check', label: 'Ack' },
+      ],
+    },
   ]);
-  const [soundOn, setSoundOn] = useState(true);
-  const [ackComment, setAckComment] = useState('');
-  const [activeAlertId, setActiveAlertId] = useState(null);
 
-  // Protocol state
-  const [protocol, setProtocol] = useState({ type: '', confirm: false, timerMins: 15 });
+  // Inactivity timer refs
+  const inactivityTimerRef = useRef(null);
+  const resetInactivity = () => {
+    if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+    inactivityTimerRef.current = setTimeout(() => {
+      alert('You have been logged out due to inactivity.');
+    }, 30 * 60 * 1000); // 30 minutes
+  };
 
-  // Profiles search
-  const [search, setSearch] = useState('');
-  const profiles = useMemo(() => ([
-    { crewId: 'CR-1001', name: 'John Doe', age: 34, blood: 'O+', risks: 'Hypertension', allergies: 'Penicillin', chronic: ['Hypertension'], highRisk: true },
-    { crewId: 'CR-1002', name: 'Jane Smith', age: 29, blood: 'A-', risks: 'Asthma', allergies: 'None', chronic: ['Asthma'], highRisk: false },
-  ]), []);
-
-  // Map/locations demo data
-  const [locations, setLocations] = useState([
-    { crewId: 'CR-1001', name: 'John Doe', coords: 'Deck B / Corridor', status: 'critical', last5: ['B-12', 'B-11', 'B-10', 'B-10', 'B-9'] },
-    { crewId: 'CR-1002', name: 'Jane Smith', coords: 'Engine Room', status: 'affected', last5: ['Engine', 'Engine', 'Stairs', 'Engine', 'C-2'] },
-  ]);
-
-  // Messaging state
-  const [message, setMessage] = useState({ to: 'medical-team', priority: 'urgent', text: '', template: '' });
-  const templates = [
-    { id: 't1', text: 'Immediate assistance required at {location} for {crew}.' },
-    { id: 't2', text: 'Prepare infirmary for incoming patient: {crew}, suspected {issue}.' },
-  ];
-  const [threads, setThreads] = useState([]);
-
-  // Incident logging state
-  const [incident, setIncident] = useState({
-    id: 'CASE-' + Math.floor(Math.random() * 90000 + 10000),
-    status: 'Ongoing',
-    notes: '',
-    crew: '',
-    equipment: '',
-    location: '',
-    cause: '',
-    severity: 'major',
-    ts: new Date().toISOString(),
-  });
-  const [incidentFiles, setIncidentFiles] = useState([]);
-  const [caseHistory, setCaseHistory] = useState([]);
-
-  // Auto logout after inactivity (30 mins)
   useEffect(() => {
-    let timer = setTimeout(() => { clearSession(); navigate('/login'); }, 30 * 60 * 1000);
-    const reset = () => { clearTimeout(timer); timer = setTimeout(() => { clearSession(); navigate('/login'); }, 30 * 60 * 1000); };
-    window.addEventListener('mousemove', reset);
-    window.addEventListener('keydown', reset);
-    return () => { clearTimeout(timer); window.removeEventListener('mousemove', reset); window.removeEventListener('keydown', reset); };
-  }, [navigate]);
+    // Initialize inactivity timer and listeners
+    resetInactivity();
+    const onMove = () => resetInactivity();
+    const onKey = () => resetInactivity();
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('keypress', onKey);
+    return () => {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('keypress', onKey);
+    };
+  }, []);
 
-  const onLogout = () => { clearSession(); navigate('/login'); };
-  const scrollToId = (id) => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth' }); };
+  // Simulate real-time alert update (adds the 4th alert after 10s)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setAlerts((prev) => [
+        ...prev,
+        {
+          type: 'warning',
+          icon: 'fas fa-head-side-virus',
+          person: 'Sarah Johnson - Neurological Symptoms',
+          location: 'Bridge • Dizziness and confusion reported',
+          time: 'Triggered: Just now | Status: Evaluating',
+          actions: [
+            { cls: 'btn btn-primary', icon: 'fas fa-eye', label: 'Details' },
+            { cls: 'btn btn-warning', icon: 'fas fa-play', label: 'Protocol' },
+          ],
+        },
+      ]);
+      setActiveAlerts(4);
+      alert('New health alert: Sarah Johnson - Neurological Symptoms');
+    }, 10000);
+    return () => clearTimeout(t);
+  }, []);
 
-  const acknowledgeAlert = (id) => {
-    setAlerts((as) => as.map((a) => (a.id === id ? { ...a, status: 'acknowledged', ackAt: new Date().toISOString(), ackComment } : a)));
-    setAckComment('');
-    setActiveAlertId(null);
-  };
-
-  const closeAlert = (id) => {
-    // simple required field check
-    const a = alerts.find((x) => x.id === id);
-    if (!a?.ackAt) return alert('Please acknowledge the alert before closing.');
-    setAlerts((as) => as.map((al) => (al.id === id ? { ...al, status: 'closed', closedAt: new Date().toISOString() } : al)));
-  };
-
-  const triggerProtocol = () => {
-    if (!protocol.type) return alert('Select a protocol.');
-    if (!protocol.confirm) return alert('Please confirm before execution.');
-    alert(`Protocol "${protocol.type}" activated. Re-evaluation in ${protocol.timerMins} mins.`);
-  };
-
-  const onSaveIncident = () => {
-    setCaseHistory((h) => [
-      { ts: new Date().toISOString(), data: incident, files: incidentFiles.map((f) => f.name) },
-      ...h,
-    ]);
-    setIncidentFiles([]);
-    alert('Incident saved. Case history updated.');
+  const navigateTo = (page) => {
+    const map = {
+      alerts: '/dashboard/emergency/alerts',
+      dashboard: '/dashboard/emergency',
+      protocols: '/dashboard/emergency/protocols',
+    };
+    if (map[page]) return navigate(map[page]);
+    alert(`Navigating to ${page} page...`);
   };
 
   return (
-    <div className="emergency-dashboard">
-      <div className="dashboard-container">
-        <EmergencySidebar onLogout={onLogout} />
+    <div className="dashboard-container emergency-dashboard">
+      {/* Inline styles to match the provided template exactly */}
+      <style>{`
+        :root { --primary:#e63946; --primary-dark:#b3202c; --primary-light:#ff7b86; --secondary:#3a86ff; --accent:#f4a261; --light:#f8f9fa; --dark:#343a40; --danger:#e63946; --success:#2a9d8f; --warning:#f4a261; --info:#3a86ff; }
+        * { margin:0; padding:0; box-sizing:border-box; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color:#f5f7fb; color:#333; line-height:1.6; }
+        .dashboard-container { display:flex; min-height:100vh; }
+        .sidebar { width:280px; background:linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color:#fff; padding:20px 0; transition:all .3s; }
+        .logo { display:flex; align-items:center; padding:0 20px 20px; border-bottom:1px solid rgba(255,255,255,.1); margin-bottom:20px; }
+        .logo i { font-size:28px; margin-right:10px; }
+        .logo h1 { font-size:20px; font-weight:700; }
+        .sidebar-menu { list-style:none; }
+        .sidebar-menu li { margin-bottom:5px; }
+        .sidebar-menu a { display:flex; align-items:center; padding:12px 20px; color:rgba(255,255,255,.9); text-decoration:none; transition:all .3s; }
+        .sidebar-menu a:hover, .sidebar-menu a.active { background-color:rgba(255,255,255,.1); color:#fff; border-left:4px solid #fff; }
+        .sidebar-menu i { margin-right:10px; font-size:18px; }
+        .main-content { flex:1; padding:20px; overflow-y:auto; }
+        .header { display:flex; justify-content:space-between; align-items:center; margin-bottom:30px; padding-bottom:15px; border-bottom:1px solid #eee; }
+        .header h2 { color:var(--primary); font-size:24px; }
+        .user-info { display:flex; align-items:center; }
+        .user-info img { width:40px; height:40px; border-radius:50%; margin-right:10px; }
+        .status-badge { padding:5px 10px; border-radius:20px; font-size:12px; font-weight:600; margin-left:10px; }
+        .status-active { background-color:rgba(42,157,143,.15); color:var(--success); }
+        .status-warning { background-color:rgba(244,162,97,.2); color:var(--warning); }
+        .status-danger { background-color:rgba(230,57,70,.2); color:var(--danger); }
+        .stats-container { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:20px; margin-bottom:30px; }
+        .stat-card { background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,.05); padding:25px; display:flex; align-items:center; transition:transform .3s; }
+        .stat-card:hover { transform:translateY(-5px); }
+        .stat-icon { width:60px; height:60px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:24px; margin-right:20px; }
+        .stat-icon.primary { background-color:rgba(230,57,70,.15); color:var(--primary); }
+        .stat-icon.warning { background-color:rgba(244,162,97,.2); color:var(--warning); }
+        .stat-icon.danger { background-color:rgba(230,57,70,.2); color:var(--danger); }
+        .stat-icon.info { background-color:rgba(58,134,255,.2); color:var(--info); }
+        .stat-content { flex:1; }
+        .stat-value { font-size:28px; font-weight:700; margin-bottom:5px; }
+        .stat-label { font-size:14px; color:#777; }
+        .alert-banner { background:linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%); color:#fff; padding:15px 20px; border-radius:8px; margin-bottom:20px; display:flex; align-items:center; animation:pulse 2s infinite; }
+        @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(255,107,107,.7);} 70%{box-shadow:0 0 0 10px rgba(255,107,107,0);} 100%{box-shadow:0 0 0 0 rgba(255,107,107,0);} }
+        .alert-banner i { font-size:24px; margin-right:15px; }
+        .alert-content { flex:1; }
+        .alert-title { font-weight:600; margin-bottom:5px; }
+        .quick-actions { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:15px; margin-bottom:30px; }
+        .action-card { background:#fff; border-radius:8px; box-shadow:0 3px 10px rgba(0,0,0,.08); padding:20px; text-align:center; transition:all .3s; cursor:pointer; }
+        .action-card:hover { transform:translateY(-5px); box-shadow:0 5px 15px rgba(0,0,0,.1); }
+        .action-icon { width:50px; height:50px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:20px; margin:0 auto 15px; background-color:rgba(42,157,143,.1); color:var(--primary); }
+        .action-title { font-size:16px; font-weight:600; margin-bottom:5px; }
+        .action-desc { font-size:12px; color:#777; }
+        .activity-container { background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,.05); padding:25px; margin-bottom:30px; }
+        .section-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+        .section-title { font-size:20px; font-weight:600; color:var(--primary); }
+        .activity-list { list-style:none; }
+        .activity-item { display:flex; padding:15px 0; border-bottom:1px solid #eee; }
+        .activity-item:last-child { border-bottom:none; }
+        .activity-icon { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:16px; margin-right:15px; background-color:#f8f9fa; }
+        .activity-content { flex:1; }
+        .activity-title { font-weight:600; margin-bottom:5px; }
+        .activity-desc { font-size:14px; color:#777; margin-bottom:5px; }
+        .activity-time { font-size:12px; color:#999; }
+        .schedule-container { background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,.05); padding:25px; }
+        .schedule-list { list-style:none; }
+        .schedule-item { display:flex; padding:15px 0; border-bottom:1px solid #eee; }
+        .schedule-item:last-child { border-bottom:none; }
+        .schedule-time { width:80px; font-weight:600; color:var(--primary); }
+        .schedule-content { flex:1; }
+        .schedule-title { font-weight:600; margin-bottom:5px; }
+        .schedule-desc { font-size:14px; color:#777; }
+        .schedule-status { padding:4px 8px; border-radius:12px; font-size:12px; font-weight:600; }
+        .status-upcoming { background-color:rgba(42,157,143,.2); color:var(--success); }
+        .status-urgent { background-color:rgba(244,162,97,.2); color:var(--warning); }
+        .emergency-alerts { margin-bottom:30px; }
+        .alert-item { background:#fff; border-radius:8px; box-shadow:0 3px 10px rgba(0,0,0,.08); padding:15px; margin-bottom:15px; border-left:4px solid var(--danger); display:flex; align-items:center; }
+        .alert-item.warning { border-left-color:var(--warning); }
+        .alert-item.info { border-left-color:var(--info); }
+        .alert-icon { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:18px; margin-right:15px; color:#fff; }
+        .alert-icon.danger { background-color:var(--danger); }
+        .alert-icon.warning { background-color:var(--warning); }
+        .alert-icon.info { background-color:var(--info); }
+        .alert-details { flex:1; }
+        .alert-person { font-weight:600; margin-bottom:5px; }
+        .alert-location { font-size:14px; color:#777; margin-bottom:5px; }
+        .alert-time { font-size:12px; color:#999; }
+        .alert-actions { display:flex; gap:10px; }
+        .btn { padding:8px 15px; border:none; border-radius:4px; cursor:pointer; font-weight:500; transition:all .3s; display:inline-flex; align-items:center; }
+        .btn i { margin-right:5px; }
+        .btn-primary { background-color:var(--primary); color:#fff; }
+        .btn-danger { background-color:var(--danger); color:#fff; }
+        .btn-warning { background-color:var(--warning); color:#fff; }
+        .two-col-grid { display:grid; grid-template-columns:1fr 1fr; gap:30px; }
+        @media (max-width: 992px) {
+          .dashboard-container { flex-direction:column; }
+          .sidebar { width:100%; height:auto; }
+          .sidebar-menu { display:flex; overflow-x:auto; }
+          .sidebar-menu li { margin-bottom:0; margin-right:10px; }
+          .sidebar-menu a { padding:10px 15px; border-left:none; border-bottom:3px solid transparent; }
+          .sidebar-menu a:hover, .sidebar-menu a.active { border-left:none; border-bottom:3px solid #fff; }
+        }
+        @media (max-width: 768px) {
+          .header { flex-direction:column; align-items:flex-start; }
+          .user-info { margin-top:15px; }
+          .stats-container { grid-template-columns:1fr; }
+          .quick-actions { grid-template-columns:repeat(2,1fr); }
+          .main-content > div { grid-template-columns:1fr; }
+          .two-col-grid { grid-template-columns:1fr; }
+        }
+        @media (max-width: 480px) {
+          .quick-actions { grid-template-columns:1fr; }
+          .alert-item { flex-direction:column; text-align:center; }
+          .alert-icon { margin-right:0; margin-bottom:10px; }
+          .alert-actions { justify-content:center; margin-top:10px; }
+        }
+      `}</style>
 
-        <main className="main-content">
-          {/* Header */}
-          <div className="dash-header">
-            <h2>Emergency Officer Dashboard</h2>
-            <div className="user-info">
-              <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || 'Emergency Officer')}&background=b3202c&color=fff`} alt="User" />
-              <div>
-                <div>{user?.fullName || 'Emergency Officer'}</div>
-                <small>Role: Emergency</small>
-              </div>
-              <div className="status-badge status-active">Online</div>
+      {/* Sidebar */}
+      <EmergencySidebar onLogout={() => { clearSession(); navigate('/login'); }} />
+
+      {/* Main Content */}
+      <div className="main-content">
+        <div className="header">
+          <h2>Emergency Officer Dashboard</h2>
+          <div className="user-info">
+            <img
+              src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || 'Emergency Officer')}&background=e63946&color=fff`}
+              alt="User"
+            />
+            <div>
+              <div>{user?.fullName || 'Emergency Officer'}</div>
+              <small>
+                {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Emergency Officer'}
+                {user?.vessel ? ` | ${user.vessel}` : ''}
+              </small>
+            </div>
+            <div className="status-badge status-active">Online</div>
+          </div>
+        </div>
+
+        {/* Dashboard Stats */}
+        <div className="stats-container">
+          <div className="stat-card">
+            <div className="stat-icon danger"><i className="fas fa-exclamation-circle"></i></div>
+            <div className="stat-content">
+              <div className="stat-value">{activeAlerts}</div>
+              <div className="stat-label">Active Alerts</div>
             </div>
           </div>
-
-          {/* Quick actions */}
-          <section className="quick-actions">
-            <button className="btn btn-primary" onClick={() => scrollToId('alerts')}><i className="fas fa-siren-on"></i> View Alerts</button>
-            <button className="btn btn-primary" onClick={() => scrollToId('protocols')}><i className="fas fa-procedures"></i> Trigger Protocol</button>
-            <button className="btn btn-danger" onClick={() => setSoundOn((s) => !s)}><i className={`fas ${soundOn ? 'fa-volume-up' : 'fa-volume-mute'}`}></i> {soundOn ? 'Sound On' : 'Sound Off'}</button>
-          </section>
-
-          {/* 1. Real-time Alerts */}
-          <section className="panel" id="alerts">
-            <h3 className="form-title">Real-time Health Alerts</h3>
-            <div className="form-grid">
-              <div className="form-group">
-                <label>Notification</label>
-                <div>New alerts appear with sound/vibration. Duplicate alerts suppressed. Auto-escalation if not acknowledged in time.</div>
-              </div>
-              <div className="form-group">
-                <label>Sound/Vibration</label>
-                <div>{soundOn ? 'Enabled' : 'Disabled'}</div>
-              </div>
+          <div className="stat-card">
+            <div className="stat-icon warning"><i className="fas fa-heartbeat"></i></div>
+            <div className="stat-content">
+              <div className="stat-value">1</div>
+              <div className="stat-label">Critical Cases</div>
             </div>
-            <div className="table-responsive">
-              <table>
-                <thead>
-                  <tr><th>ID</th><th>Crew</th><th>Location</th><th>Issue</th><th>Time</th><th>Priority</th><th>Status</th><th>Actions</th></tr>
-                </thead>
-                <tbody>
-                  {alerts.map((a) => (
-                    <tr key={a.id} className={a.status !== 'closed' ? 'row-blink' : ''}>
-                      <td>{a.id}</td>
-                      <td>{a.crew} ({a.crewId})</td>
-                      <td>{a.location}</td>
-                      <td>{a.issue}</td>
-                      <td>{new Date(a.time).toLocaleString()}</td>
-                      <td><span className={`badge badge-${a.priority}`}>{a.priority}</span></td>
-                      <td>{a.status}</td>
-                      <td>
-                        <button className="btn btn-primary" onClick={() => setActiveAlertId(a.id)}>Acknowledge</button>
-                        <button className="btn btn-success" onClick={() => closeAlert(a.id)} style={{ marginLeft: 8 }}>Close</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon primary"><i className="fas fa-user-injured"></i></div>
+            <div className="stat-content">
+              <div className="stat-value">45</div>
+              <div className="stat-label">Crew Monitored</div>
             </div>
-            {activeAlertId && (
-              <div className="ack-box">
-                <div>Acknowledging alert {activeAlertId}</div>
-                <textarea className="form-control" rows={2} value={ackComment} onChange={(e) => setAckComment(e.target.value)} placeholder="Optional comment..." />
-                <button className="btn btn-primary" onClick={() => acknowledgeAlert(activeAlertId)} style={{ marginTop: 8 }}>Confirm Acknowledge</button>
-              </div>
-            )}
-          </section>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon info"><i className="fas fa-check-circle"></i></div>
+            <div className="stat-content">
+              <div className="stat-value">12</div>
+              <div className="stat-label">Resolved Today</div>
+            </div>
+          </div>
+        </div>
 
-          {/* 2. Emergency Protocols */}
-          <section className="panel" id="protocols">
-            <h3 className="form-title">Trigger Emergency Protocols</h3>
-            <div className="form-grid">
-              <div className="form-group">
-                <label>Protocol</label>
-                <select className="form-control" value={protocol.type} onChange={(e) => setProtocol((p) => ({ ...p, type: e.target.value }))}>
-                  <option value="">Select protocol</option>
-                  <option value="contact-captain">Contact Captain</option>
-                  <option value="notify-medical">Notify Medical Team</option>
-                  <option value="ship-wide-alert">Ship-wide Alert</option>
-                  <option value="isolate-zone">Isolate Critical Zone</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Re-evaluation Timer (mins)</label>
-                <input type="number" className="form-control" min="5" max="120" value={protocol.timerMins} onChange={(e) => setProtocol((p) => ({ ...p, timerMins: parseInt(e.target.value || '15', 10) }))} />
-              </div>
-              <div className="form-group">
-                <label>Confirm</label>
-                <div className="form-check-line">
-                  <input id="confirmProt" type="checkbox" checked={protocol.confirm} onChange={(e) => setProtocol((p) => ({ ...p, confirm: e.target.checked }))} />
-                  <label htmlFor="confirmProt">I confirm execution and understand this is logged with my ID</label>
-                </div>
-              </div>
-            </div>
-            <button className="btn btn-danger" onClick={triggerProtocol}><i className="fas fa-exclamation-triangle"></i> Activate Protocol</button>
-          </section>
+        {/* Emergency Alerts */}
+        <div className="emergency-alerts">
+          <div className="section-header">
+            <div className="section-title">Active Emergency Alerts</div>
+            <a href="#" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: 14 }}>View All Alerts</a>
+          </div>
 
-          {/* 3. Crew Profiles */}
-          <section className="panel" id="profiles">
-            <h3 className="form-title">Crew Health Profiles</h3>
-            <div className="form-group">
-              <input className="form-control" placeholder="Search name, ID, risk..." value={search} onChange={(e) => setSearch(e.target.value)} />
-            </div>
-            <div className="table-responsive">
-              <table>
-                <thead>
-                  <tr><th>Crew ID</th><th>Name</th><th>Age</th><th>Blood</th><th>Chronic</th><th>Allergies</th><th>Risk</th><th>Actions</th></tr>
-                </thead>
-                <tbody>
-                  {profiles.filter(p => (p.name + p.crewId + p.risks).toLowerCase().includes(search.toLowerCase())).map((p, i) => (
-                    <tr key={i} className={p.highRisk ? 'row-highlight' : ''}>
-                      <td>{p.crewId}</td><td>{p.name}</td><td>{p.age}</td><td>{p.blood}</td>
-                      <td>{p.chronic.join(', ')}</td><td>{p.allergies}</td><td>{p.risks}</td>
-                      <td><button className="btn btn-primary">Open Profile</button> <button className="btn btn-success">Monitor</button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="note">Vitals graphs, uploads, and emergency contacts appear in the detailed profile view (placeholder).</div>
-          </section>
-
-          {/* 4. Live Map */}
-          <section className="panel" id="map">
-            <h3 className="form-title">Live Location Map</h3>
-            <div className="map-placeholder">
-              <div className="map-legend">
-                <span className="legend critical"></span> Critical
-                <span className="legend affected"></span> Affected
-                <span className="legend offline"></span> Offline
+          {alerts.map((a, idx) => (
+            <div key={idx} className={`alert-item ${a.type === 'warning' ? 'warning' : a.type === 'info' ? 'info' : ''}`}>
+              <div className={`alert-icon ${a.type}`}>
+                <i className={a.icon}></i>
               </div>
-              <div className="map-canvas">
-                {locations.map((l, i) => (
-                  <div key={i} className={`pin ${l.status}`} title={`${l.name} (${l.crewId})`}>
-                    <i className="fas fa-user"></i>
-                  </div>
+              <div className="alert-details">
+                <div className="alert-person">{a.person}</div>
+                <div className="alert-location">{a.location}</div>
+                <div className="alert-time">{a.time}</div>
+              </div>
+              <div className="alert-actions">
+                {a.actions.map((b, i) => (
+                  <button key={i} className={b.cls}><i className={b.icon}></i> {b.label}</button>
                 ))}
               </div>
             </div>
-            <div className="table-responsive" style={{ marginTop: 10 }}>
-              <table>
-                <thead>
-                  <tr><th>Crew</th><th>Current</th><th>Last 5</th><th>Status</th></tr>
-                </thead>
-                <tbody>
-                  {locations.map((l, i) => (
-                    <tr key={i}><td>{l.name} ({l.crewId})</td><td>{l.coords}</td><td>{l.last5.join(' > ')}</td><td>{l.status}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          ))}
+        </div>
 
-          {/* 5. Secure Messaging */}
-          <section className="panel" id="messaging">
-            <h3 className="form-title">Secure Messaging</h3>
-            <div className="form-grid">
-              <div className="form-group">
-                <label>To</label>
-                <select className="form-control" value={message.to} onChange={(e) => setMessage((m) => ({ ...m, to: e.target.value }))}>
-                  <option value="medical-team">Medical Team</option>
-                  <option value="captain">Captain</option>
-                  <option value="response-team">Response Team</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Priority</label>
-                <select className="form-control" value={message.priority} onChange={(e) => setMessage((m) => ({ ...m, priority: e.target.value }))}>
-                  <option value="urgent">Urgent</option>
-                  <option value="normal">Normal</option>
-                  <option value="info">Info</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Template</label>
-                <select className="form-control" value={message.template} onChange={(e) => setMessage((m) => ({ ...m, template: e.target.value, text: templates.find(t => t.id === e.target.value)?.text || '' }))}>
-                  <option value="">Custom</option>
-                  {templates.map(t => <option key={t.id} value={t.id}>{t.text}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="form-group">
-              <textarea className="form-control" rows={3} placeholder="Type your message..." value={message.text} onChange={(e) => setMessage((m) => ({ ...m, text: e.target.value }))} />
-            </div>
-            <div className="form-group">
-              <button className="btn btn-primary" onClick={() => {
-                if (!message.text.trim()) return alert('Enter a message');
-                setThreads((th) => [{ ts: new Date().toISOString(), ...message }, ...th]);
-                setMessage((m) => ({ ...m, text: '' }));
-              }}><i className="fas fa-paper-plane"></i> Send</button>
-            </div>
-            {threads.length > 0 && (
-              <div className="history">
-                <h4>Message History</h4>
-                <ul>
-                  {threads.map((t, i) => (
-                    <li key={i}><strong>{new Date(t.ts).toLocaleString()}</strong> — to {t.to} [{t.priority}]: {t.text}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </section>
+        {/* Quick Actions */}
+        <div className="quick-actions">
+          <div className="action-card" onClick={() => navigateTo('alerts')}>
+            <div className="action-icon"><i className="fas fa-bell"></i></div>
+            <div className="action-title">Health Alerts</div>
+            <div className="action-desc">View and manage alerts</div>
+          </div>
+          <div className="action-card" onClick={() => navigateTo('protocols')}>
+            <div className="action-icon"><i className="fas fa-play-circle"></i></div>
+            <div className="action-title">Emergency Protocols</div>
+            <div className="action-desc">Activate response plans</div>
+          </div>
+          <div className="action-card" onClick={() => navigateTo('profiles')}>
+            <div className="action-icon"><i className="fas fa-user-injured"></i></div>
+            <div className="action-title">Crew Profiles</div>
+            <div className="action-desc">Access medical records</div>
+          </div>
+          <div className="action-card" onClick={() => navigateTo('locator')}>
+            <div className="action-icon"><i className="fas fa-map-marker-alt"></i></div>
+            <div className="action-title">Crew Locator</div>
+            <div className="action-desc">Track crew locations</div>
+          </div>
+          <div className="action-card" onClick={() => navigateTo('messaging')}>
+            <div className="action-icon"><i className="fas fa-comments"></i></div>
+            <div className="action-title">Emergency Messaging</div>
+            <div className="action-desc">Notify medical staff</div>
+          </div>
+          <div className="action-card" onClick={() => navigateTo('reports')}>
+            <div className="action-icon"><i className="fas fa-chart-bar"></i></div>
+            <div className="action-title">Incident Reports</div>
+            <div className="action-desc">Generate emergency reports</div>
+          </div>
+        </div>
 
-          {/* 6. Incident Logging */}
-          <section className="panel" id="incidents">
-            <h3 className="form-title">Incident Log</h3>
-            <div className="form-grid">
-              <div className="form-group">
-                <label>Case ID</label>
-                <input className="form-control" value={incident.id} readOnly />
-              </div>
-              <div className="form-group">
-                <label>Status</label>
-                <select className="form-control" value={incident.status} onChange={(e) => setIncident((s) => ({ ...s, status: e.target.value }))}>
-                  <option>Ongoing</option>
-                  <option>Resolved</option>
-                  <option>Escalated</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Severity</label>
-                <select className="form-control" value={incident.severity} onChange={(e) => setIncident((s) => ({ ...s, severity: e.target.value }))}>
-                  <option>minor</option>
-                  <option>major</option>
-                  <option>critical</option>
-                </select>
-              </div>
+        <div className="two-col-grid">
+          {/* Recent Activity */}
+          <div className="activity-container">
+            <div className="section-header">
+              <div className="section-title">Recent Emergency Activity</div>
+              <a href="#" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: 14 }}>View All</a>
             </div>
-            <div className="form-grid">
-              <div className="form-group">
-                <label>Crew Involved</label>
-                <input className="form-control" placeholder="IDs or names" value={incident.crew} onChange={(e) => setIncident((s) => ({ ...s, crew: e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label>Equipment Used</label>
-                <input className="form-control" placeholder="e.g., oxygen, AED" value={incident.equipment} onChange={(e) => setIncident((s) => ({ ...s, equipment: e.target.value }))} />
-              </div>
-              <div className="form-group">
-                <label>Location</label>
-                <input className="form-control" placeholder="Deck / area" value={incident.location} onChange={(e) => setIncident((s) => ({ ...s, location: e.target.value }))} />
-              </div>
-            </div>
-            <div className="form-grid">
-              <div className="form-group">
-                <label>Cause/Nature</label>
-                <select className="form-control" value={incident.cause} onChange={(e) => setIncident((s) => ({ ...s, cause: e.target.value }))}>
-                  <option value="">Select cause</option>
-                  <option value="injury">Injury</option>
-                  <option value="illness">Illness</option>
-                  <option value="equipment">Equipment Failure</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Timestamp</label>
-                <input type="datetime-local" className="form-control" value={new Date(incident.ts).toISOString().slice(0,16)} onChange={(e) => setIncident((s) => ({ ...s, ts: new Date(e.target.value).toISOString() }))} />
-              </div>
-            </div>
-            <div className="form-group">
-              <label>Notes</label>
-              <textarea className="form-control" rows={3} placeholder="Response steps, e.g., oxygen given" value={incident.notes} onChange={(e) => setIncident((s) => ({ ...s, notes: e.target.value }))} />
-            </div>
-            <div className="form-group">
-              <label>Attachments (photos/audio)</label>
-              <input type="file" multiple onChange={(e) => setIncidentFiles(Array.from(e.target.files || []))} />
-              {incidentFiles.length > 0 && (
-                <div className="file-list">{incidentFiles.map((f, i) => <span key={i} className="file-pill">{f.name}</span>)}</div>
-              )}
-            </div>
-            <button className="btn btn-primary" onClick={onSaveIncident}>Save Incident</button>
-            {caseHistory.length > 0 && (
-              <div className="history">
-                <h4>Case History</h4>
-                <ul>
-                  {caseHistory.map((c, i) => (
-                    <li key={i}><strong>{new Date(c.ts).toLocaleString()}</strong> — {c.data.id} [{c.data.status}/{c.data.severity}] — Files: {c.files.join(', ') || 'None'}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </section>
+            <ul className="activity-list">
+              <li className="activity-item">
+                <div className="activity-icon"><i className="fas fa-bell"></i></div>
+                <div className="activity-content">
+                  <div className="activity-title">Cardiac Alert Triggered</div>
+                  <div className="activity-desc">John Davis - Elevated heart rate detected</div>
+                  <div className="activity-time">10:24 AM • Today</div>
+                </div>
+              </li>
+              <li className="activity-item">
+                <div className="activity-icon"><i className="fas fa-play-circle"></i></div>
+                <div className="activity-content">
+                  <div className="activity-title">Emergency Protocol Activated</div>
+                  <div className="activity-desc">Respiratory distress - Maria Rodriguez</div>
+                  <div className="activity-time">09:50 AM • Today</div>
+                </div>
+              </li>
+              <li className="activity-item">
+                <div className="activity-icon"><i className="fas fa-comments"></i></div>
+                <div className="activity-content">
+                  <div className="activity-title">Emergency Message Sent</div>
+                  <div className="activity-desc">Medical team notified of critical case</div>
+                  <div className="activity-time">09:45 AM • Today</div>
+                </div>
+              </li>
+              <li className="activity-item">
+                <div className="activity-icon"><i className="fas fa-map-marker-alt"></i></div>
+                <div className="activity-content">
+                  <div className="activity-title">Crew Location Updated</div>
+                  <div className="activity-desc">John Davis moved to Medical Bay</div>
+                  <div className="activity-time">09:30 AM • Today</div>
+                </div>
+              </li>
+              <li className="activity-item">
+                <div className="activity-icon"><i className="fas fa-check-circle"></i></div>
+                <div className="activity-content">
+                  <div className="activity-title">Alert Resolved</div>
+                  <div className="activity-desc">Robert Chen - Temperature normalized</div>
+                  <div className="activity-time">Yesterday • 4:15 PM</div>
+                </div>
+              </li>
+            </ul>
+          </div>
 
-          {/* 7. Reports */}
-          <section className="panel" id="reports">
-            <h3 className="form-title">Emergency Reports</h3>
-            <div className="form-grid">
-              <div className="form-group">
-                <label>From</label>
-                <input type="date" className="form-control" />
-              </div>
-              <div className="form-group">
-                <label>To</label>
-                <input type="date" className="form-control" />
-              </div>
-              <div className="form-group">
-                <label>Type</label>
-                <select className="form-control">
-                  <option>All</option>
-                  <option>Medical</option>
-                  <option>Injury</option>
-                  <option>Equipment</option>
-                </select>
-              </div>
+          {/* Upcoming Schedule */}
+          <div className="schedule-container">
+            <div className="section-header">
+              <div className="section-title">Emergency Response Schedule</div>
+              <a href="#" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: 14 }}>View Calendar</a>
             </div>
-            <div>
-              <button className="btn btn-success"><i className="fas fa-file-excel"></i> Export Excel</button>
-              <button className="btn btn-primary" style={{ marginLeft: 10 }}><i className="fas fa-file-pdf"></i> Export PDF</button>
-              <button className="btn btn-primary" style={{ marginLeft: 10 }}><i className="fas fa-envelope"></i> Email to HQ</button>
-            </div>
-            <div className="note">Officer: {user?.fullName || 'Emergency Officer'} — Signature and approval sections are auto-added. Watermark applied to prevent edits.</div>
-          </section>
-
-        </main>
+            <ul className="schedule-list">
+              <li className="schedule-item">
+                <div className="schedule-time">11:00 AM</div>
+                <div className="schedule-content">
+                  <div className="schedule-title">Emergency Drill - Cardiac Arrest</div>
+                  <div className="schedule-desc">Medical team training session</div>
+                </div>
+                <div className="schedule-status status-urgent">Mandatory</div>
+              </li>
+              <li className="schedule-item">
+                <div className="schedule-time">02:30 PM</div>
+                <div className="schedule-content">
+                  <div className="schedule-title">Equipment Check</div>
+                  <div className="schedule-desc">Defibrillator and emergency kit inspection</div>
+                </div>
+                <div className="schedule-status status-upcoming">Scheduled</div>
+              </li>
+              <li className="schedule-item">
+                <div className="schedule-time">04:00 PM</div>
+                <div className="schedule-content">
+                  <div className="schedule-title">Team Briefing</div>
+                  <div className="schedule-desc">Daily emergency response update</div>
+                </div>
+                <div className="schedule-status status-upcoming">Scheduled</div>
+              </li>
+              <li className="schedule-item">
+                <div className="schedule-time">05:30 PM</div>
+                <div className="schedule-content">
+                  <div className="schedule-title">System Maintenance</div>
+                  <div className="schedule-desc">Health monitoring system update</div>
+                </div>
+                <div className="schedule-status status-upcoming">Scheduled</div>
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
+
+
+

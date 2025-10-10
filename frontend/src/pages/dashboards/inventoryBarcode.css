@@ -1,0 +1,101 @@
+:root {
+  --primary: #f4a261;
+  --primary-dark: #e76f51;
+  --primary-light: #f8c4a4;
+  --secondary: #2a9d8f;
+  --accent: #e63946;
+  --light: #f8f9fa;
+  --dark: #343a40;
+  --danger: #e63946;
+  --success: #2a9d8f;
+  --warning: #ffb55a; /* match dashboard warning */
+  --info: #3a86ff;
+}
+
+.inventory-barcode { background-color: #fff7ef; color: #333; min-height: 100vh; }
+.inventory-barcode .dashboard-container { display: flex; min-height: 100vh; }
+.inventory-barcode .main-content { flex: 1; padding: 20px; overflow-y: auto; }
+
+/* Header */
+.inventory-barcode .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+.inventory-barcode .header h2 { color: var(--primary); font-size: 24px; }
+.inventory-barcode .user-info { display: flex; align-items: center; }
+.inventory-barcode .user-info img { width: 40px; height: 40px; border-radius: 50%; margin-right: 10px; }
+.inventory-barcode .status-badge { padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-left: 10px; }
+.inventory-barcode .status-active { background-color: rgba(244, 162, 97, 0.2); color: var(--primary); }
+
+/* Buttons */
+.inventory-barcode .btn { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; transition: all 0.3s; display: inline-flex; align-items: center; }
+.inventory-barcode .btn i { margin-right: 5px; }
+.inventory-barcode .btn-primary { background-color: var(--primary); color: #fff; }
+.inventory-barcode .btn-success { background-color: var(--success); color: #fff; }
+.inventory-barcode .btn-danger { background-color: var(--danger); color: #fff; }
+.inventory-barcode .btn-warning { background-color: var(--warning); color: #fff; }
+.inventory-barcode .btn-info { background-color: var(--info); color: #fff; }
+
+/* Scanner Section */
+.inventory-barcode .scanner-section { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-bottom: 30px; }
+.inventory-barcode .scanner-card { background: #fff; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); padding: 25px; }
+.inventory-barcode .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.inventory-barcode .section-title { font-size: 20px; font-weight: 600; color: var(--primary); }
+.inventory-barcode .scanner-container { height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #f8f9fa; border-radius: 8px; border: 2px dashed #ddd; margin-bottom: 20px; position: relative; overflow: hidden; }
+.inventory-barcode .scanner-placeholder { text-align: center; color: #666; }
+.inventory-barcode .scanner-placeholder i { font-size: 64px; margin-bottom: 15px; color: var(--primary); }
+.inventory-barcode .scanner-active { background: #000; border: none; }
+.inventory-barcode .scanner-active .scanner-placeholder { color: #fff; }
+.inventory-barcode .scanner-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.7); color: #fff; font-size: 18px; font-weight: 600; }
+.inventory-barcode .scanner-controls { display: flex; gap: 10px; justify-content: center; }
+
+/* Scan Results */
+.inventory-barcode .scan-results { background: #fff; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); padding: 25px; margin-bottom: 30px; }
+.inventory-barcode .result-card { display: flex; gap: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid var(--primary); }
+.inventory-barcode .result-icon { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff; background-color: var(--primary); flex-shrink: 0; }
+.inventory-barcode .result-details { flex: 1; }
+.inventory-barcode .result-header { display: flex; justify-content: space-between; margin-bottom: 10px; }
+.inventory-barcode .result-title { font-weight: 600; font-size: 18px; }
+.inventory-barcode .result-barcode { color: #777; font-family: monospace; font-size: 16px; }
+.inventory-barcode .result-meta { display: flex; gap: 15px; margin-bottom: 10px; }
+.inventory-barcode .meta-item { display: flex; align-items: center; gap: 5px; font-size: 14px; color: #666; }
+.inventory-barcode .status-badge { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.inventory-barcode .status-ok { background-color: rgba(42,157,143,0.2); color: var(--success); }
+.inventory-barcode .status-warning { background-color: rgba(244,162,97,0.2); color: var(--warning); }
+.inventory-barcode .status-danger { background-color: rgba(230,57,70,0.2); color: var(--danger); }
+.inventory-barcode .result-actions { display: flex; gap: 10px; margin-top: 15px; }
+
+/* Recent Scans */
+.inventory-barcode .recent-scans { background: #fff; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); padding: 25px; }
+.inventory-barcode .table-responsive { width: 100%; overflow-x: auto; }
+.inventory-barcode .scans-table { width: 100%; border-collapse: collapse; }
+.inventory-barcode .scans-table th, .inventory-barcode .scans-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #ffe9d6; }
+.inventory-barcode .scans-table th { background-color: #fff1e4; font-weight: 600; color: var(--dark); }
+.inventory-barcode .scans-table tr:hover { background-color: #fff7ef; }
+.inventory-barcode .scan-type { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.inventory-barcode .type-checkin { background-color: rgba(42,157,143,0.2); color: var(--success); }
+.inventory-barcode .type-checkout { background-color: rgba(58,134,255,0.2); color: var(--info); }
+.inventory-barcode .type-expiry { background-color: rgba(244,162,97,0.2); color: var(--warning); }
+
+/* Manual Entry */
+.inventory-barcode .manual-entry { background: #fff; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); padding: 25px; margin-top: 30px; }
+.inventory-barcode .form-group { margin-bottom: 20px; }
+.inventory-barcode .form-label { display: block; margin-bottom: 8px; font-weight: 500; }
+.inventory-barcode .form-control { width: 100%; padding: 10px 15px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+.inventory-barcode .form-row { display: flex; gap: 15px; }
+.inventory-barcode .form-row .form-group { flex: 1; }
+
+/* Responsive */
+@media (max-width: 992px) {
+  .inventory-barcode .dashboard-container { flex-direction: column; }
+  .inventory-barcode .scanner-section { grid-template-columns: 1fr; }
+}
+@media (max-width: 768px) {
+  .inventory-barcode .header { flex-direction: column; align-items: flex-start; }
+  .inventory-barcode .user-info { margin-top: 15px; }
+  .inventory-barcode .result-header { flex-direction: column; gap: 10px; }
+  .inventory-barcode .result-meta { flex-wrap: wrap; }
+  .inventory-barcode .result-actions { flex-wrap: wrap; }
+  .inventory-barcode .form-row { flex-direction: column; gap: 0; }
+}
+@media (max-width: 480px) {
+  .inventory-barcode .scanner-controls { flex-direction: column; }
+  .inventory-barcode .result-card { flex-direction: column; text-align: center; }
+}

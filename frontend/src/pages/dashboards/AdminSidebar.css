@@ -1,8 +1,24 @@
+/* Admin Theme Variables (scoped to admin pages) */
+.admin-dashboard {
+  --primary: #8338ec;       /* Purple primary */
+  --primary-dark: #6a2bc9;
+  --primary-light: #9d5af0;
+  --secondary: #3a86ff;
+  --accent: #ff006e;
+  --light: #f8f9fa;
+  --dark: #343a40;
+  --danger: #ff006e;
+  --success: #38b000;
+  --warning: #ff9e00;
+  --info: #3a86ff;
+}
+
 /* Sidebar styles for Administrator Dashboard (scoped) */
 .admin-dashboard .sidebar {
   width: 250px;
-  background: linear-gradient(135deg, var(--primary) 0%, #2a6ec9 100%);
-  color: white;
+  /* Purple theme */
+  background: linear-gradient(160deg, #6f2dbd 0%, #8338ec 55%, #a06cd5 100%);
+  color: #fff;
   padding: 20px 0;
   transition: all 0.3s;
 }
@@ -45,9 +61,9 @@
 .admin-dashboard .sidebar-menu a:hover,
 .admin-dashboard .sidebar-menu a.active,
 .admin-dashboard .sidebar-menu .linklike:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: white;
-  border-left: 4px solid white;
+  background-color: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-left: 4px solid #ffffff;
 }
 
 .admin-dashboard .sidebar-menu i { margin-right: 10px; font-size: 18px; }

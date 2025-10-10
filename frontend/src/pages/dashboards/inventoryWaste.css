@@ -1,0 +1,128 @@
+:root {
+  --primary: #f4a261;
+  --primary-dark: #e76f51;
+  --primary-light: #f8c4a4;
+  --secondary: #2a9d8f;
+  --accent: #e63946;
+  --light: #f8f9fa;
+  --dark: #343a40;
+  --danger: #e63946;
+  --success: #2a9d8f;
+  --warning: #ffb55a; /* match dashboard warning */
+  --info: #3a86ff;
+}
+
+.inventory-waste { background-color: #fff7ef; color: #333; min-height: 100vh; }
+.inventory-waste .dashboard-container { display: flex; min-height: 100vh; }
+.inventory-waste .main-content { flex: 1; padding: 20px; overflow-y: auto; }
+
+/* Header */
+.inventory-waste .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+.inventory-waste .header h2 { color: var(--primary); font-size: 24px; }
+.inventory-waste .user-info { display: flex; align-items: center; }
+.inventory-waste .user-info img { width: 40px; height: 40px; border-radius: 50%; margin-right: 10px; }
+.inventory-waste .status-badge { padding: 5px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-left: 10px; }
+.inventory-waste .status-active { background-color: rgba(244, 162, 97, 0.2); color: var(--primary); }
+
+/* Buttons */
+.inventory-waste .btn { padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; transition: all 0.3s; display: inline-flex; align-items: center; }
+.inventory-waste .btn i { margin-right: 5px; }
+.inventory-waste .btn-primary { background-color: var(--primary); color: #fff; }
+.inventory-waste .btn-danger { background-color: var(--danger); color: #fff; }
+.inventory-waste .btn-warning { background-color: var(--warning); color: #fff; }
+.inventory-waste .btn-success { background-color: var(--success); color: #fff; }
+.inventory-waste .btn-info { background-color: var(--info); color: #fff; }
+
+/* Stats */
+.inventory-waste .disposal-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+.inventory-waste .stat-card { background: #fff; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); padding: 20px; text-align: center; transition: transform 0.3s; }
+.inventory-waste .stat-card:hover { transform: translateY(-5px); }
+.inventory-waste .stat-icon { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; margin: 0 auto 15px; color: #fff; }
+.inventory-waste .stat-icon.expired { background-color: var(--warning); }
+.inventory-waste .stat-icon.damaged { background-color: var(--danger); }
+.inventory-waste .stat-icon.completed { background-color: var(--success); }
+.inventory-waste .stat-icon.pending { background-color: var(--info); }
+.inventory-waste .stat-value { font-size: 32px; font-weight: 700; margin-bottom: 5px; }
+.inventory-waste .stat-label { font-size: 14px; color: #777; }
+
+/* Controls */
+.inventory-waste .disposal-controls { background: #fff; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); padding: 20px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
+.inventory-waste .filter-group { display: flex; flex-direction: column; }
+.inventory-waste .filter-label { font-size: 14px; margin-bottom: 5px; color: #666; font-weight: 500; }
+.inventory-waste .filter-select, .inventory-waste .date-input, .inventory-waste .form-control { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; background: #fff; }
+.inventory-waste .date-range { display: flex; gap: 10px; align-items: center; }
+
+/* Pending Disposals */
+.inventory-waste .pending-disposals { background: #fff; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); padding: 25px; margin-bottom: 30px; }
+.inventory-waste .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.inventory-waste .section-title { font-size: 20px; font-weight: 600; color: var(--primary); }
+.inventory-waste .disposal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+.inventory-waste .disposal-card { background: #f8f9fa; border-radius: 8px; padding: 20px; border-left: 4px solid var(--warning); transition: all 0.3s; }
+.inventory-waste .disposal-card.expired { border-left-color: var(--warning); }
+.inventory-waste .disposal-card.damaged { border-left-color: var(--danger); }
+.inventory-waste .disposal-card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+.inventory-waste .disposal-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; }
+.inventory-waste .disposal-title { font-weight: 600; font-size: 18px; }
+.inventory-waste .disposal-badge { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.inventory-waste .badge-expired { background-color: rgba(244,162,97,0.2); color: var(--warning); }
+.inventory-waste .badge-damaged { background-color: rgba(230,57,70,0.2); color: var(--danger); }
+.inventory-waste .disposal-details { margin-bottom: 15px; }
+.inventory-waste .detail-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
+.inventory-waste .detail-label { color: #666; }
+.inventory-waste .detail-value { font-weight: 500; }
+.inventory-waste .disposal-actions { display: flex; gap: 10px; }
+
+/* History */
+.inventory-waste .disposal-history { background: #fff; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); padding: 25px; }
+.inventory-waste .table-responsive { width: 100%; overflow-x: auto; }
+.inventory-waste .history-table { width: 100%; border-collapse: collapse; }
+.inventory-waste .history-table th, .inventory-waste .history-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #ffe9d6; }
+.inventory-waste .history-table th { background-color: #fff1e4; font-weight: 600; color: var(--dark); }
+.inventory-waste .history-table tr:hover { background-color: #fff7ef; }
+.inventory-waste .disposal-type { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.inventory-waste .type-expired { background-color: rgba(244,162,97,0.2); color: var(--warning); }
+.inventory-waste .type-damaged { background-color: rgba(230,57,70,0.2); color: var(--danger); }
+.inventory-waste .disposal-status { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.inventory-waste .status-completed { background-color: rgba(42,157,143,0.2); color: var(--success); }
+.inventory-waste .status-pending { background-color: rgba(244,162,97,0.2); color: var(--warning); }
+.inventory-waste .disposal-method { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; background-color: #e3f2fd; color: var(--info); }
+
+/* Modal */
+.inventory-waste .modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background-color: rgba(0,0,0,0.5); z-index: 1000; }
+.inventory-waste .modal-content { background: #fff; border-radius: 10px; width: 90%; max-width: 600px; padding: 30px; box-shadow: 0 5px 25px rgba(0,0,0,0.2); }
+.inventory-waste .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.inventory-waste .modal-title { font-size: 20px; font-weight: 600; color: var(--primary); }
+.inventory-waste .close-modal { background: none; border: none; font-size: 24px; cursor: pointer; color: #777; }
+.inventory-waste .modal-body { margin-bottom: 25px; }
+.inventory-waste .form-group { margin-bottom: 20px; }
+.inventory-waste .form-label { display: block; margin-bottom: 8px; font-weight: 500; }
+.inventory-waste .form-row { display: flex; gap: 15px; }
+.inventory-waste .form-row .form-group { flex: 1; }
+.inventory-waste .checkbox-group { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 10px; }
+.inventory-waste .checkbox-item { display: flex; align-items: center; gap: 8px; }
+.inventory-waste .modal-footer { display: flex; justify-content: flex-end; gap: 10px; }
+
+/* Pagination */
+.inventory-waste .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
+.inventory-waste .pagination-info { color: #777; font-size: 14px; }
+.inventory-waste .pagination-controls { display: flex; gap: 5px; }
+.inventory-waste .page-btn { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid #ddd; background: #fff; border-radius: 4px; cursor: pointer; font-weight: 500; }
+.inventory-waste .page-btn.active { background-color: var(--primary); color: #fff; border-color: var(--primary); }
+
+/* Responsive */
+@media (max-width: 992px) { .inventory-waste .dashboard-container { flex-direction: column; } }
+@media (max-width: 768px) {
+  .inventory-waste .header { flex-direction: column; align-items: flex-start; }
+  .inventory-waste .user-info { margin-top: 15px; }
+  .inventory-waste .disposal-controls { flex-direction: column; align-items: flex-start; }
+  .inventory-waste .filter-group, .inventory-waste .filter-select, .inventory-waste .date-input { width: 100%; }
+  .inventory-waste .date-range { width: 100%; flex-direction: column; }
+  .inventory-waste .disposal-stats { grid-template-columns: repeat(2, 1fr); }
+  .inventory-waste .disposal-grid { grid-template-columns: 1fr; }
+  .inventory-waste .history-table { display: block; overflow-x: auto; }
+  .inventory-waste .form-row { flex-direction: column; gap: 0; }
+}
+@media (max-width: 480px) {
+  .inventory-waste .disposal-actions { flex-direction: column; }
+  .inventory-waste .pagination { flex-direction: column; gap: 15px; }
+}

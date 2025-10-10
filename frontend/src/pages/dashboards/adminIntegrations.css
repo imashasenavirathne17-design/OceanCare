@@ -1,0 +1,142 @@
+/* Admin Integrations Management Styles */
+/* Rely on shared variables from .admin-dashboard (see AdminSidebar.css) */
+
+.admin-integrations { background:#f5f7fb; color:#333; min-height:100vh; }
+.admin-integrations .dashboard-container { display:flex; min-height:100vh; }
+.admin-integrations .main-content { flex:1; padding:20px; overflow-y:auto; }
+.admin-integrations .header { display:flex; justify-content:space-between; align-items:center; margin-bottom:30px; padding-bottom:15px; border-bottom:1px solid #eee; }
+.admin-integrations .header h2 { color:var(--primary); font-size:24px; }
+.admin-integrations .user-info { display:flex; align-items:center; }
+.admin-integrations .user-info img { width:40px; height:40px; border-radius:50%; margin-right:10px; }
+.admin-integrations .status-badge { padding:5px 10px; border-radius:20px; font-size:12px; font-weight:600; margin-left:10px; }
+.admin-integrations .status-active { background-color:rgba(56,176,0,0.2); color:var(--success); }
+
+/* Integration Status */
+.admin-integrations .integration-status { background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.05); padding:25px; margin-bottom:30px; }
+.admin-integrations .section-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+.admin-integrations .section-title { font-size:20px; font-weight:600; color:var(--primary); }
+.admin-integrations .status-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:20px; }
+.admin-integrations .status-card { background:#f8f9fa; border-radius:8px; padding:20px; text-align:center; transition:transform .3s; border-left:4px solid var(--primary); }
+.admin-integrations .status-card:hover { transform:translateY(-3px); box-shadow:0 5px 15px rgba(0,0,0,0.1); }
+.admin-integrations .status-icon { width:50px; height:50px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:20px; margin:0 auto 15px; color:#fff; }
+.admin-integrations .status-icon.healthy { background:var(--success); }
+.admin-integrations .status-icon.warning { background:var(--warning); }
+.admin-integrations .status-icon.error { background:var(--danger); }
+.admin-integrations .status-name { font-weight:600; margin-bottom:5px; }
+.admin-integrations .status-value { font-size:24px; font-weight:700; margin-bottom:5px; }
+.admin-integrations .status-desc { font-size:12px; color:#666; }
+
+/* Buttons */
+.btn { padding:8px 15px; border:none; border-radius:4px; cursor:pointer; font-weight:500; transition:all .3s; display:inline-flex; align-items:center; }
+.btn i { margin-right:5px; }
+.btn-primary { background:var(--primary); color:#fff; }
+.btn-success { background:var(--success); color:#fff; }
+.btn-warning { background:var(--warning); color:#fff; }
+.btn-info { background:var(--info); color:#fff; }
+.btn-danger { background:var(--danger); color:#fff; }
+.btn-sm { padding:5px 10px; font-size:12px; }
+
+/* Active Integrations */
+.admin-integrations .active-integrations { background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.05); padding:25px; margin-bottom:30px; }
+.admin-integrations .integrations-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+.admin-integrations .search-box { display:flex; gap:10px; }
+.admin-integrations .search-input { padding:8px 15px; border:1px solid #ddd; border-radius:4px; width:250px; }
+.admin-integrations .integrations-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:20px; }
+.admin-integrations .integration-card { background:#f8f9fa; border-radius:8px; padding:20px; border-left:4px solid var(--primary); transition:all .3s; }
+.admin-integrations .integration-card:hover { transform:translateY(-3px); box-shadow:0 5px 15px rgba(0,0,0,0.1); }
+.admin-integrations .integration-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; }
+.admin-integrations .integration-name { font-weight:600; font-size:18px; }
+.admin-integrations .integration-status-badge { padding:4px 8px; border-radius:12px; font-size:12px; font-weight:600; }
+.admin-integrations .status-warning { background:rgba(255,158,0,.2); color:var(--warning); }
+.admin-integrations .status-error { background:rgba(255,0,110,.2); color:var(--danger); }
+.admin-integrations .status-disabled { background:rgba(108,117,125,.2); color:#6c757d; }
+.admin-integrations .integration-details { margin-bottom:15px; }
+.admin-integrations .detail-item { display:flex; justify-content:space-between; margin-bottom:8px; font-size:14px; }
+.admin-integrations .detail-label { color:#666; }
+.admin-integrations .detail-value { font-weight:500; }
+.admin-integrations .integration-actions { display:flex; gap:10px; }
+
+/* API Monitoring */
+.admin-integrations .api-monitoring { background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.05); padding:25px; margin-bottom:30px; }
+.admin-integrations .monitoring-tabs { display:flex; border-bottom:1px solid #eee; margin-bottom:20px; }
+.admin-integrations .monitoring-tab { padding:10px 20px; cursor:pointer; font-weight:500; border-bottom:3px solid transparent; }
+.admin-integrations .monitoring-tab.active { border-bottom-color:var(--primary); color:var(--primary); }
+.admin-integrations .monitoring-content { display:none; }
+.admin-integrations .monitoring-content.active { display:block; }
+.admin-integrations .api-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:15px; margin-bottom:20px; }
+.admin-integrations .api-stat-card { background:#f8f9fa; border-radius:6px; padding:15px; text-align:center; }
+.admin-integrations .api-stat-value { font-size:24px; font-weight:700; margin-bottom:5px; }
+.admin-integrations .api-stat-label { font-size:12px; color:#666; }
+.admin-integrations .api-table { width:100%; border-collapse:collapse; }
+.admin-integrations .api-table th, .admin-integrations .api-table td { padding:12px 15px; text-align:left; border-bottom:1px solid #eee; }
+.admin-integrations .api-table th { background:#f8f9fa; font-weight:600; color:#555; }
+.admin-integrations .api-table tr:hover { background:#f8f9fa; }
+.admin-integrations .response-time { padding:4px 8px; border-radius:12px; font-size:12px; font-weight:600; }
+.admin-integrations .time-fast { background:rgba(56,176,0,.2); color:var(--success); }
+.admin-integrations .time-medium { background:rgba(255,158,0,.2); color:var(--warning); }
+.admin-integrations .time-slow { background:rgba(255,0,110,.2); color:var(--danger); }
+
+/* System Health */
+.admin-integrations .system-health { background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.05); padding:25px; }
+.admin-integrations .health-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:20px; }
+.admin-integrations .health-card { background:#f8f9fa; border-radius:8px; padding:20px; text-align:center; transition:all .3s; border:1px solid #e9ecef; }
+.admin-integrations .health-card:hover { transform:translateY(-3px); box-shadow:0 5px 15px rgba(0,0,0,0.1); border-color:var(--primary-light); }
+.admin-integrations .health-icon { width:50px; height:50px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:20px; margin:0 auto 15px; color:#fff; background:var(--primary); }
+.admin-integrations .health-icon.warning { background:var(--warning); }
+.admin-integrations .health-icon.error { background:var(--danger); }
+.admin-integrations .health-title { font-weight:600; margin-bottom:10px; }
+.admin-integrations .health-desc { font-size:12px; color:#666; margin-bottom:15px; }
+.admin-integrations .health-meta { font-size:12px; color:#888; margin-bottom:15px; }
+
+/* Modal */
+.admin-integrations .modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; display:none; }
+.admin-integrations .modal.open { display:flex; }
+.admin-integrations .modal-content { background:#fff; border-radius:10px; width:90%; max-width:600px; padding:30px; box-shadow:0 5px 25px rgba(0,0,0,0.2); }
+.admin-integrations .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+.admin-integrations .modal-title { font-size:20px; font-weight:600; color:var(--primary); }
+.admin-integrations .close-modal { background:none; border:none; font-size:24px; cursor:pointer; color:#777; }
+.admin-integrations .modal-body { margin-bottom:25px; }
+.admin-integrations .form-group { margin-bottom:20px; }
+.admin-integrations .form-label { display:block; margin-bottom:8px; font-weight:500; }
+.admin-integrations .form-control { width:100%; padding:10px 15px; border:1px solid #ddd; border-radius:4px; font-size:14px; }
+.admin-integrations .form-row { display:flex; gap:15px; }
+.admin-integrations .form-row .form-group { flex:1; }
+.admin-integrations .checkbox-group { display:flex; flex-wrap:wrap; gap:15px; margin-top:10px; }
+.admin-integrations .checkbox-item { display:flex; align-items:center; width:calc(50% - 10px); }
+.admin-integrations .checkbox-item input { margin-right:8px; }
+.admin-integrations .modal-footer { display:flex; justify-content:flex-end; gap:10px; }
+
+/* Toggle Switch */
+.admin-integrations .toggle-switch { position:relative; display:inline-block; width:50px; height:24px; }
+.admin-integrations .toggle-switch input { opacity:0; width:0; height:0; }
+.admin-integrations .slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:#ccc; transition:.4s; border-radius:24px; }
+.admin-integrations .slider:before { position:absolute; content:""; height:16px; width:16px; left:4px; bottom:4px; background:#fff; transition:.4s; border-radius:50%; }
+.admin-integrations .toggle-switch input:checked + .slider { background:var(--success); }
+.admin-integrations .toggle-switch input:checked + .slider:before { transform:translateX(26px); }
+
+/* Pagination */
+.admin-integrations .pagination { display:flex; justify-content:space-between; align-items:center; margin-top:20px; }
+.admin-integrations .pagination-info { color:#777; font-size:14px; }
+.admin-integrations .pagination-controls { display:flex; gap:5px; }
+.admin-integrations .page-btn { width:36px; height:36px; display:flex; align-items:center; justify-content:center; border:1px solid #ddd; background:#fff; border-radius:4px; cursor:pointer; font-weight:500; }
+.admin-integrations .page-btn.active { background:var(--success); color:#fff; border-color:var(--success); }
+
+/* Responsive */
+@media (max-width: 992px){
+  .admin-integrations .dashboard-container{flex-direction:column}
+  .admin-integrations .status-grid{grid-template-columns:repeat(2,1fr)}
+  .admin-integrations .integrations-header{flex-direction:column; align-items:flex-start; gap:15px}
+  .admin-integrations .search-box{flex-direction:column; width:100%}
+  .admin-integrations .search-input{width:100%}
+  .admin-integrations .integrations-grid{grid-template-columns:1fr}
+  .admin-integrations .api-stats{grid-template-columns:repeat(2,1fr)}
+  .admin-integrations .api-table{display:block; overflow-x:auto}
+  .admin-integrations .health-grid{grid-template-columns:1fr}
+  .admin-integrations .form-row{flex-direction:column; gap:0}
+  .admin-integrations .checkbox-item{width:100%}
+}
+@media (max-width: 480px){
+  .admin-integrations .status-grid{grid-template-columns:1fr}
+  .admin-integrations .api-stats{grid-template-columns:1fr}
+  .admin-integrations .pagination{flex-direction:column; gap:15px}
+}

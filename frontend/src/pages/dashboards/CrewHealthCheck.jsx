@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearSession, getUser } from '../../lib/token';
 import './crewDashboard.css';
@@ -23,10 +23,25 @@ export default function CrewHealthCheck() {
     submissionDate: ''
   });
   const [errors, setErrors] = useState({});
-  const [successOpen, setSuccessOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const saveTimer = useRef(null);
 
+  // Draft restore (runs once)
   useEffect(() => {
-    setForm((f) => ({ ...f, submissionDate: new Date().toISOString().split('T')[0] }));
+    const today = new Date().toISOString().split('T')[0];
+    const draftKey = `crewHealthCheck:draft:${form.crewId}`;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setForm((f) => ({ ...f, ...parsed, submissionDate: parsed.submissionDate || today }));
+      } else {
+        setForm((f) => ({ ...f, submissionDate: today }));
+      }
+    } catch {
+      setForm((f) => ({ ...f, submissionDate: today }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onLogout = () => { clearSession(); navigate('/login'); };
@@ -44,21 +59,102 @@ export default function CrewHealthCheck() {
     const dia = parseInt(form.diastolic, 10);
     const oxy = parseInt(form.oxygen, 10);
     const rr = parseInt(form.respiratoryRate, 10);
-    if (!(t >= 35 && t <= 42)) e.temperature = 'Temperature must be between 35°C and 42°C';
-    if (!(hr >= 40 && hr <= 200)) e.heartRate = 'Heart rate must be between 40 and 200 BPM';
-    if (!(sys >= 70 && sys <= 200) || !(dia >= 40 && dia <= 130)) e.bp = 'Valid systolic: 70-200, diastolic: 40-130';
-    if (!(oxy >= 70 && oxy <= 100)) e.oxygen = 'Oxygen saturation must be between 70% and 100%';
-    if (!(rr >= 10 && rr <= 40)) e.respiratoryRate = 'Respiratory rate must be between 10 and 40';
+    if (!(t >= 35 && t <= 42)) e.temperature = 'Must be 35–42°C';
+    if (!(hr >= 40 && hr <= 200)) e.heartRate = 'Must be 40–200 BPM';
+    if (!(sys >= 70 && sys <= 200) || !(dia >= 40 && dia <= 130)) e.bp = 'Systolic 70–200, Diastolic 40–130';
+    if (!(oxy >= 70 && oxy <= 100)) e.oxygen = 'Must be 70–100%';
+    if (!(rr >= 10 && rr <= 40)) e.respiratoryRate = 'Must be 10–40';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
+
+  // Debounced validation while typing
+  useEffect(() => {
+    const id = setTimeout(() => {
+      validate();
+    }, 300);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.temperature, form.heartRate, form.systolic, form.diastolic, form.oxygen, form.respiratoryRate]);
+
+  // Autosave draft
+  useEffect(() => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      try {
+        const draftKey = `crewHealthCheck:draft:${form.crewId}`;
+        localStorage.setItem(draftKey, JSON.stringify(form));
+      } catch {}
+    }, 500);
+    return () => saveTimer.current && clearTimeout(saveTimer.current);
+  }, [form]);
+
+  // Removed clearDraft controls and notifications
+
+  // Derived summary and risk
+  const summary = useMemo(() => {
+    const t = parseFloat(form.temperature);
+    const hr = parseInt(form.heartRate || '0', 10);
+    const sys = parseInt(form.systolic || '0', 10);
+    const dia = parseInt(form.diastolic || '0', 10);
+    const oxy = parseInt(form.oxygen || '0', 10);
+    const rr = parseInt(form.respiratoryRate || '0', 10);
+
+    const bpCategory = () => {
+      if (!sys || !dia) return '—';
+      if (sys >= 180 || dia >= 120) return 'Hypertensive crisis';
+      if (sys >= 140 || dia >= 90) return 'Hypertension stage 2';
+      if (sys >= 130 || dia >= 80) return 'Hypertension stage 1';
+      if (sys >= 120 && dia < 80) return 'Elevated';
+      return 'Normal';
+    };
+
+    let risk = 'Low';
+    if (
+      (t && (t < 35.5 || t > 38.5)) ||
+      (oxy && oxy < 94) ||
+      (rr && (rr < 12 || rr > 24)) ||
+      (hr && (hr < 50 || hr > 110)) ||
+      ['Hypertension stage 2', 'Hypertensive crisis'].includes(bpCategory())
+    ) {
+      risk = 'High';
+    } else if (
+      (t && (t < 36 || t > 37.8)) ||
+      (oxy && oxy < 96) ||
+      (rr && (rr < 14 || rr > 20)) ||
+      (hr && (hr < 55 || hr > 100)) ||
+      bpCategory() === 'Hypertension stage 1' ||
+      bpCategory() === 'Elevated'
+    ) {
+      risk = 'Moderate';
+    }
+
+    return {
+      bpLabel: sys && dia ? `${sys}/${dia} (${bpCategory()})` : '—',
+      risk,
+    };
+  }, [form.temperature, form.heartRate, form.systolic, form.diastolic, form.oxygen, form.respiratoryRate]);
   const onSubmit = (e) => {
     e.preventDefault();
     if (!validate()) return;
-    // Placeholder: submit to backend
-    setSuccessOpen(true);
-    // reset form (keep crewId and submissionDate)
-    setForm((f) => ({ ...f, temperature: '', heartRate: '', systolic: '', diastolic: '', oxygen: '', respiratoryRate: '', symptoms: [], symptomsDescription: '', additionalNotes: '' }));
+    // Daily submission guard (client-side)
+    const today = new Date().toISOString().split('T')[0];
+    const lastKey = `crewHealthCheck:lastSubmission:${form.crewId}`;
+    const last = localStorage.getItem(lastKey);
+    if (last === today) return; // silently block duplicate same-day submissions
+    setLoading(true);
+    try {
+      // Placeholder: submit to backend using api helper when backend is ready
+      // await api.post('/crew/health-checks', form)
+      localStorage.setItem(lastKey, today);
+      // reset form (keep crewId and submissionDate)
+      setForm((f) => ({ ...f, temperature: '', heartRate: '', systolic: '', diastolic: '', oxygen: '', respiratoryRate: '', symptoms: [], symptomsDescription: '', additionalNotes: '' }));
+      // clear draft after successful submit
+      try { localStorage.removeItem(`crewHealthCheck:draft:${form.crewId}`); } catch {}
+    } catch (err) {
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -74,7 +170,7 @@ export default function CrewHealthCheck() {
                 <div>{user?.fullName || 'Crew User'}</div>
                 <small>Crew ID: {user?.crewId || 'CD12345'}</small>
               </div>
-              <div className="status-badge status-active">Active</div>
+              {/* Risk badge removed for clean header */}
             </div>
           </div>
           <section className="health-check-form">
@@ -83,32 +179,69 @@ export default function CrewHealthCheck() {
               <div className="form-grid">
                 <div className="form-group">
                   <label>Temperature (°C) *</label>
-                  <input name="temperature" type="number" className="form-control" placeholder="36.5" step="0.1" min="35" max="42" value={form.temperature} onChange={onChange} required />
-                  {errors.temperature && <div className="error-message">{errors.temperature}</div>}
+                  <input name="temperature" type="number" className="form-control" placeholder="36.5" step="0.1" min="35" max="42" value={form.temperature} onChange={onChange} required aria-invalid={!!errors.temperature} />
+                  <div className="error-slot">
+                    {errors.temperature ? (
+                      <div className="error-message"><i className="fas fa-exclamation-circle" aria-hidden="true"></i> {errors.temperature}</div>
+                    ) : (
+                      <div className="hint-message">Range: 35–42°C</div>
+                    )}
+                  </div>
                 </div>
                 <div className="form-group">
                   <label>Heart Rate (BPM) *</label>
-                  <input name="heartRate" type="number" className="form-control" placeholder="72" min="40" max="200" value={form.heartRate} onChange={onChange} required />
-                  {errors.heartRate && <div className="error-message">{errors.heartRate}</div>}
+                  <input name="heartRate" type="number" className="form-control" placeholder="72" min="40" max="200" value={form.heartRate} onChange={onChange} required aria-invalid={!!errors.heartRate} />
+                  <div className="error-slot">
+                    {errors.heartRate ? (
+                      <div className="error-message"><i className="fas fa-exclamation-circle" aria-hidden="true"></i> {errors.heartRate}</div>
+                    ) : (
+                      <div className="hint-message">Range: 40–200 BPM</div>
+                    )}
+                  </div>
                 </div>
                 <div className="form-group">
                   <label>Blood Pressure - Systolic *</label>
-                  <input name="systolic" type="number" className="form-control" placeholder="120" min="70" max="200" value={form.systolic} onChange={onChange} required />
+                  <input name="systolic" type="number" className="form-control" placeholder="120" min="70" max="200" value={form.systolic} onChange={onChange} required aria-invalid={!!errors.bp} />
+                  <div className="error-slot">
+                    {errors.bp ? (
+                      <div className="error-message"><i className="fas fa-exclamation-circle" aria-hidden="true"></i> {errors.bp}</div>
+                    ) : (
+                      <div className="hint-message">Systolic 70–200</div>
+                    )}
+                  </div>
                 </div>
                 <div className="form-group">
                   <label>Blood Pressure - Diastolic *</label>
-                  <input name="diastolic" type="number" className="form-control" placeholder="80" min="40" max="130" value={form.diastolic} onChange={onChange} required />
-                  {errors.bp && <div className="error-message">{errors.bp}</div>}
+                  <input name="diastolic" type="number" className="form-control" placeholder="80" min="40" max="130" value={form.diastolic} onChange={onChange} required aria-invalid={!!errors.bp} />
+                  <div className="error-slot">
+                    {errors.bp ? (
+                      <div className="error-message"><i className="fas fa-exclamation-circle" aria-hidden="true"></i> {errors.bp}</div>
+                    ) : (
+                      <div className="hint-message">Diastolic 40–130</div>
+                    )}
+                  </div>
                 </div>
                 <div className="form-group">
                   <label>Oxygen Saturation (%) *</label>
-                  <input name="oxygen" type="number" className="form-control" placeholder="98" min="70" max="100" value={form.oxygen} onChange={onChange} required />
-                  {errors.oxygen && <div className="error-message">{errors.oxygen}</div>}
+                  <input name="oxygen" type="number" className="form-control" placeholder="98" min="70" max="100" value={form.oxygen} onChange={onChange} required aria-invalid={!!errors.oxygen} />
+                  <div className="error-slot">
+                    {errors.oxygen ? (
+                      <div className="error-message"><i className="fas fa-exclamation-circle" aria-hidden="true"></i> {errors.oxygen}</div>
+                    ) : (
+                      <div className="hint-message">Range: 70–100%</div>
+                    )}
+                  </div>
                 </div>
                 <div className="form-group">
                   <label>Respiratory Rate (breaths/min) *</label>
-                  <input name="respiratoryRate" type="number" className="form-control" placeholder="16" min="10" max="40" value={form.respiratoryRate} onChange={onChange} required />
-                  {errors.respiratoryRate && <div className="error-message">{errors.respiratoryRate}</div>}
+                  <input name="respiratoryRate" type="number" className="form-control" placeholder="16" min="10" max="40" value={form.respiratoryRate} onChange={onChange} required aria-invalid={!!errors.respiratoryRate} />
+                  <div className="error-slot">
+                    {errors.respiratoryRate ? (
+                      <div className="error-message"><i className="fas fa-exclamation-circle" aria-hidden="true"></i> {errors.respiratoryRate}</div>
+                    ) : (
+                      <div className="hint-message">Range: 10–40</div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -141,24 +274,12 @@ export default function CrewHealthCheck() {
               <input type="hidden" name="crewId" value={form.crewId} />
               <input type="hidden" name="submissionDate" value={form.submissionDate} />
 
-              <button type="submit" className="btn btn-primary btn-block">Submit Health Check</button>
+              <button type="submit" className="btn btn-primary btn-block" disabled={loading}>{loading ? 'Submitting…' : 'Submit Health Check'}</button>
             </form>
           </section>
         </main>
       </div>
-      {/* Success Modal */}
-      {successOpen && (
-        <div className="modal" onClick={(e) => e.target.classList.contains('modal') && setSuccessOpen(false)}>
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3 className="modal-title">Success!</h3>
-              <button className="close-modal" onClick={() => setSuccessOpen(false)}>&times;</button>
-            </div>
-            <p>Your health check has been submitted successfully.</p>
-            <button className="btn btn-primary" onClick={() => setSuccessOpen(false)}>OK</button>
-          </div>
-        </div>
-      )}
+      {/* Success modal removed */}
     </div>
   );
 }

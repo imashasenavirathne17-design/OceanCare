@@ -1,0 +1,522 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { clearSession, getUser } from '../../lib/token';
+import './emergencyOfficerDashboard.css';
+import EmergencySidebar from './EmergencySidebar';
+
+export default function EmergencyDashboard() {
+  const navigate = useNavigate();
+  const user = getUser();
+
+  // Top stats (match layout)
+  const stats = useMemo(() => ([
+    { icon: 'fas fa-exclamation-circle', value: 3, label: 'Active Alerts', tone: 'danger' },
+    { icon: 'fas fa-heartbeat', value: 1, label: 'Critical Cases', tone: 'warning' },
+    { icon: 'fas fa-user-injured', value: 45, label: 'Crew Monitored', tone: 'primary' },
+    { icon: 'fas fa-check-circle', value: 12, label: 'Resolved Today', tone: 'info' },
+  ]), []);
+
+  // Demo alert list (deduplicated by id)
+  const [alerts, setAlerts] = useState([
+    { id: 'A-1001', crew: 'John Doe', crewId: 'CR-1001', location: 'Deck B - Cabin 12', issue: 'High BP detected', time: new Date().toISOString(), status: 'new', priority: 'urgent' },
+    { id: 'A-1002', crew: 'Jane Smith', crewId: 'CR-1002', location: 'Engine Room', issue: 'Low O2 saturation', time: new Date().toISOString(), status: 'new', priority: 'critical' },
+  ]);
+  const [soundOn, setSoundOn] = useState(true);
+  const [ackComment, setAckComment] = useState('');
+  const [activeAlertId, setActiveAlertId] = useState(null);
+
+  // Protocol state
+  const [protocol, setProtocol] = useState({ type: '', confirm: false, timerMins: 15 });
+
+  // Profiles search
+  const [search, setSearch] = useState('');
+  const profiles = useMemo(() => ([
+    { crewId: 'CR-1001', name: 'John Doe', age: 34, blood: 'O+', risks: 'Hypertension', allergies: 'Penicillin', chronic: ['Hypertension'], highRisk: true },
+    { crewId: 'CR-1002', name: 'Jane Smith', age: 29, blood: 'A-', risks: 'Asthma', allergies: 'None', chronic: ['Asthma'], highRisk: false },
+  ]), []);
+
+  // Map/locations demo data
+  const [locations, setLocations] = useState([
+    { crewId: 'CR-1001', name: 'John Doe', coords: 'Deck B / Corridor', status: 'critical', last5: ['B-12', 'B-11', 'B-10', 'B-10', 'B-9'] },
+    { crewId: 'CR-1002', name: 'Jane Smith', coords: 'Engine Room', status: 'affected', last5: ['Engine', 'Engine', 'Stairs', 'Engine', 'C-2'] },
+  ]);
+
+  // Messaging state
+  const [message, setMessage] = useState({ to: 'medical-team', priority: 'urgent', text: '', template: '' });
+  const templates = [
+    { id: 't1', text: 'Immediate assistance required at {location} for {crew}.' },
+    { id: 't2', text: 'Prepare infirmary for incoming patient: {crew}, suspected {issue}.' },
+  ];
+  const [threads, setThreads] = useState([]);
+
+  // Incident logging state
+  const [incident, setIncident] = useState({
+    id: 'CASE-' + Math.floor(Math.random() * 90000 + 10000),
+    status: 'Ongoing',
+    notes: '',
+    crew: '',
+    equipment: '',
+    location: '',
+    cause: '',
+    severity: 'major',
+    ts: new Date().toISOString(),
+  });
+  const [incidentFiles, setIncidentFiles] = useState([]);
+  const [caseHistory, setCaseHistory] = useState([]);
+
+  // Auto logout after inactivity (30 mins)
+  useEffect(() => {
+    let timer = setTimeout(() => { clearSession(); navigate('/login'); }, 30 * 60 * 1000);
+    const reset = () => { clearTimeout(timer); timer = setTimeout(() => { clearSession(); navigate('/login'); }, 30 * 60 * 1000); };
+    window.addEventListener('mousemove', reset);
+    window.addEventListener('keydown', reset);
+    return () => { clearTimeout(timer); window.removeEventListener('mousemove', reset); window.removeEventListener('keydown', reset); };
+  }, [navigate]);
+
+  const onLogout = () => { clearSession(); navigate('/login'); };
+  const scrollToId = (id) => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth' }); };
+
+  const acknowledgeAlert = (id) => {
+    setAlerts((as) => as.map((a) => (a.id === id ? { ...a, status: 'acknowledged', ackAt: new Date().toISOString(), ackComment } : a)));
+    setAckComment('');
+    setActiveAlertId(null);
+  };
+
+  const closeAlert = (id) => {
+    // simple required field check
+    const a = alerts.find((x) => x.id === id);
+    if (!a?.ackAt) return alert('Please acknowledge the alert before closing.');
+    setAlerts((as) => as.map((al) => (al.id === id ? { ...al, status: 'closed', closedAt: new Date().toISOString() } : al)));
+  };
+
+  const triggerProtocol = () => {
+    if (!protocol.type) return alert('Select a protocol.');
+    if (!protocol.confirm) return alert('Please confirm before execution.');
+    alert(`Protocol "${protocol.type}" activated. Re-evaluation in ${protocol.timerMins} mins.`);
+  };
+
+  const onSaveIncident = () => {
+    setCaseHistory((h) => [
+      { ts: new Date().toISOString(), data: incident, files: incidentFiles.map((f) => f.name) },
+      ...h,
+    ]);
+    setIncidentFiles([]);
+    alert('Incident saved. Case history updated.');
+  };
+
+  return (
+    <div className="emergency-dashboard">
+      <div className="dashboard-container">
+        <EmergencySidebar onLogout={onLogout} />
+
+        <main className="main-content">
+          {/* Header */}
+          <div className="dash-header">
+            <h2>Emergency Officer Dashboard</h2>
+            <div className="user-info">
+              <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || 'Emergency Officer')}&background=b3202c&color=fff`} alt="User" />
+              <div>
+                <div>{user?.fullName || 'Emergency Officer'}</div>
+                <small>Role: Emergency</small>
+              </div>
+
+          {/* Alert Banner */}
+          <div className="alert-banner">
+            <i className="fas fa-exclamation-triangle"></i>
+            <div className="alert-content">
+              <div className="alert-title">2 Critical Health Alerts Require Immediate Attention</div>
+              <div>1 cardiac emergency, 1 respiratory distress</div>
+            </div>
+            <button className="btn" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', border: '1px solid #fff' }}>View Details</button>
+          </div>
+              <div className="status-badge status-active">Online</div>
+            </div>
+          </div>
+
+          {/* Dashboard Stats */}
+          <div className="stats-container">
+            {stats.map((s, i) => (
+              <div key={i} className="stat-card">
+                <div className={`stat-icon ${s.tone}`}>
+                  <i className={s.icon}></i>
+                </div>
+                <div className="stat-content">
+                  <div className="stat-value">{s.value}</div>
+                  <div className="stat-label">{s.label}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Quick Actions (cards) */}
+          <div className="dashboard-section">
+            <div className="section-header">
+              <div className="section-title">Quick Actions</div>
+            </div>
+            <div className="quick-actions horiz">
+              {[
+                { to: '#alerts', icon: 'fas fa-bell', title: 'Health Alerts', desc: 'View and manage alerts' },
+                { to: '#protocols', icon: 'fas fa-play-circle', title: 'Emergency Protocols', desc: 'Activate response plans' },
+                { to: '#profiles', icon: 'fas fa-user-injured', title: 'Crew Profiles', desc: 'Access medical records' },
+                { to: '#map', icon: 'fas fa-map-marker-alt', title: 'Crew Locator', desc: 'Track crew locations' },
+                { to: '#messaging', icon: 'fas fa-comments', title: 'Emergency Messaging', desc: 'Notify medical staff' },
+                { to: '#reports', icon: 'fas fa-chart-bar', title: 'Incident Reports', desc: 'Generate emergency reports' },
+              ].map((a, idx) => (
+                <div key={idx} className="action-card" role="button" tabIndex={0} onClick={() => a.to.startsWith('#') ? scrollToId(a.to.substring(1)) : navigate(a.to)}>
+                  <div className="action-icon"><i className={a.icon}></i></div>
+                  <div className="action-title">{a.title}</div>
+                  <div className="action-desc">{a.desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Two-column Activity + Schedule */}
+          <div className="two-col-grid">
+            {/* Recent Activity */}
+            <div className="activity-container">
+              <div className="section-header">
+                <div className="section-title">Recent Emergency Activity</div>
+                <button className="btn btn-outline btn-sm" onClick={() => scrollToId('alerts')}>View All</button>
+              </div>
+              <ul className="activity-list">
+                {[
+                  { icon: 'fas fa-bell', title: 'Cardiac Alert Triggered', desc: 'John Davis - Elevated heart rate detected', time: '10:24 AM • Today' },
+                  { icon: 'fas fa-play-circle', title: 'Emergency Protocol Activated', desc: 'Respiratory distress - Maria Rodriguez', time: '09:50 AM • Today' },
+                  { icon: 'fas fa-comments', title: 'Emergency Message Sent', desc: 'Medical team notified of critical case', time: '09:45 AM • Today' },
+                  { icon: 'fas fa-map-marker-alt', title: 'Crew Location Updated', desc: 'John Davis moved to Medical Bay', time: '09:30 AM • Today' },
+                  { icon: 'fas fa-check-circle', title: 'Alert Resolved', desc: 'Robert Chen - Temperature normalized', time: 'Yesterday • 4:15 PM' },
+                ].map((a, i) => (
+                  <li key={i} className="activity-item">
+                    <div className="activity-icon"><i className={a.icon}></i></div>
+                    <div className="activity-content">
+                      <div className="activity-title">{a.title}</div>
+                      <div className="activity-desc">{a.desc}</div>
+                      <div className="activity-time">{a.time}</div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Upcoming Schedule */}
+            <div className="schedule-container">
+              <div className="section-header">
+                <div className="section-title">Emergency Response Schedule</div>
+                <button className="btn btn-outline btn-sm" onClick={() => scrollToId('incidents')}>View Calendar</button>
+              </div>
+              <ul className="schedule-list">
+                {[
+                  { time: '11:00 AM', title: 'Emergency Drill - Cardiac Arrest', desc: 'Medical team training session', status: 'Mandatory', cls: 'status-urgent' },
+                  { time: '02:30 PM', title: 'Equipment Check', desc: 'Defibrillator and emergency kit inspection', status: 'Scheduled', cls: 'status-upcoming' },
+                  { time: '04:00 PM', title: 'Team Briefing', desc: 'Daily emergency response update', status: 'Scheduled', cls: 'status-upcoming' },
+                  { time: '05:30 PM', title: 'System Maintenance', desc: 'Health monitoring system update', status: 'Scheduled', cls: 'status-upcoming' },
+                ].map((s, i) => (
+                  <li key={i} className="schedule-item">
+                    <div className="schedule-time">{s.time}</div>
+                    <div className="schedule-content">
+                      <div className="schedule-title">{s.title}</div>
+                      <div className="schedule-desc">{s.desc}</div>
+                    </div>
+                    <div className={`schedule-status ${s.cls}`}>{s.status}</div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {/* 1. Real-time Alerts */}
+          <section className="panel" id="alerts">
+            <h3 className="form-title">Real-time Health Alerts</h3>
+            <div className="form-grid">
+              <div className="form-group">
+                <label>Notification</label>
+                <div>New alerts appear with sound/vibration. Duplicate alerts suppressed. Auto-escalation if not acknowledged in time.</div>
+              </div>
+              <div className="form-group">
+                <label>Sound/Vibration</label>
+                <div>{soundOn ? 'Enabled' : 'Disabled'}</div>
+              </div>
+            </div>
+            <div className="table-responsive">
+              <table>
+                <thead>
+                  <tr><th>ID</th><th>Crew</th><th>Location</th><th>Issue</th><th>Time</th><th>Priority</th><th>Status</th><th>Actions</th></tr>
+                </thead>
+                <tbody>
+                  {alerts.map((a) => (
+                    <tr key={a.id} className={a.status !== 'closed' ? 'row-blink' : ''}>
+                      <td>{a.id}</td>
+                      <td>{a.crew} ({a.crewId})</td>
+                      <td>{a.location}</td>
+                      <td>{a.issue}</td>
+                      <td>{new Date(a.time).toLocaleString()}</td>
+                      <td><span className={`badge badge-${a.priority}`}>{a.priority}</span></td>
+                      <td>{a.status}</td>
+                      <td>
+                        <button className="btn btn-primary" onClick={() => setActiveAlertId(a.id)}>Acknowledge</button>
+                        <button className="btn btn-success" onClick={() => closeAlert(a.id)} style={{ marginLeft: 8 }}>Close</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {activeAlertId && (
+              <div className="ack-box">
+                <div>Acknowledging alert {activeAlertId}</div>
+                <textarea className="form-control" rows={2} value={ackComment} onChange={(e) => setAckComment(e.target.value)} placeholder="Optional comment..." />
+                <button className="btn btn-primary" onClick={() => acknowledgeAlert(activeAlertId)} style={{ marginTop: 8 }}>Confirm Acknowledge</button>
+              </div>
+            )}
+          </section>
+
+          {/* 2. Emergency Protocols */}
+          <section className="panel" id="protocols">
+            <h3 className="form-title">Trigger Emergency Protocols</h3>
+            <div className="form-grid">
+              <div className="form-group">
+                <label>Protocol</label>
+                <select className="form-control" value={protocol.type} onChange={(e) => setProtocol((p) => ({ ...p, type: e.target.value }))}>
+                  <option value="">Select protocol</option>
+                  <option value="contact-captain">Contact Captain</option>
+                  <option value="notify-medical">Notify Medical Team</option>
+                  <option value="ship-wide-alert">Ship-wide Alert</option>
+                  <option value="isolate-zone">Isolate Critical Zone</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Re-evaluation Timer (mins)</label>
+                <input type="number" className="form-control" min="5" max="120" value={protocol.timerMins} onChange={(e) => setProtocol((p) => ({ ...p, timerMins: parseInt(e.target.value || '15', 10) }))} />
+              </div>
+              <div className="form-group">
+                <label>Confirm</label>
+                <div className="form-check-line">
+                  <input id="confirmProt" type="checkbox" checked={protocol.confirm} onChange={(e) => setProtocol((p) => ({ ...p, confirm: e.target.checked }))} />
+                  <label htmlFor="confirmProt">I confirm execution and understand this is logged with my ID</label>
+                </div>
+              </div>
+            </div>
+            <button className="btn btn-danger" onClick={triggerProtocol}><i className="fas fa-exclamation-triangle"></i> Activate Protocol</button>
+          </section>
+
+          {/* 3. Crew Profiles */}
+          <section className="panel" id="profiles">
+            <h3 className="form-title">Crew Health Profiles</h3>
+            <div className="form-group">
+              <input className="form-control" placeholder="Search name, ID, risk..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+            <div className="table-responsive">
+              <table>
+                <thead>
+                  <tr><th>Crew ID</th><th>Name</th><th>Age</th><th>Blood</th><th>Chronic</th><th>Allergies</th><th>Risk</th><th>Actions</th></tr>
+                </thead>
+                <tbody>
+                  {profiles.filter(p => (p.name + p.crewId + p.risks).toLowerCase().includes(search.toLowerCase())).map((p, i) => (
+                    <tr key={i} className={p.highRisk ? 'row-highlight' : ''}>
+                      <td>{p.crewId}</td><td>{p.name}</td><td>{p.age}</td><td>{p.blood}</td>
+                      <td>{p.chronic.join(', ')}</td><td>{p.allergies}</td><td>{p.risks}</td>
+                      <td><button className="btn btn-primary">Open Profile</button> <button className="btn btn-success">Monitor</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="note">Vitals graphs, uploads, and emergency contacts appear in the detailed profile view (placeholder).</div>
+          </section>
+
+          {/* 4. Live Map */}
+          <section className="panel" id="map">
+            <h3 className="form-title">Live Location Map</h3>
+            <div className="map-placeholder">
+              <div className="map-legend">
+                <span className="legend critical"></span> Critical
+                <span className="legend affected"></span> Affected
+                <span className="legend offline"></span> Offline
+              </div>
+              <div className="map-canvas">
+                {locations.map((l, i) => (
+                  <div key={i} className={`pin ${l.status}`} title={`${l.name} (${l.crewId})`}>
+                    <i className="fas fa-user"></i>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="table-responsive" style={{ marginTop: 10 }}>
+              <table>
+                <thead>
+                  <tr><th>Crew</th><th>Current</th><th>Last 5</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                  {locations.map((l, i) => (
+                    <tr key={i}><td>{l.name} ({l.crewId})</td><td>{l.coords}</td><td>{l.last5.join(' > ')}</td><td>{l.status}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* 5. Secure Messaging */}
+          <section className="panel" id="messaging">
+            <h3 className="form-title">Secure Messaging</h3>
+            <div className="form-grid">
+              <div className="form-group">
+                <label>To</label>
+                <select className="form-control" value={message.to} onChange={(e) => setMessage((m) => ({ ...m, to: e.target.value }))}>
+                  <option value="medical-team">Medical Team</option>
+                  <option value="captain">Captain</option>
+                  <option value="response-team">Response Team</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Priority</label>
+                <select className="form-control" value={message.priority} onChange={(e) => setMessage((m) => ({ ...m, priority: e.target.value }))}>
+                  <option value="urgent">Urgent</option>
+                  <option value="normal">Normal</option>
+                  <option value="info">Info</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Template</label>
+                <select className="form-control" value={message.template} onChange={(e) => setMessage((m) => ({ ...m, template: e.target.value, text: templates.find(t => t.id === e.target.value)?.text || '' }))}>
+                  <option value="">Custom</option>
+                  {templates.map(t => <option key={t.id} value={t.id}>{t.text}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="form-group">
+              <textarea className="form-control" rows={3} placeholder="Type your message..." value={message.text} onChange={(e) => setMessage((m) => ({ ...m, text: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <button className="btn btn-primary" onClick={() => {
+                if (!message.text.trim()) return alert('Enter a message');
+                setThreads((th) => [{ ts: new Date().toISOString(), ...message }, ...th]);
+                setMessage((m) => ({ ...m, text: '' }));
+              }}><i className="fas fa-paper-plane"></i> Send</button>
+            </div>
+            {threads.length > 0 && (
+              <div className="history">
+                <h4>Message History</h4>
+                <ul>
+                  {threads.map((t, i) => (
+                    <li key={i}><strong>{new Date(t.ts).toLocaleString()}</strong> — to {t.to} [{t.priority}]: {t.text}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+
+          {/* 6. Incident Logging */}
+          <section className="panel" id="incidents">
+            <h3 className="form-title">Incident Log</h3>
+            <div className="form-grid">
+              <div className="form-group">
+                <label>Case ID</label>
+                <input className="form-control" value={incident.id} readOnly />
+              </div>
+              <div className="form-group">
+                <label>Status</label>
+                <select className="form-control" value={incident.status} onChange={(e) => setIncident((s) => ({ ...s, status: e.target.value }))}>
+                  <option>Ongoing</option>
+                  <option>Resolved</option>
+                  <option>Escalated</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Severity</label>
+                <select className="form-control" value={incident.severity} onChange={(e) => setIncident((s) => ({ ...s, severity: e.target.value }))}>
+                  <option>minor</option>
+                  <option>major</option>
+                  <option>critical</option>
+                </select>
+              </div>
+            </div>
+            <div className="form-grid">
+              <div className="form-group">
+                <label>Crew Involved</label>
+                <input className="form-control" placeholder="IDs or names" value={incident.crew} onChange={(e) => setIncident((s) => ({ ...s, crew: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label>Equipment Used</label>
+                <input className="form-control" placeholder="e.g., oxygen, AED" value={incident.equipment} onChange={(e) => setIncident((s) => ({ ...s, equipment: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label>Location</label>
+                <input className="form-control" placeholder="Deck / area" value={incident.location} onChange={(e) => setIncident((s) => ({ ...s, location: e.target.value }))} />
+              </div>
+            </div>
+            <div className="form-grid">
+              <div className="form-group">
+                <label>Cause/Nature</label>
+                <select className="form-control" value={incident.cause} onChange={(e) => setIncident((s) => ({ ...s, cause: e.target.value }))}>
+                  <option value="">Select cause</option>
+                  <option value="injury">Injury</option>
+                  <option value="illness">Illness</option>
+                  <option value="equipment">Equipment Failure</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Timestamp</label>
+                <input type="datetime-local" className="form-control" value={new Date(incident.ts).toISOString().slice(0,16)} onChange={(e) => setIncident((s) => ({ ...s, ts: new Date(e.target.value).toISOString() }))} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Notes</label>
+              <textarea className="form-control" rows={3} placeholder="Response steps, e.g., oxygen given" value={incident.notes} onChange={(e) => setIncident((s) => ({ ...s, notes: e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label>Attachments (photos/audio)</label>
+              <input type="file" multiple onChange={(e) => setIncidentFiles(Array.from(e.target.files || []))} />
+              {incidentFiles.length > 0 && (
+                <div className="file-list">{incidentFiles.map((f, i) => <span key={i} className="file-pill">{f.name}</span>)}</div>
+              )}
+            </div>
+            <button className="btn btn-primary" onClick={onSaveIncident}>Save Incident</button>
+            {caseHistory.length > 0 && (
+              <div className="history">
+                <h4>Case History</h4>
+                <ul>
+                  {caseHistory.map((c, i) => (
+                    <li key={i}><strong>{new Date(c.ts).toLocaleString()}</strong> — {c.data.id} [{c.data.status}/{c.data.severity}] — Files: {c.files.join(', ') || 'None'}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+
+          {/* 7. Reports */}
+          <section className="panel" id="reports">
+            <h3 className="form-title">Emergency Reports</h3>
+            <div className="form-grid">
+              <div className="form-group">
+                <label>From</label>
+                <input type="date" className="form-control" />
+              </div>
+              <div className="form-group">
+                <label>To</label>
+                <input type="date" className="form-control" />
+              </div>
+              <div className="form-group">
+                <label>Type</label>
+                <select className="form-control">
+                  <option>All</option>
+                  <option>Medical</option>
+                  <option>Injury</option>
+                  <option>Equipment</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <button className="btn btn-success"><i className="fas fa-file-excel"></i> Export Excel</button>
+              <button className="btn btn-primary" style={{ marginLeft: 10 }}><i className="fas fa-file-pdf"></i> Export PDF</button>
+              <button className="btn btn-primary" style={{ marginLeft: 10 }}><i className="fas fa-envelope"></i> Email to HQ</button>
+            </div>
+            <div className="note">Officer: {user?.fullName || 'Emergency Officer'} — Signature and approval sections are auto-added. Watermark applied to prevent edits.</div>
+          </section>
+
+        </main>
+      </div>
+    </div>
+  );
+}

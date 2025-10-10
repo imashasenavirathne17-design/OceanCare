@@ -1,8 +1,17 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearSession, getUser } from '../../lib/token';
 import './healthOfficerDashboard.css';
+import './HealthChronic.css';
 import HealthSidebar from './HealthSidebar';
+import { listCrewMembers } from '../../lib/healthApi';
+import {
+  listChronicPatients,
+  createChronicPatient,
+  updateChronicPatient,
+  deleteChronicPatient,
+  createChronicReading
+} from '../../lib/chronicApi';
 
 export default function HealthChronic() {
   const navigate = useNavigate();
@@ -10,40 +19,286 @@ export default function HealthChronic() {
 
   const [activeTab, setActiveTab] = useState('patients');
   const [addReadingOpen, setAddReadingOpen] = useState(false);
+  const [addPatientOpen, setAddPatientOpen] = useState(false);
+  const [viewPatientOpen, setViewPatientOpen] = useState(false);
+  const [viewPatientId, setViewPatientId] = useState(null);
+  const [editMode, setEditMode] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  
+  // Search and filter states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [conditionFilter, setConditionFilter] = useState('All Conditions');
+  const [statusFilter, setStatusFilter] = useState('All Status');
+  const [progressSearch, setProgressSearch] = useState('');
+  const [timePeriod, setTimePeriod] = useState('Last 30 Days');
+  
+  // Crew members data
+  const [crewMembers, setCrewMembers] = useState([]);
+  const [loadingCrew, setLoadingCrew] = useState(false);
 
-  const stats = useMemo(() => ([
-    { icon: 'fas fa-heartbeat', value: 8, label: 'Patients with Chronic Conditions', bg: 'var(--primary)' },
-    { icon: 'fas fa-user-md', value: 5, label: 'Requiring Close Monitoring', bg: 'var(--warning)' },
-    { icon: 'fas fa-exclamation-triangle', value: 2, label: 'Critical Conditions', bg: 'var(--danger)' },
-    { icon: 'fas fa-chart-line', value: '75%', label: 'Stable/Improving', bg: 'var(--success)' },
-  ]), []);
+  const [patients, setPatients] = useState([]);
 
-  const distribution = [
-    { label: 'Hypertension', count: 4, percent: 50 },
-    { label: 'Diabetes', count: 3, percent: 37.5 },
-    { label: 'Asthma', count: 2, percent: 25 },
-    { label: 'Cardiovascular Disease', count: 1, percent: 12.5 },
-  ];
-
-  const patients = [
-    { id: 1, name: 'James Wilson', conditions: 'Hypertension, Diabetes', status: 'critical', lastBp: '165/95', hba1c: '8.9', last: 'Oct 18, 2023', next: 'Oct 28, 2023' },
-    { id: 2, name: 'Maria Rodriguez', conditions: 'Asthma', status: 'monitoring', oxy: '92%', attacks: 2, last: 'Oct 20, 2023', next: 'Nov 5, 2023' },
-    { id: 3, name: 'Robert Smith', conditions: 'Hypertension', status: 'stable', lastBp: '135/85', hr: 78, last: 'Oct 22, 2023', next: 'Nov 15, 2023' },
-  ];
-
-  const [patientSelect, setPatientSelect] = useState('1');
-  const [timePeriod, setTimePeriod] = useState('30');
-
-  const [addPatientForm, setAddPatientForm] = useState({ crew: '', condition: '', dx: '', assessment: '', freq: 'biweekly' });
-  const [readingForm, setReadingForm] = useState({ patient: '', bp: '', sugar: '', hr: '', weight: '', spo2: '', notes: '' });
+  const [addPatientForm, setAddPatientForm] = useState({
+    crewId: '',
+    crewName: '',
+    condition: '',
+    dx: '',
+    severity: 'mild',
+    findings: '',
+    treatment: '',
+    monitoring: '',
+    nextCheckup: ''
+  });
+  const [readingForm, setReadingForm] = useState({
+    patient: '',
+    date: '',
+    bloodGlucose: '',
+    bloodPressure: '',
+    peakFlow: '',
+    weight: '',
+    notes: ''
+  });
 
   const onLogout = () => { clearSession(); navigate('/login'); };
 
-  const viewPatient = (id) => alert(`Viewing patient details for ID: ${id}`);
-  const logReading = (id) => { setReadingForm((f) => ({ ...f, patient: String(id) })); setAddReadingOpen(true); };
+  // Crew name lookup
+  const crewNameById = useMemo(() => {
+    const map = {};
+    crewMembers.forEach(member => {
+      if (member.crewId) {
+        map[member.crewId] = member.fullName || member.name || 'Unknown';
+      }
+    });
+    return map;
+  }, [crewMembers]);
 
-  const submitAddPatient = (e) => { e.preventDefault(); alert('Patient added to chronic condition tracking!'); };
-  const submitReading = (e) => { e.preventDefault(); alert('Health reading saved successfully!'); setAddReadingOpen(false); };
+  // Filtered patients based on search and filters
+  const filteredPatients = patients.filter((p) => {
+    const matchesSearch = searchQuery.trim() === '' || 
+      (p.crewName && p.crewName.toLowerCase().includes(searchQuery.toLowerCase())) || 
+      (p.crewId && p.crewId.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (p.conditions && p.conditions.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesCondition = conditionFilter === 'All Conditions' || 
+      (p.conditions && p.conditions.includes(conditionFilter.replace(' Disease', '')));
+    const matchesStatus = statusFilter === 'All Status' || 
+      (statusFilter === 'Stable' && p.status === 'stable') ||
+      (statusFilter === 'Needs Review' && p.status === 'warning') ||
+      (statusFilter === 'Critical' && p.status === 'critical');
+    return matchesSearch && matchesCondition && matchesStatus;
+  });
+
+  const viewPatient = (id) => {
+    setViewPatientId(id);
+    setViewPatientOpen(true);
+  };
+  
+  const editPatient = (id) => {
+    const patient = patients.find(p => p.id === id || p._id === id);
+    if (patient) {
+      setAddPatientForm({
+        id: patient._id || patient.id,
+        crewId: patient.crewId,
+        crewName: patient.crewName,
+        condition: patient.primaryCondition || 
+                   (patient.conditions && patient.conditions.includes('Diabetes') ? 'diabetes' : 
+                   patient.conditions.includes('Hypertension') ? 'hypertension' :
+                   patient.conditions.includes('Asthma') ? 'asthma' :
+                   patient.conditions.includes('Hyperthyroidism') ? 'thyroid' : 'other'),
+        dx: patient.diagnosisDate ? new Date(patient.diagnosisDate).toISOString().slice(0, 10) : '',
+        severity: patient.severity || 'mild',
+        findings: patient.initialFindings || '',
+        treatment: patient.treatmentPlan || '',
+        monitoring: patient.monitoringParameters || '',
+        nextCheckup: patient.nextCheckup ? new Date(patient.nextCheckup).toISOString().slice(0, 10) : ''
+      });
+      setEditMode(true);
+      setAddPatientOpen(true);
+    }
+  };
+  
+  const deletePatient = async (id) => {
+    if (confirm('Are you sure you want to remove this patient from chronic illness tracking?')) {
+      try {
+        await deleteChronicPatient(id);
+        await loadPatients();
+        alert('Patient removed from chronic illness tracking successfully!');
+      } catch (error) {
+        console.error('Delete patient error:', error);
+        alert('Failed to remove patient: ' + error.message);
+      }
+    }
+  };
+  
+  const logReading = (id) => {
+    const patient = patients.find(p => p.id === id || p._id === id);
+    setReadingForm((f) => ({ 
+      ...f, 
+      patient: String(id),
+      patientId: patient?._id || patient?.id || id
+    })); 
+    setAddReadingOpen(true); 
+  };
+
+  const submitAddPatient = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    
+    try {
+      const selectedCrew = crewMembers.find(c => c.crewId === addPatientForm.crewId);
+      
+      const patientData = {
+        crewId: addPatientForm.crewId,
+        crewName: selectedCrew?.fullName || addPatientForm.crewName,
+        primaryCondition: addPatientForm.condition === 'diabetes' ? 'Type 2 Diabetes' :
+                         addPatientForm.condition === 'hypertension' ? 'Hypertension' :
+                         addPatientForm.condition === 'asthma' ? 'Asthma' :
+                         addPatientForm.condition === 'heart' ? 'Heart Disease' :
+                         addPatientForm.condition === 'thyroid' ? 'Hyperthyroidism' : 'Other',
+        conditions: [addPatientForm.condition === 'diabetes' ? 'Type 2 Diabetes' :
+                    addPatientForm.condition === 'hypertension' ? 'Hypertension' :
+                    addPatientForm.condition === 'asthma' ? 'Asthma' :
+                    addPatientForm.condition === 'heart' ? 'Heart Disease' :
+                    addPatientForm.condition === 'thyroid' ? 'Hyperthyroidism' : 'Other'],
+        severity: addPatientForm.severity,
+        diagnosisDate: addPatientForm.dx,
+        status: 'stable',
+        nextCheckup: addPatientForm.nextCheckup || null,
+        initialFindings: addPatientForm.findings,
+        treatmentPlan: addPatientForm.treatment,
+        monitoringParameters: addPatientForm.monitoring
+      };
+      
+      if (editMode) {
+        await updateChronicPatient(addPatientForm.id, patientData);
+        alert('Patient record updated successfully!');
+      } else {
+        await createChronicPatient(patientData);
+        alert('Chronic illness patient record added successfully!');
+      }
+      
+      await loadPatients();
+      setAddPatientOpen(false);
+      setEditMode(false);
+      resetForm();
+    } catch (error) {
+      console.error('Submit patient error:', error);
+      setError(error.message || 'Failed to save patient record');
+    } finally {
+      setLoading(false);
+    }
+  };
+  const submitReading = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    try {
+      const readingData = {
+        patientId: readingForm.patientId,
+        crewId: readingForm.crewId,
+        readingDate: readingForm.date,
+        bloodGlucose: readingForm.bloodGlucose,
+        bloodPressure: readingForm.bloodPressure,
+        peakFlow: readingForm.peakFlow,
+        weight: readingForm.weight,
+        clinicalNotes: readingForm.notes
+      };
+      
+      await createChronicReading(readingData);
+      alert('Health reading logged successfully!');
+      setAddReadingOpen(false);
+      await loadPatients(); // Refresh to show updated last reading
+      
+      // Reset form
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      setReadingForm({ 
+        patient: '', 
+        patientId: '',
+        crewId: '',
+        date: now.toISOString().slice(0, 16), 
+        bloodGlucose: '', 
+        bloodPressure: '', 
+        peakFlow: '', 
+        weight: '', 
+        notes: '' 
+      });
+    } catch (error) {
+      console.error('Submit reading error:', error);
+      alert('Failed to log reading: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load patients from API
+  const loadPatients = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const data = await listChronicPatients();
+      setPatients(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Load patients error:', error);
+      setError('Failed to load patients');
+      setPatients([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Load crew members
+  const loadCrewMembers = async () => {
+    try {
+      setLoadingCrew(true);
+      const data = await listCrewMembers();
+      setCrewMembers(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Load crew members error:', error);
+      setCrewMembers([]);
+    } finally {
+      setLoadingCrew(false);
+    }
+  };
+  
+  // Reset form to defaults
+  const resetForm = () => {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    
+    setAddPatientForm({
+      crewId: '',
+      crewName: '',
+      condition: '',
+      dx: today,
+      severity: 'mild',
+      findings: '',
+      treatment: '',
+      monitoring: '',
+      nextCheckup: ''
+    });
+    
+    setReadingForm({
+      patient: '',
+      patientId: '',
+      crewId: '',
+      date: now.toISOString().slice(0, 16),
+      bloodGlucose: '',
+      bloodPressure: '',
+      peakFlow: '',
+      weight: '',
+      notes: ''
+    });
+  };
+  
+  // Initialize data and forms
+  useEffect(() => {
+    loadPatients();
+    loadCrewMembers();
+    resetForm();
+  }, []);
 
   return (
     <div className="health-dashboard">
@@ -52,281 +307,583 @@ export default function HealthChronic() {
         <main className="main-content">
           {/* Header */}
           <div className="header">
-            <h2>Chronic Illness Tracking</h2>
+            <h2>Chronic Illness Management</h2>
             <div className="user-info">
               <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || 'Health Officer')}&background=2a9d8f&color=fff`} alt="User" />
               <div>
-                <div>{user?.fullName || 'Dr. Sarah Johnson'}</div>
-                <small>Health Officer | MV Ocean Explorer</small>
+                <div>{user?.fullName}</div>
+                <small>Health Officer</small>
               </div>
               <div className="status-badge status-active">Active</div>
             </div>
           </div>
 
-          {/* Stats */}
-          <section className="dashboard-stats">
-            {stats.map((s, i) => (
-              <div key={i} className="stat-card">
-                <div className="stat-icon" style={{ backgroundColor: s.bg }}>
-                  <i className={s.icon}></i>
-                </div>
-                <div className="stat-value">{s.value}</div>
-                <div className="stat-label">{s.label}</div>
+          <div className="page-content">
+            <div className="page-header">
+              <div className="page-title">Chronic Conditions Management</div>
+              <div className="page-actions">
+                <button className="btn btn-outline"><i className="fas fa-chart-line"></i> View Trends</button>
+                <button className="btn btn-primary" onClick={() => { setEditMode(false); setError(''); resetForm(); setAddPatientOpen(true); }} disabled={loading}>
+                  <i className="fas fa-plus"></i> Add Patient
+                </button>
               </div>
-            ))}
-          </section>
-
-          {/* Condition Distribution */}
-          <div className="dashboard-section">
-            <div className="section-header">
-              <div className="section-title">Condition Distribution</div>
             </div>
-            {distribution.map((d) => (
-              <div key={d.label} className="progress-container">
-                <div className="progress-label">
-                  <span>{d.label}</span>
-                  <span>{d.count} {d.count === 1 ? 'patient' : 'patients'}</span>
-                </div>
-                <div className="progress-bar">
-                  <div className="progress-fill" style={{ width: `${d.percent}%` }}></div>
-                </div>
+            
+            {error && (
+              <div className="alert alert-danger" style={{ marginBottom: 20, padding: 15, backgroundColor: '#f8d7da', color: '#721c24', borderRadius: 8, border: '1px solid #f5c6cb' }}>
+                <i className="fas fa-exclamation-triangle" style={{ marginRight: 8 }}></i>
+                {error}
               </div>
-            ))}
-          </div>
+            )}
+            
+            {loading && (
+              <div className="alert alert-info" style={{ marginBottom: 20, padding: 15, backgroundColor: '#d1ecf1', color: '#0c5460', borderRadius: 8, border: '1px solid #bee5eb' }}>
+                <i className="fas fa-spinner fa-spin" style={{ marginRight: 8 }}></i>
+                Loading...
+              </div>
+            )}
 
-          {/* Tabs */}
-          <div className="dashboard-section">
             <div className="tabs">
-              <div className={`tab ${activeTab === 'patients' ? 'active' : ''}`} onClick={() => setActiveTab('patients')} role="button" tabIndex={0}>Patient Overview</div>
-              <div className={`tab ${activeTab === 'tracking' ? 'active' : ''}`} onClick={() => setActiveTab('tracking')} role="button" tabIndex={0}>Health Tracking</div>
-              <div className={`tab ${activeTab === 'add' ? 'active' : ''}`} onClick={() => setActiveTab('add')} role="button" tabIndex={0}>Add New Patient</div>
+              <div className={`tab ${activeTab === 'patients' ? 'active' : ''}`} onClick={() => setActiveTab('patients')}>Active Patients</div>
+              <div className={`tab ${activeTab === 'conditions' ? 'active' : ''}`} onClick={() => setActiveTab('conditions')}>Conditions Overview</div>
+              <div className={`tab ${activeTab === 'progress' ? 'active' : ''}`} onClick={() => setActiveTab('progress')}>Progress Tracking</div>
             </div>
 
             {/* Patients Tab */}
             {activeTab === 'patients' && (
-              <div className="tab-content active" id="patients">
-                <div className="section-header">
-                  <div className="section-title">Patients with Chronic Conditions</div>
-                  <div className="section-actions">
-                    <button className="btn btn-outline"><i className="fas fa-download"></i> Export</button>
+              <div className="tab-content active" id="patients-tab">
+                <div className="chronic-filter-container">
+                  <div className="chronic-search-box">
+                    <i className="fas fa-search"></i>
+                    <input 
+                      type="text" 
+                      placeholder="Search by patient name, ID, or condition..." 
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
                   </div>
+                  <select 
+                    className="chronic-filter-select" 
+                    value={conditionFilter} 
+                    onChange={(e) => setConditionFilter(e.target.value)}
+                  >
+                    <option>All Conditions</option>
+                    <option>Diabetes</option>
+                    <option>Hypertension</option>
+                    <option>Asthma</option>
+                    <option>Heart Disease</option>
+                    <option>Hyperthyroidism</option>
+                  </select>
+                  <select 
+                    className="chronic-filter-select" 
+                    value={statusFilter} 
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  >
+                    <option>All Status</option>
+                    <option>Stable</option>
+                    <option>Needs Review</option>
+                    <option>Critical</option>
+                  </select>
                 </div>
-                <div className="patient-cards">
-                  {patients.map((p) => (
-                    <div key={p.id} className={`patient-card ${p.status === 'critical' ? 'critical' : p.status === 'monitoring' ? 'monitoring' : ''}`}>
-                      <div className="patient-header">
-                        <div>
-                          <div className="patient-name">{p.name}</div>
-                          <div className="patient-condition">{p.conditions}</div>
-                        </div>
-                        <div className={`status-badge ${p.status === 'critical' ? 'status-critical' : p.status === 'monitoring' ? 'status-monitoring' : 'status-stable'}`}>
-                          {p.status === 'critical' ? 'Critical' : p.status === 'monitoring' ? 'Monitoring' : 'Stable'}
-                        </div>
-                      </div>
-                      <div className="patient-stats">
-                        <div className="stat-item">
-                          <div className="stat-value">{p.lastBp || p.oxy}</div>
-                          <div className="stat-label">{p.lastBp ? 'Last BP' : 'Oxygen Sat'}</div>
-                        </div>
-                        <div className="stat-item">
-                          <div className="stat-value">{p.hba1c || p.attacks || p.hr}</div>
-                          <div className="stat-label">{p.hba1c ? 'HbA1c' : p.attacks ? 'Weekly Attacks' : 'Heart Rate'}</div>
-                        </div>
-                      </div>
-                      <div style={{ fontSize: 14, marginBottom: 15 }}>
-                        Last reading: {p.last} • Next review: {p.next}
-                      </div>
-                      <div style={{ display: 'flex', gap: 10 }}>
-                        <button className="btn btn-outline" onClick={() => viewPatient(p.id)}>View Details</button>
-                        <button className="btn btn-outline" onClick={() => logReading(p.id)}>Log Reading</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
-            {/* Tracking Tab */}
-            {activeTab === 'tracking' && (
-              <div className="tab-content active" id="tracking">
-                <div className="section-header">
-                  <div className="section-title">Health Progress Tracking</div>
-                  <div className="section-actions">
-                    <button className="btn btn-primary" onClick={() => setAddReadingOpen(true)}><i className="fas fa-plus"></i> Add Reading</button>
-                  </div>
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label className="form-label">Select Patient</label>
-                    <select className="form-control" value={patientSelect} onChange={(e) => setPatientSelect(e.target.value)}>
-                      <option value="1">James Wilson (Hypertension, Diabetes)</option>
-                      <option value="2">Maria Rodriguez (Asthma)</option>
-                      <option value="3">Robert Smith (Hypertension)</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Time Period</label>
-                    <select className="form-control" value={timePeriod} onChange={(e) => setTimePeriod(e.target.value)}>
-                      <option value="7">Last 7 days</option>
-                      <option value="30">Last 30 days</option>
-                      <option value="90">Last 90 days</option>
-                      <option value="365">Last year</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="chart-container">
-                  <div className="chart-title">Blood Pressure Trends - {patients.find(p => p.id === Number(patientSelect))?.name || ''}</div>
-                  <div style={{ display: 'flex', height: 200, alignItems: 'flex-end', justifyContent: 'space-around', padding: '0 20px' }}>
-                    {[70,65,75,60,55].map((h, idx) => (
-                      <div key={idx} style={{ background: 'var(--primary)', width: '8%', height: `${h}%`, borderRadius: '4px 4px 0 0' }}></div>
-                    ))}
-                  </div>
-                </div>
-                <div className="table-responsive" style={{ marginTop: 20 }}>
-                  <table>
+                <div className="table-responsive">
+                  <table className="chronic-table">
                     <thead>
                       <tr>
-                        <th>Date</th>
-                        <th>Blood Pressure</th>
-                        <th>Blood Sugar</th>
-                        <th>Weight</th>
-                        <th>Notes</th>
+                        <th>Patient</th>
+                        <th>Condition(s)</th>
+                        <th>Severity</th>
+                        <th>Diagnosis Date</th>
+                        <th>Last Reading</th>
+                        <th>Next Checkup</th>
+                        <th>Status</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr>
-                        <td>Oct 23, 2023</td>
-                        <td>145/80</td>
-                        <td>128 mg/dL</td>
-                        <td>82 kg</td>
-                        <td>Improving with medication</td>
-                        <td><button className="btn btn-outline">Edit</button></td>
-                      </tr>
-                      <tr>
-                        <td>Oct 16, 2023</td>
-                        <td>150/85</td>
-                        <td>142 mg/dL</td>
-                        <td>83 kg</td>
-                        <td>Medication adjusted</td>
-                        <td><button className="btn btn-outline">Edit</button></td>
-                      </tr>
-                      <tr>
-                        <td>Oct 9, 2023</td>
-                        <td>165/95</td>
-                        <td>158 mg/dL</td>
-                        <td>84 kg</td>
-                        <td>Elevated readings</td>
-                        <td><button className="btn btn-outline">Edit</button></td>
-                      </tr>
+                      {filteredPatients.map((p) => (
+                        <tr key={p.id}>
+                          <td>
+                            <div className="patient-cell">
+                              <div className="name">{p.crewName || crewNameById[p.crewId] || 'Unknown'}</div>
+                              <div className="id">{p.crewId}</div>
+                            </div>
+                          </td>
+                          <td className="nowrap">{p.primaryCondition || (Array.isArray(p.conditions) ? p.conditions.join(', ') : p.conditions)}</td>
+                          <td>
+                            <span className={`severity-badge severity-${p.severity}`}>
+                              {p.severity}
+                            </span>
+                          </td>
+                          <td className="nowrap">{p.diagnosisDate ? new Date(p.diagnosisDate).toLocaleDateString() : '—'}</td>
+                          <td>{p.lastReading?.notes || p.lastReading?.bloodGlucose || p.lastReading?.bloodPressure || 'No readings yet'}</td>
+                          <td className="nowrap">{p.nextCheckup ? new Date(p.nextCheckup).toLocaleDateString() : '—'}</td>
+                          <td>
+                            <span className={`status-badge ${p.status === 'warning' ? 'status-warning' : p.status === 'stable' ? 'status-active' : 'status-danger'}`}>
+                              {p.status === 'warning' ? 'Needs Review' : p.status === 'stable' ? 'Stable' : 'Critical'}
+                            </span>
+                          </td>
+                          <td className="chronic-actions">
+                            <button className="btn btn-outline btn-sm" onClick={() => logReading(p.id)}>Log Reading</button>
+                            <button className="btn btn-outline btn-sm" onClick={() => viewPatient(p.id)}>View</button>
+                            <button className="btn btn-outline btn-sm" onClick={() => editPatient(p.id)}>Edit</button>
+                            <button className="btn btn-outline btn-sm" onClick={() => deletePatient(p.id)}>Remove</button>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
               </div>
             )}
 
-            {/* Add New Patient Tab */}
-            {activeTab === 'add' && (
-              <div className="tab-content active" id="add">
-                <div className="section-header">
-                  <div className="section-title">Add New Chronic Condition Patient</div>
+            {/* Conditions Tab */}
+            {activeTab === 'conditions' && (
+              <div className="tab-content active" id="conditions-tab">
+                <div className="cards-container">
+                  <div className="chronic-condition-card">
+                    <div className="chronic-condition-header">
+                      <div className="chronic-condition-title">Diabetes</div>
+                      <div className="chronic-condition-icon warning">
+                        <i className="fas fa-vial"></i>
+                      </div>
+                    </div>
+                    <div className="chronic-condition-value">3 Patients</div>
+                    <div className="chronic-condition-label">1 needs follow-up</div>
+                    <button className="btn btn-outline btn-sm" style={{ marginTop: 15 }}>View Patients</button>
+                  </div>
+
+                  <div className="chronic-condition-card">
+                    <div className="chronic-condition-header">
+                      <div className="chronic-condition-title">Hypertension</div>
+                      <div className="chronic-condition-icon danger">
+                        <i className="fas fa-heartbeat"></i>
+                      </div>
+                    </div>
+                    <div className="chronic-condition-value">4 Patients</div>
+                    <div className="chronic-condition-label">2 need medication adjustment</div>
+                    <button className="btn btn-outline btn-sm" style={{ marginTop: 15 }}>View Patients</button>
+                  </div>
+
+                  <div className="chronic-condition-card">
+                    <div className="chronic-condition-header">
+                      <div className="chronic-condition-title">Asthma</div>
+                      <div className="chronic-condition-icon primary">
+                        <i className="fas fa-wind"></i>
+                      </div>
+                    </div>
+                    <div className="chronic-condition-value">2 Patients</div>
+                    <div className="chronic-condition-label">All stable</div>
+                    <button className="btn btn-outline btn-sm" style={{ marginTop: 15 }}>View Patients</button>
+                  </div>
                 </div>
-                <form onSubmit={submitAddPatient}>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label className="form-label">Crew Member</label>
-                      <select className="form-control" required value={addPatientForm.crew} onChange={(e) => setAddPatientForm(f => ({ ...f, crew: e.target.value }))}>
-                        <option value="">Select crew member</option>
-                        <option value="CD12345">John Doe (CD12345)</option>
-                        <option value="CD12346">Maria Rodriguez (CD12346)</option>
-                        <option value="CD12347">James Wilson (CD12347)</option>
-                        <option value="CD12348">Lisa Chen (CD12348)</option>
-                      </select>
+
+                <div className="page-content" style={{ marginTop: 20 }}>
+                  <div className="page-header">
+                    <div className="page-title">Condition Overview</div>
+                  </div>
+
+                  <div className="table-responsive">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Condition</th>
+                          <th>Total Patients</th>
+                          <th>Stable</th>
+                          <th>Needs Review</th>
+                          <th>Critical</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>Diabetes</td>
+                          <td>3</td>
+                          <td>2</td>
+                          <td>1</td>
+                          <td>0</td>
+                          <td className="action-buttons">
+                            <button className="btn btn-outline btn-sm">View Details</button>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td>Hypertension</td>
+                          <td>4</td>
+                          <td>2</td>
+                          <td>2</td>
+                          <td>0</td>
+                          <td className="action-buttons">
+                            <button className="btn btn-outline btn-sm">View Details</button>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td>Asthma</td>
+                          <td>2</td>
+                          <td>2</td>
+                          <td>0</td>
+                          <td>0</td>
+                          <td className="action-buttons">
+                            <button className="btn btn-outline btn-sm">View Details</button>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td>Hyperthyroidism</td>
+                          <td>1</td>
+                          <td>0</td>
+                          <td>1</td>
+                          <td>0</td>
+                          <td className="action-buttons">
+                            <button className="btn btn-outline btn-sm">View Details</button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Progress Tracking Tab */}
+            {activeTab === 'progress' && (
+              <div className="tab-content active" id="progress-tab">
+                <div className="chronic-filter-container">
+                  <div className="chronic-search-box">
+                    <i className="fas fa-search"></i>
+                    <input 
+                      type="text" 
+                      placeholder="Search patient progress..." 
+                      value={progressSearch}
+                      onChange={(e) => setProgressSearch(e.target.value)}
+                    />
+                  </div>
+                  <select 
+                    className="chronic-filter-select" 
+                    value={timePeriod} 
+                    onChange={(e) => setTimePeriod(e.target.value)}
+                    style={{ width: 200 }}
+                  >
+                    <option>Last 30 Days</option>
+                    <option>Last 7 Days</option>
+                    <option>Last 3 Months</option>
+                    <option>All Time</option>
+                  </select>
+                </div>
+
+                {/* Example progress bars */}
+                <div className="chronic-progress-container">
+                  <div className="chronic-progress-header">
+                    <div className="chronic-progress-title">Maria Rodriguez - Blood Glucose Control</div>
+                    <div className="chronic-progress-target">Target: &lt; 130 mg/dL</div>
+                  </div>
+                  <div className="chronic-progress-bar">
+                    <div className="chronic-progress-fill" style={{ width: '75%' }}></div>
+                  </div>
+                  <div className="chronic-progress-labels">
+                    <span>Start: 180 mg/dL</span>
+                    <span>Current: 145 mg/dL</span>
+                    <span>Target: 130 mg/dL</span>
+                  </div>
+                </div>
+
+                <div className="chronic-progress-container">
+                  <div className="chronic-progress-header">
+                    <div className="chronic-progress-title">John Doe - Blood Pressure Control</div>
+                    <div className="chronic-progress-target">Target: &lt; 120/80 mmHg</div>
+                  </div>
+                  <div className="chronic-progress-bar">
+                    <div className="chronic-progress-fill" style={{ width: '60%' }}></div>
+                  </div>
+                  <div className="chronic-progress-labels">
+                    <span>Start: 160/95 mmHg</span>
+                    <span>Current: 142/88 mmHg</span>
+                    <span>Target: 120/80 mmHg</span>
+                  </div>
+                </div>
+
+                <div className="chronic-progress-container">
+                  <div className="chronic-progress-header">
+                    <div className="chronic-progress-title">James Wilson - Asthma Control</div>
+                    <div className="chronic-progress-target">Target: Peak Flow &gt; 450 L/min</div>
+                  </div>
+                  <div className="chronic-progress-bar">
+                    <div className="chronic-progress-fill" style={{ width: '85%' }}></div>
+                  </div>
+                  <div className="chronic-progress-labels">
+                    <span>Start: 350 L/min</span>
+                    <span>Current: 420 L/min</span>
+                    <span>Target: 450 L/min</span>
+                  </div>
+                </div>
+
+                <div className="page-content">
+                  <div className="page-header">
+                    <div className="page-title">Recent Progress Notes</div>
+                    <div className="page-actions">
+                      <button className="btn btn-primary" onClick={() => setAddReadingOpen(true)}><i className="fas fa-plus"></i> Add Reading</button>
                     </div>
-                    <div className="form-group">
-                      <label className="form-label">Condition Type</label>
-                      <select className="form-control" required value={addPatientForm.condition} onChange={(e) => setAddPatientForm(f => ({ ...f, condition: e.target.value }))}>
-                        <option value="">Select condition</option>
-                        <option value="hypertension">Hypertension</option>
-                        <option value="diabetes">Diabetes</option>
-                        <option value="asthma">Asthma</option>
-                        <option value="cardiovascular">Cardiovascular Disease</option>
-                        <option value="other">Other</option>
-                      </select>
-                    </div>
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Diagnosis Date</label>
-                    <input type="date" className="form-control" required value={addPatientForm.dx} onChange={(e) => setAddPatientForm(f => ({ ...f, dx: e.target.value }))} />
+                  <div className="table-responsive">
+                    <table className="chronic-notes-table">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Patient</th>
+                          <th>Condition</th>
+                          <th>Progress Note</th>
+                          <th>Health Officer</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>2023-10-24</td>
+                          <td>Maria Rodriguez</td>
+                          <td>Diabetes</td>
+                          <td>Blood glucose levels improving with new medication regimen. Patient reports increased energy.</td>
+                          <td>Dr. Johnson</td>
+                        </tr>
+                        <tr>
+                          <td>2023-10-22</td>
+                          <td>John Doe</td>
+                          <td>Hypertension</td>
+                          <td>BP readings remain elevated. Considering dosage adjustment for lisinopril.</td>
+                          <td>Dr. Johnson</td>
+                        </tr>
+                        <tr>
+                          <td>2023-10-20</td>
+                          <td>James Wilson</td>
+                          <td>Asthma</td>
+                          <td>Peak flow measurements show consistent improvement. No recent asthma attacks reported.</td>
+                          <td>Dr. Johnson</td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Initial Assessment</label>
-                    <textarea className="form-control" rows={4} placeholder="Describe the condition, severity, and initial treatment plan..." value={addPatientForm.assessment} onChange={(e) => setAddPatientForm(f => ({ ...f, assessment: e.target.value }))}></textarea>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Monitoring Frequency</label>
-                    <select className="form-control" required value={addPatientForm.freq} onChange={(e) => setAddPatientForm(f => ({ ...f, freq: e.target.value }))}>
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                      <option value="biweekly">Every 2 weeks</option>
-                      <option value="monthly">Monthly</option>
-                    </select>
-                  </div>
-                  <button type="submit" className="btn btn-primary">Add Patient to Tracking</button>
-                </form>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Add Reading Modal */}
+          {/* View Patient Modal */}
+          {viewPatientOpen && (
+            <div className="modal" style={{ display: 'flex' }} onClick={(e) => e.target.classList.contains('modal') && setViewPatientOpen(false)}>
+              <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3 className="modal-title">Patient Details</h3>
+                  <button className="close-modal" onClick={() => setViewPatientOpen(false)}>&times;</button>
+                </div>
+                {(() => {
+                  const patient = patients.find((p) => p.id === viewPatientId);
+                  if (!patient) return <div style={{ padding: 10 }}>Patient not found</div>;
+                  return (
+                    <div style={{ padding: 10 }}>
+                      <div className="chronic-modal-section">
+                        <h4>Patient Information</h4>
+                        <div className="chronic-info-grid">
+                          <div className="chronic-info-item"><strong>Name:</strong> {patient.name}</div>
+                          <div className="chronic-info-item"><strong>ID:</strong> {patient.code}</div>
+                          <div className="chronic-info-item"><strong>Condition(s):</strong> {patient.conditions}</div>
+                          <div className="chronic-info-item"><strong>Severity:</strong> <span className={`severity-badge severity-${patient.severity}`}>{patient.severity}</span></div>
+                          <div className="chronic-info-item"><strong>Diagnosis Date:</strong> {patient.diagnosisDate}</div>
+                          <div className="chronic-info-item"><strong>Status:</strong> 
+                            <span className={`status-badge ${patient.status === 'warning' ? 'status-warning' : patient.status === 'stable' ? 'status-active' : 'status-danger'}`} style={{ marginLeft: 8 }}>
+                              {patient.status === 'warning' ? 'Needs Review' : patient.status === 'stable' ? 'Stable' : 'Critical'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="chronic-modal-section">
+                        <h4>Latest Reading</h4>
+                        <div>{patient.lastReading}</div>
+                      </div>
+                      <div className="chronic-modal-section">
+                        <h4>Next Checkup</h4>
+                        <div>{patient.nextCheckup}</div>
+                      </div>
+                      <div className="chronic-modal-section">
+                        <h4>Treatment History</h4>
+                        <ul style={{ paddingLeft: 20 }}>
+                          <li>Regular monitoring of vital signs</li>
+                          <li>Medication compliance tracking</li>
+                          <li>Lifestyle modification counseling</li>
+                        </ul>
+                      </div>
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <button className="btn btn-outline" onClick={() => setViewPatientOpen(false)}>Close</button>
+                        <button className="btn btn-primary" onClick={() => { setViewPatientOpen(false); editPatient(viewPatientId); }}>Edit</button>
+                        <button className="btn btn-primary" onClick={() => { setViewPatientOpen(false); logReading(viewPatientId); }}>Log Reading</button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* Add/Edit Patient Modal */}
+          {addPatientOpen && (
+            <div className="modal" style={{ display: 'flex' }} onClick={(e) => e.target.classList.contains('modal') && setAddPatientOpen(false)}>
+              <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3 className="modal-title">{editMode ? 'Edit Patient Record' : 'Add New Chronic Illness Patient'}</h3>
+                  <button className="close-modal" onClick={() => { setAddPatientOpen(false); setEditMode(false); }}>&times;</button>
+                </div>
+                <form onSubmit={submitAddPatient}>
+                  {error && (
+                    <div className="alert alert-danger" style={{ marginBottom: 20, padding: 10, backgroundColor: '#f8d7da', color: '#721c24', borderRadius: 5 }}>
+                      {error}
+                    </div>
+                  )}
+                  <div className="form-grid">
+                    <div className="form-group">
+                      <label htmlFor="patientSelect">Crew Member *</label>
+                      <select 
+                        id="patientSelect" 
+                        className="form-control" 
+                        required 
+                        value={addPatientForm.crewId} 
+                        onChange={(e) => {
+                          const selectedCrew = crewMembers.find(c => c.crewId === e.target.value);
+                          setAddPatientForm(f => ({ 
+                            ...f, 
+                            crewId: e.target.value,
+                            crewName: selectedCrew?.fullName || ''
+                          }));
+                        }} 
+                        disabled={editMode || loadingCrew}
+                      >
+                        <option value="">{loadingCrew ? 'Loading crew members...' : 'Select crew member'}</option>
+                        {crewMembers.map((crew) => (
+                          <option key={crew._id || crew.crewId} value={crew.crewId}>
+                            {crew.fullName || crew.name} ({crew.crewId})
+                          </option>
+                        ))}
+                      </select>
+                      {loadingCrew && <small style={{ color: '#6b7280' }}>Loading crew members...</small>}
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="conditionType">Condition *</label>
+                      <select id="conditionType" className="form-control" required value={addPatientForm.condition} onChange={(e) => setAddPatientForm(f => ({ ...f, condition: e.target.value }))} disabled={editMode}>
+                        <option value="">Select condition</option>
+                        <option value="diabetes">Type 2 Diabetes</option>
+                        <option value="hypertension">Hypertension</option>
+                        <option value="asthma">Asthma</option>
+                        <option value="heart">Heart Disease</option>
+                        <option value="thyroid">Thyroid Disorder</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="diagnosisDate">Diagnosis Date *</label>
+                      <input id="diagnosisDate" type="date" className="form-control" required value={addPatientForm.dx} onChange={(e) => setAddPatientForm(f => ({ ...f, dx: e.target.value }))} disabled={editMode} />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="severity">Severity *</label>
+                      <select id="severity" className="form-control" required value={addPatientForm.severity} onChange={(e) => setAddPatientForm(f => ({ ...f, severity: e.target.value }))}>
+                        <option value="mild">Mild</option>
+                        <option value="moderate">Moderate</option>
+                        <option value="severe">Severe</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="nextCheckup">Next Checkup Date</label>
+                      <input id="nextCheckup" type="date" className="form-control" value={addPatientForm.nextCheckup} onChange={(e) => setAddPatientForm(f => ({ ...f, nextCheckup: e.target.value }))} />
+                    </div>
+                  </div>
+                  
+                  {!editMode && (
+                    <>
+                      <div className="form-group">
+                        <label htmlFor="initialFindings">Initial Findings</label>
+                        <textarea id="initialFindings" className="form-control" rows={3} placeholder="Initial symptoms and diagnostic findings..." value={addPatientForm.findings} onChange={(e) => setAddPatientForm(f => ({ ...f, findings: e.target.value }))}></textarea>
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="treatmentPlan">Treatment Plan</label>
+                        <textarea id="treatmentPlan" className="form-control" rows={3} placeholder="Initial treatment approach and medications..." value={addPatientForm.treatment} onChange={(e) => setAddPatientForm(f => ({ ...f, treatment: e.target.value }))}></textarea>
+                      </div>
+                    </>
+                  )}
+                  
+                  <div className="form-group">
+                    <label htmlFor="monitoringParams">Monitoring Parameters</label>
+                    <textarea id="monitoringParams" className="form-control" rows={2} placeholder="e.g., Blood glucose 2x daily, BP weekly..." value={addPatientForm.monitoring} onChange={(e) => setAddPatientForm(f => ({ ...f, monitoring: e.target.value }))}></textarea>
+                  </div>
+                  
+                  <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+                    <button type="button" className="btn btn-outline" onClick={() => { setAddPatientOpen(false); setEditMode(false); setError(''); }} style={{ flex: 1 }} disabled={loading}>Cancel</button>
+                    <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={loading}>
+                      {loading ? 'Saving...' : (editMode ? 'Update Record' : 'Add Patient Record')}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Log Reading Modal */}
           {addReadingOpen && (
             <div className="modal" style={{ display: 'flex' }} onClick={(e) => e.target.classList.contains('modal') && setAddReadingOpen(false)}>
-              <div className="modal-content">
+              <div className="modal-content" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
                   <h3 className="modal-title">Log Health Reading</h3>
                   <button className="close-modal" onClick={() => setAddReadingOpen(false)}>&times;</button>
                 </div>
                 <form onSubmit={submitReading}>
+                  <div className="form-grid">
+                    <div className="form-group">
+                      <label htmlFor="readingPatient">Patient *</label>
+                      <select id="readingPatient" className="form-control" required value={readingForm.patient} onChange={(e) => {
+                        const selectedPatient = patients.find(p => (p._id || p.id) === e.target.value);
+                        setReadingForm(f => ({ 
+                          ...f, 
+                          patient: e.target.value,
+                          patientId: selectedPatient?._id || selectedPatient?.id,
+                          crewId: selectedPatient?.crewId
+                        }));
+                      }}>
+                        <option value="">Select patient</option>
+                        {patients.map(p => (
+                          <option key={p._id || p.id} value={p._id || p.id}>
+                            {p.crewName || crewNameById[p.crewId] || 'Unknown'} ({p.primaryCondition || (Array.isArray(p.conditions) ? p.conditions.join(', ') : p.conditions)})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="readingDate">Reading Date *</label>
+                      <input id="readingDate" type="datetime-local" className="form-control" required value={readingForm.date} onChange={(e) => setReadingForm(f => ({ ...f, date: e.target.value }))} />
+                    </div>
+                  </div>
+
+                  <h4 style={{ color: 'var(--primary)', margin: '20px 0 15px' }}>Vital Signs & Measurements</h4>
+                  <div className="chronic-vitals-grid">
+                    <div className="chronic-vital-item">
+                      <div className="chronic-vital-label">Blood Glucose</div>
+                      <input type="number" className="form-control" placeholder="mg/dL" value={readingForm.bloodGlucose} onChange={(e) => setReadingForm(f => ({ ...f, bloodGlucose: e.target.value }))} />
+                    </div>
+                    <div className="chronic-vital-item">
+                      <div className="chronic-vital-label">Blood Pressure</div>
+                      <input type="text" className="form-control" placeholder="Systolic/Diastolic" value={readingForm.bloodPressure} onChange={(e) => setReadingForm(f => ({ ...f, bloodPressure: e.target.value }))} />
+                    </div>
+                    <div className="chronic-vital-item">
+                      <div className="chronic-vital-label">Peak Flow</div>
+                      <input type="number" className="form-control" placeholder="L/min" value={readingForm.peakFlow} onChange={(e) => setReadingForm(f => ({ ...f, peakFlow: e.target.value }))} />
+                    </div>
+                    <div className="chronic-vital-item">
+                      <div className="chronic-vital-label">Weight</div>
+                      <input type="number" step="0.1" className="form-control" placeholder="kg" value={readingForm.weight} onChange={(e) => setReadingForm(f => ({ ...f, weight: e.target.value }))} />
+                    </div>
+                  </div>
+
                   <div className="form-group">
-                    <label className="form-label">Patient</label>
-                    <select className="form-control" required value={readingForm.patient} onChange={(e) => setReadingForm(f => ({ ...f, patient: e.target.value }))}>
-                      <option value="">Select patient</option>
-                      <option value="1">James Wilson (Hypertension, Diabetes)</option>
-                      <option value="2">Maria Rodriguez (Asthma)</option>
-                      <option value="3">Robert Smith (Hypertension)</option>
-                    </select>
+                    <label htmlFor="readingNotes">Clinical Notes</label>
+                    <textarea id="readingNotes" className="form-control" rows={4} placeholder="Patient symptoms, observations, medication adherence..." value={readingForm.notes} onChange={(e) => setReadingForm(f => ({ ...f, notes: e.target.value }))}></textarea>
                   </div>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label className="form-label">Blood Pressure</label>
-                      <input type="text" className="form-control" placeholder="e.g., 120/80" value={readingForm.bp} onChange={(e) => setReadingForm(f => ({ ...f, bp: e.target.value }))} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Blood Sugar (mg/dL)</label>
-                      <input type="number" className="form-control" placeholder="e.g., 100" value={readingForm.sugar} onChange={(e) => setReadingForm(f => ({ ...f, sugar: e.target.value }))} />
-                    </div>
-                  </div>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label className="form-label">Heart Rate (BPM)</label>
-                      <input type="number" className="form-control" placeholder="e.g., 72" value={readingForm.hr} onChange={(e) => setReadingForm(f => ({ ...f, hr: e.target.value }))} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Weight (kg)</label>
-                      <input type="number" step="0.1" className="form-control" placeholder="e.g., 70.5" value={readingForm.weight} onChange={(e) => setReadingForm(f => ({ ...f, weight: e.target.value }))} />
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Oxygen Saturation (%)</label>
-                    <input type="number" className="form-control" placeholder="e.g., 98" min="0" max="100" value={readingForm.spo2} onChange={(e) => setReadingForm(f => ({ ...f, spo2: e.target.value }))} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Notes</label>
-                    <textarea className="form-control" rows={3} placeholder="Any observations or notes..." value={readingForm.notes} onChange={(e) => setReadingForm(f => ({ ...f, notes: e.target.value }))}></textarea>
-                  </div>
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Save Reading</button>
-                    <button type="button" className="btn btn-outline" onClick={() => setAddReadingOpen(false)} style={{ flex: 1 }}>Cancel</button>
+
+                  <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+                    <button type="button" className="btn btn-outline" onClick={() => setAddReadingOpen(false)} style={{ flex: 1 }} disabled={loading}>Cancel</button>
+                    <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={loading}>
+                      {loading ? 'Saving...' : 'Save Reading'}
+                    </button>
                   </div>
                 </form>
               </div>

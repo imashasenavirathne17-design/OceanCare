@@ -74,6 +74,9 @@ export default function CrewHealthRecords() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalHtml, setModalHtml] = useState('');
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All Status');
+  const useMocks = String(import.meta.env.VITE_USE_MOCKS).toLowerCase() === 'true';
 
   const onFilterChange = (e) => setFilters((f) => ({ ...f, [e.target.name]: e.target.value }));
   const applyFilters = () => { /* no-op, computed by useMemo */ };
@@ -84,12 +87,15 @@ export default function CrewHealthRecords() {
 
   const filtered = useMemo(() => {
     return records.filter((r) => {
+      const q = query.trim().toLowerCase();
+      const qOk = !q || r.type.toLowerCase().includes(q) || r.details.toLowerCase().includes(q) || String(r.status).toLowerCase().includes(q);
       const typeOk = filters.recordType === 'all' || r.type.toLowerCase().includes(filters.recordType.replace('-', ' ').toLowerCase());
+      const statusOk = statusFilter === 'All Status' || String(r.status).toLowerCase() === statusFilter.toLowerCase();
       const fromOk = !filters.dateFrom || r.date >= filters.dateFrom;
       const toOk = !filters.dateTo || r.date <= filters.dateTo;
-      return typeOk && fromOk && toOk;
+      return qOk && typeOk && statusOk && fromOk && toOk;
     });
-  }, [records, filters]);
+  }, [records, filters, query, statusFilter]);
 
   return (
     <div className="crew-dashboard">
@@ -111,7 +117,26 @@ export default function CrewHealthRecords() {
           <section className="health-records">
             <h3 className="form-title">Your Health Records</h3>
 
+            {useMocks && (
+              <div style={{
+                background: '#fff7e6', border: '1px solid #ffd591', color: '#ad6800',
+                padding: '10px 12px', borderRadius: 8, marginBottom: 12
+              }}>
+                Mock data enabled (VITE_USE_MOCKS=true). Showing sample records while backend is offline.
+              </div>
+            )}
+
+            {/* Action bar */}
+            <div className="page-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginBottom: 12 }}>
+              <button className="btn btn-outline" onClick={printRecords}><i className="fas fa-print"></i> Print</button>
+              <button className="btn btn-success" onClick={() => alert('Exporting as CSV...')}><i className="fas fa-download"></i> Export</button>
+            </div>
+
             <div className="records-filter" style={{ display: 'flex', gap: 15, marginBottom: 20, flexWrap: 'wrap' }}>
+              <div className="filter-group" style={{ flex: 2, minWidth: 220 }}>
+                <label>Search</label>
+                <input type="text" className="form-control" placeholder="Search by type, details, or status..." value={query} onChange={(e)=>setQuery(e.target.value)} />
+              </div>
               <div className="filter-group" style={{ flex: 1, minWidth: 200 }}>
                 <label>Record Type</label>
                 <select name="recordType" className="form-control" value={filters.recordType} onChange={onFilterChange}>
@@ -120,6 +145,15 @@ export default function CrewHealthRecords() {
                   <option value="immunization">Immunizations</option>
                   <option value="appointment">Medical Appointments</option>
                   <option value="emergency">Emergency Reports</option>
+                </select>
+              </div>
+              <div className="filter-group" style={{ flex: 1, minWidth: 200 }}>
+                <label>Status</label>
+                <select className="form-control" value={statusFilter} onChange={(e)=>setStatusFilter(e.target.value)}>
+                  <option>All Status</option>
+                  <option>Normal</option>
+                  <option>Completed</option>
+                  <option>Slight Fever</option>
                 </select>
               </div>
               <div className="filter-group" style={{ flex: 1, minWidth: 200 }}>

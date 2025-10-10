@@ -76,7 +76,6 @@ tr:hover { background-color: #fff6f7; }
 .pin { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
 .pin.critical { background: #e63946; animation: blink 1s linear infinite; }
 .pin.affected { background: #f4a261; }
-.pin.offline { background: #9aa0a6; }
 
 /* History and files */
 .file-list { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
@@ -86,6 +85,9 @@ tr:hover { background-color: #fff6f7; }
 
 /* Ack box */
 .ack-box { margin-top: 12px; background: #fff0f1; border: 1px solid #f3c2c5; border-radius: 8px; padding: 12px; }
+
+/* Hide the red alert banner on Emergency Dashboard */
+.emergency-dashboard .alert-banner { display: none !important; }
 
 /* Responsive */
 @media (max-width: 992px) {

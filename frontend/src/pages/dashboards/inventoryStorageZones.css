@@ -1,0 +1,80 @@
+/* Storage Zones page styles (scoped) */
+.inventory-dashboard { --primary:#f4a261; --primary-dark:#e76f51; --primary-light:#f8c4a4; --secondary:#2a9d8f; --accent:#e63946; --light:#f8f9fa; --dark:#343a40; --danger:#e63946; --success:#2a9d8f; --warning:#f4a261; --info:#3a86ff; }
+
+/* Layout */
+.dashboard-container { display:flex; min-height:100vh; }
+.main-content { flex:1; padding:20px; overflow-y:auto; }
+
+/* Header */
+.header { display:flex; justify-content:space-between; align-items:center; margin-bottom:30px; padding-bottom:15px; border-bottom:1px solid #eee; }
+.header h2 { color:var(--primary); font-size:24px; }
+.user-info { display:flex; align-items:center; }
+.user-info img { width:40px; height:40px; border-radius:50%; margin-right:10px; }
+.status-badge { padding:5px 10px; border-radius:20px; font-size:12px; font-weight:600; margin-left:10px; }
+.status-active { background-color:rgba(244,162,97,0.2); color:var(--primary); }
+
+/* Ship Layout */
+.ship-layout { background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.05); padding:25px; margin-bottom:30px; }
+.section-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+.section-title { font-size:20px; font-weight:600; color:var(--primary); }
+.deck-navigation { display:flex; gap:10px; margin-bottom:25px; }
+.deck-btn { padding:8px 16px; background:#fff; border:1px solid #ddd; border-radius:4px; cursor:pointer; font-weight:500; transition:all 0.3s; }
+.deck-btn.active { background-color:var(--primary); color:#fff; border-color:var(--primary); }
+.ship-map { height:400px; background:#f8f9fa; border-radius:8px; position:relative; overflow:hidden; background-image: linear-gradient(45deg,#e9ecef 25%,transparent 25%), linear-gradient(-45deg,#e9ecef 25%,transparent 25%), linear-gradient(45deg,transparent 75%,#e9ecef 75%), linear-gradient(-45deg,transparent 75%,#e9ecef 75%); background-size:20px 20px; background-position:0 0,0 10px,10px -10px,-10px 0; }
+.zone-marker { position:absolute; width:120px; height:80px; border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; transition:all 0.3s; border:2px solid transparent; }
+.zone-marker:hover { transform:scale(1.05); z-index:10; }
+.zone-marker.active { border-color:var(--primary); box-shadow:0 0 0 2px var(--primary-light); }
+.zone-icon { font-size:20px; margin-bottom:5px; }
+.zone-name { font-weight:600; font-size:12px; text-align:center; }
+.zone-count { font-size:10px; color:#666; margin-top:2px; }
+
+/* Zone Details */
+.zone-details { background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.05); padding:25px; margin-bottom:30px; display:none; }
+.zone-details.active { display:block; }
+.zone-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; padding-bottom:15px; border-bottom:1px solid #eee; }
+.zone-info { flex:1; }
+.zone-title { font-size:24px; font-weight:600; margin-bottom:10px; color:var(--primary); }
+.zone-meta { display:flex; flex-wrap:wrap; gap:15px; margin-bottom:10px; }
+.zone-meta-item { display:flex; align-items:center; font-size:14px; color:#666; }
+.zone-meta-item i { margin-right:5px; color:var(--primary); }
+.zone-actions { display:flex; gap:10px; }
+
+/* Zone Table */
+.zone-table-container { background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.05); overflow:hidden; margin-bottom:30px; }
+.table-header { display:flex; justify-content:space-between; align-items:center; padding:15px 20px; background:#f8f9fa; border-bottom:1px solid #eee; }
+.table-title { font-weight:600; color:var(--primary); }
+.table-actions { display:flex; gap:10px; }
+.zone-table { width:100%; border-collapse:collapse; }
+.zone-table th,.zone-table td { padding:12px 15px; text-align:left; border-bottom:1px solid #eee; }
+.zone-table th { background:#f8f9fa; font-weight:600; color:#555; }
+.zone-table tr:hover { background:#f8f9fa; }
+.item-status { padding:4px 8px; border-radius:12px; font-size:12px; font-weight:600; }
+.status-low { background-color:rgba(230,57,70,0.2); color:var(--danger); }
+.status-adequate { background-color:rgba(42,157,143,0.2); color:var(--success); }
+.status-expiring { background-color:rgba(244,162,97,0.2); color:var(--warning); }
+.item-actions { display:flex; gap:5px; }
+.btn-sm { padding:5px 10px; font-size:13px; }
+
+/* Modal */
+.modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; }
+.modal-content { background:#fff; border-radius:10px; width:90%; max-width:600px; padding:30px; box-shadow:0 5px 25px rgba(0,0,0,0.2); max-height:90vh; overflow-y:auto; }
+.modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+.modal-title { font-size:20px; font-weight:600; color:var(--primary); }
+.close-modal { background:none; border:none; font-size:24px; cursor:pointer; color:#777; }
+.modal-body { margin-bottom:25px; }
+.form-group { margin-bottom:20px; }
+.form-label { display:block; margin-bottom:8px; font-weight:500; }
+.form-control { width:100%; padding:10px 15px; border:1px solid #ddd; border-radius:4px; font-size:14px; }
+.form-select { width:100%; padding:10px 15px; border:1px solid #ddd; border-radius:4px; font-size:14px; background:#fff; }
+.form-row { display:flex; gap:15px; }
+.form-row .form-group { flex:1; }
+.item-list { max-height:200px; overflow-y:auto; border:1px solid #ddd; border-radius:4px; padding:10px; }
+.item-checkbox { display:flex; align-items:center; padding:8px 0; border-bottom:1px solid #f0f0f0; }
+.item-checkbox:last-child { border-bottom:none; }
+.item-checkbox input { margin-right:10px; }
+.modal-footer { display:flex; justify-content:flex-end; gap:10px; }
+
+/* Responsive */
+@media (max-width: 992px){ .dashboard-container{ flex-direction:column; } .zone-table{ display:block; overflow-x:auto; } }
+@media (max-width: 768px){ .header{ flex-direction:column; align-items:flex-start; } .user-info{ margin-top:15px; } .ship-map{ height:300px; } .zone-marker{ width:100px; height:70px; } .zone-header{ flex-direction:column; } .zone-actions{ margin-top:15px; width:100%; justify-content:flex-start; } .form-row{ flex-direction:column; gap:0; } }
+@media (max-width: 480px){ .zone-stats{ grid-template-columns:1fr; } .item-actions{ flex-direction:column; } .table-actions{ flex-direction:column; } .deck-navigation{ flex-wrap:wrap; } }

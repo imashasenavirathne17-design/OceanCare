@@ -8,12 +8,12 @@ export default function HealthDashboard() {
   const navigate = useNavigate();
   const user = getUser();
 
-  // New compact stats for top grid
+  // Stats for top grid (match sample numbers)
   const stats = useMemo(() => ([
-    { icon: 'fas fa-user-injured', value: 12, label: 'Pending Examinations', bg: 'var(--success)' },
-    { icon: 'fas fa-heartbeat', value: 8, label: 'Chronic Patients', bg: 'var(--warning)' },
-    { icon: 'fas fa-syringe', value: 5, label: 'Vaccination Alerts', bg: 'var(--danger)' },
-    { icon: 'fas fa-exclamation-triangle', value: 3, label: 'Critical Cases', bg: 'var(--info)' },
+    { icon: 'fas fa-exclamation-circle', value: 3, label: 'Pending Examinations', tone: 'danger' },
+    { icon: 'fas fa-heartbeat', value: 5, label: 'Chronic Patients', tone: 'warning' },
+    { icon: 'fas fa-syringe', value: 8, label: 'Vaccination Alerts', tone: 'primary' },
+    { icon: 'fas fa-pills', value: 2, label: 'Low Stock Items', tone: 'info' },
   ]), []);
 
   // Simple modal controls for quick actions
@@ -128,24 +128,22 @@ export default function HealthDashboard() {
             </div>
           </div>
 
-          {/* Alert Panel */}
-          <div className="alert-panel" style={{ background: '#fff3cd', borderLeft: '4px solid var(--warning)', padding: 15, marginBottom: 20, borderRadius: 4 }}>
-            <div className="alert-title" style={{ fontWeight: 600, marginBottom: 5, color: '#856404' }}>Vaccination Alerts</div>
-            <div className="alert-content" style={{ fontSize: 14, color: '#856404' }}>5 crew members have overdue vaccinations. 3 influenza boosters due this week.</div>
-          </div>
+          {/* Alert Banner removed as requested */}
 
-          {/* Dashboard Stats */}
-          <section className="dashboard-stats">
+          {/* Dashboard Stats (match reference) */}
+          <div className="stats-container">
             {stats.map((s, i) => (
               <div key={i} className="stat-card">
-                <div className="stat-icon" style={{ background: s.bg }}>
+                <div className={`stat-icon ${s.tone}`}>
                   <i className={s.icon}></i>
                 </div>
-                <div className="stat-value">{s.value}</div>
-                <div className="stat-label">{s.label}</div>
+                <div className="stat-content">
+                  <div className="stat-value">{s.value}</div>
+                  <div className="stat-label">{s.label}</div>
+                </div>
               </div>
             ))}
-          </section>
+          </div>
 
           {/* Quick Actions */}
           <section className="dashboard-section">
@@ -154,20 +152,76 @@ export default function HealthDashboard() {
             </div>
             <div className="quick-actions">
               {[
-                { k: 'record', icon: 'fas fa-file-medical-alt', label: 'Add Medical Record' },
-                { k: 'exam', icon: 'fas fa-stethoscope', label: 'Record Examination' },
-                { k: 'vaccine', icon: 'fas fa-syringe', label: 'Log Vaccination' },
-                { k: 'reminder', icon: 'fas fa-bell', label: 'Set Reminder' },
-                { k: 'report', icon: 'fas fa-chart-bar', label: 'Generate Report' },
-                { k: 'education', icon: 'fas fa-book-medical', label: 'Publish Content' },
-              ].map((a) => (
-                <div key={a.k} onClick={() => open(a.k)} className="action-card" role="button" tabIndex={0}>
+                { to: '/dashboard/health/examinations', icon: 'fas fa-stethoscope', title: 'New Examination', desc: 'Record medical examination' },
+                { to: '/dashboard/health/medical-records', icon: 'fas fa-file-medical', title: 'Medical Records', desc: 'Update patient records' },
+                { to: '/dashboard/health/vaccination', icon: 'fas fa-syringe', title: 'Vaccinations', desc: 'Record vaccinations' },
+                { to: '/dashboard/health/inventory-alerts', icon: 'fas fa-bell', title: 'Inventory Alert', desc: 'Send stock alert' },
+                { to: '/dashboard/health/emergency', icon: 'fas fa-exclamation-triangle', title: 'Emergency', desc: 'Emergency protocols' },
+                { to: '/dashboard/health/reports', icon: 'fas fa-chart-bar', title: 'Reports', desc: 'Generate health reports' },
+              ].map((a, idx) => (
+                <div key={idx} className="action-card" role="button" tabIndex={0} onClick={() => navigate(a.to)}>
                   <div className="action-icon"><i className={a.icon}></i></div>
-                  <div className="action-label">{a.label}</div>
+                  <div className="action-title">{a.title}</div>
+                  <div className="action-desc">{a.desc}</div>
                 </div>
               ))}
             </div>
           </section>
+
+          {/* Recent Activity + Upcoming Schedule */}
+          <div className="two-col-grid">
+            {/* Recent Activity */}
+            <div className="activity-container">
+              <div className="section-header">
+                <div className="section-title">Recent Activity</div>
+                <button className="btn btn-outline btn-sm" onClick={() => navigate('/dashboard/health/reports')}>View All</button>
+              </div>
+              <ul className="activity-list">
+                {[
+                  { icon: 'fas fa-stethoscope', title: 'Medical Examination Completed', desc: 'John Doe - Routine check-up', time: '10:30 AM • Today' },
+                  { icon: 'fas fa-vial', title: 'Blood Test Results Added', desc: 'Maria Rodriguez - Diabetes monitoring', time: 'Yesterday • 3:15 PM' },
+                  { icon: 'fas fa-syringe', title: 'Vaccination Administered', desc: 'Influenza vaccine - 5 crew members', time: 'Oct 24 • 9:45 AM' },
+                  { icon: 'fas fa-pills', title: 'Inventory Alert Sent', desc: 'Low stock: Insulin (3 doses remaining)', time: 'Oct 23 • 2:30 PM' },
+                  { icon: 'fas fa-file-medical', title: 'Health Report Generated', desc: 'Monthly health summary - October 2023', time: 'Oct 22 • 11:20 AM' },
+                ].map((a, i) => (
+                  <li key={i} className="activity-item">
+                    <div className="activity-icon"><i className={a.icon}></i></div>
+                    <div className="activity-content">
+                      <div className="activity-title">{a.title}</div>
+                      <div className="activity-desc">{a.desc}</div>
+                      <div className="activity-time">{a.time}</div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Upcoming Schedule */}
+            <div className="schedule-container">
+              <div className="section-header">
+                <div className="section-title">Upcoming Schedule</div>
+                <button className="btn btn-outline btn-sm" onClick={() => navigate('/dashboard/health/reminders')}>View Calendar</button>
+              </div>
+              <ul className="schedule-list">
+                {[
+                  { time: '10:00 AM', title: 'James Wilson - Hypertension Review', desc: 'Chronic condition follow-up', status: 'High Priority', cls: 'status-urgent' },
+                  { time: '11:30 AM', title: 'Vaccination Clinic', desc: 'Influenza vaccines for deck crew', status: 'Scheduled', cls: 'status-upcoming' },
+                  { time: '02:00 PM', title: 'Mental Health Session', desc: 'Group therapy - Stress management', status: 'Scheduled', cls: 'status-upcoming' },
+                  { time: '03:30 PM', title: 'Health Education Workshop', desc: 'Hand hygiene best practices', status: 'Scheduled', cls: 'status-upcoming' },
+                  { time: '04:45 PM', title: 'Medical Supplies Check', desc: 'Weekly inventory review', status: 'Scheduled', cls: 'status-upcoming' },
+                ].map((s, i) => (
+                  <li key={i} className="schedule-item">
+                    <div className="schedule-time">{s.time}</div>
+                    <div className="schedule-content">
+                      <div className="schedule-title">{s.title}</div>
+                      <div className="schedule-desc">{s.desc}</div>
+                    </div>
+                    <div className={`schedule-status ${s.cls}`}>{s.status}</div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
 
           {/* Upcoming Examinations */}
           <div className="dashboard-section">

@@ -1,0 +1,249 @@
+  /* Aggressively hide any FA search icon near the title (outside buttons) */
+  .admin-permissions .section-header > .fa-search,
+  .admin-permissions .section-header > .fas.fa-search,
+  .admin-permissions .section-header > .far.fa-search,
+  .admin-permissions .section-header > svg[data-icon="search"],
+  .admin-permissions .section-header .section-title + .fa-search,
+  .admin-permissions .section-header .section-title + svg[data-icon="search"],
+  .admin-permissions .section-header :not(.search-box) > .fa-search,
+  .admin-permissions .section-header :not(.search-box) > svg[data-icon="search"] {
+    display: none !important;
+  }
+  /* Hide any generic icons/images next to title, except inside .search-box buttons */
+  .admin-permissions .section-header > svg,
+  .admin-permissions .section-header > img,
+  .admin-permissions .section-header .section-title + svg,
+  .admin-permissions .section-header .section-title + img,
+  .admin-permissions .section-header :not(.search-box) > svg,
+  .admin-permissions .section-header :not(.search-box) > img {
+    display: none !important;
+  }
+  /* Keep icons visible inside buttons in the search box */
+  .admin-permissions .section-header .search-box .btn i,
+  .admin-permissions .section-header .search-box .btn svg,
+  .admin-permissions .section-header .search-box .btn img { display: inline-block !important; }
+/* Admin Permissions & Access Control Page */
+.admin-permissions .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+.admin-permissions .header h2 { color: var(--primary); font-size: 24px; }
+
+  /* Permissions Header */
+  .admin-permissions .permissions-header { background: white; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); padding: 25px; margin-bottom: 30px; }
+  .admin-permissions .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 16px; flex-wrap: wrap; }
+  .admin-permissions .section-title { font-size: 20px; font-weight: 600; color: var(--primary); }
+  /* Hide any accidental icons near the section title */
+  .admin-permissions .section-title i,
+  .admin-permissions .section-title .fa,
+  .admin-permissions .section-title .fas { display: none !important; }
+  /* Also hide any direct icon siblings inside the header row */
+  .admin-permissions .section-header > i,
+  .admin-permissions .section-header > .fa,
+  .admin-permissions .section-header > .fas,
+  .admin-permissions .section-header > svg.svg-inline--fa { display: none !important; }
+  /* As a fallback, hide any icons anywhere in the section-header, except inside buttons */
+  .admin-permissions .section-header i,
+  .admin-permissions .section-header .fa,
+  .admin-permissions .section-header .fas,
+  .admin-permissions .section-header svg.svg-inline--fa { display: none !important; }
+  .admin-permissions .section-header .search-box .btn i,
+  .admin-permissions .section-header .search-box .btn .fa,
+  .admin-permissions .section-header .search-box .btn .fas,
+  .admin-permissions .section-header .search-box .btn svg.svg-inline--fa { display: inline-block !important; }
+  .admin-permissions .search-box { display: flex; gap: 0; align-items: center; margin-left: auto; flex: 1 1 auto; justify-content: flex-end; flex-wrap: nowrap; min-width: 0; max-width: 100%; }
+  .admin-permissions .search-input {
+    height: 40px;
+    padding: 8px 14px 8px 34px; /* room for icon */
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    width: auto;
+    flex: 0 1 300px;
+    min-width: 220px;
+    max-width: 100%;
+    box-sizing: border-box;
+    background: #fff !important;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%23888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>') !important;
+    background-repeat: no-repeat !important;
+    background-position: 10px center !important;
+    background-size: 16px 16px !important;
+    margin-right: 8px; /* 8px between input and first button */
+  }
+  /* 8px between buttons */
+  .admin-permissions .search-box .btn + .btn { margin-left: 8px; }
+  .admin-permissions .search-box .btn-success { white-space: nowrap; }
+  .admin-permissions .search-box .btn { height: 40px; padding: 0 16px; flex: 0 0 auto; }
+  .admin-permissions .search-box .btn-primary { min-width: 96px; }
+  .admin-permissions .search-box .btn-success { min-width: 110px; }
+
+  /* Neat, consistent buttons next to the search bar */
+  .admin-permissions .search-box .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px; /* pill-like */
+    vertical-align: middle;
+    min-width: 110px; /* equalize widths */
+    gap: 6px;
+    font-weight: 600;
+  }
+  .admin-permissions .search-box .btn:hover { filter: brightness(0.93); }
+
+  /* Make the Search button fit its text (override generic min-width) */
+  .admin-permissions .search-box .btn.btn-primary {
+    min-width: auto;
+    padding: 0 12px;
+  }
+
+/* Stats */
+.admin-permissions .security-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+.admin-permissions .stat-card { background: white; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); padding: 20px; text-align: center; transition: transform 0.3s; border-left: 4px solid var(--primary); }
+.admin-permissions .stat-card:hover { transform: translateY(-5px); }
+.admin-permissions .stat-value { font-size: 32px; font-weight: 700; margin-bottom: 5px; }
+.admin-permissions .stat-label { font-size: 14px; color: #777; }
+
+/* Role Management */
+.admin-permissions .role-management { background: white; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); padding: 25px; margin-bottom: 30px; }
+.admin-permissions .roles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+.admin-permissions .role-card { background: #f8f9fa; border-radius: 8px; padding: 20px; border-left: 4px solid var(--primary); transition: all 0.3s; }
+.admin-permissions .role-card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+.admin-permissions .role-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.admin-permissions .role-title { font-weight: 600; font-size: 18px; }
+.admin-permissions .user-count { font-size: 14px; color: #666; }
+.admin-permissions .role-description { color: #666; margin-bottom: 15px; font-size: 14px; }
+.admin-permissions .permissions-list { margin-bottom: 15px; }
+.admin-permissions .permission-item { display: flex; align-items: center; margin-bottom: 8px; font-size: 14px; }
+.admin-permissions .permission-item i { margin-right: 8px; color: var(--success); font-size: 12px; }
+.admin-permissions .role-actions { display: flex; gap: 10px; }
+
+/* Matrix */
+.admin-permissions .permissions-matrix { background: white; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); padding: 25px; margin-bottom: 30px; overflow-x: auto; }
+.admin-permissions .matrix-table { width: 100%; border-collapse: collapse; min-width: 800px; }
+.admin-permissions .matrix-table th, .admin-permissions .matrix-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; }
+.admin-permissions .matrix-table th { background: #f8f9fa; font-weight: 600; color: #555; position: sticky; left: 0; }
+.admin-permissions .matrix-table tr:hover { background: #f8f9fa; }
+.admin-permissions .permission-cell { text-align: center; }
+.admin-permissions .permission-granted { color: var(--success); }
+.admin-permissions .permission-denied { color: var(--danger); }
+.admin-permissions .permission-partial { color: var(--warning); }
+
+/* Security Settings */
+.admin-permissions .security-settings { background: white; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); padding: 25px; }
+.admin-permissions .settings-tabs { display: flex; border-bottom: 1px solid #eee; margin-bottom: 20px; }
+.admin-permissions .settings-tab { padding: 10px 20px; cursor: pointer; font-weight: 500; border-bottom: 3px solid transparent; }
+.admin-permissions .settings-tab.active { border-bottom-color: var(--primary); color: var(--primary); }
+.admin-permissions .settings-content { display: none; }
+.admin-permissions .settings-content.active { display: block; }
+.admin-permissions .settings-section { margin-bottom: 25px; }
+.admin-permissions .settings-title { font-size: 16px; font-weight: 600; margin-bottom: 15px; color: var(--primary); }
+.admin-permissions .settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+.admin-permissions .setting-card { background: #f8f9fa; border-radius: 8px; padding: 20px; border-left: 4px solid var(--primary); }
+.admin-permissions .setting-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.admin-permissions .setting-name { font-weight: 600; }
+.admin-permissions .toggle-switch { position: relative; display: inline-block; width: 50px; height: 24px; }
+.admin-permissions .toggle-switch input { opacity: 0; width: 0; height: 0; }
+.admin-permissions .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px; }
+.admin-permissions .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+.admin-permissions input:checked + .slider { background-color: var(--success); }
+.admin-permissions input:checked + .slider:before { transform: translateX(26px); }
+.admin-permissions .setting-details { margin-bottom: 15px; }
+.admin-permissions .detail-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
+.admin-permissions .detail-value { font-weight: 500; }
+.admin-permissions .setting-actions { display: flex; gap: 10px; }
+
+/* Buttons */
+.admin-permissions .btn { padding: 8px 15px; border: none; border-radius: 12px; cursor: pointer; font-weight: 500; transition: all 0.3s; display: inline-flex; align-items: center; height: 40px; }
+.admin-permissions .btn i { margin-right: 5px; }
+.admin-permissions .btn-success { background: #38b000; color: #fff; }
+.admin-permissions .btn-info { background: var(--info); color: #fff; }
+.admin-permissions .btn-warning { background: var(--warning); color: #fff; }
+.admin-permissions .btn-danger { background: var(--danger); color: #fff; }
+
+  .admin-permissions .btn:hover { filter: brightness(0.93); }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .admin-permissions .section-header { flex-direction: column; align-items: flex-start; gap: 15px; }
+  .admin-permissions .search-box { flex-direction: column; width: 100%; }
+  .admin-permissions .search-input { width: 100%; }
+  .admin-permissions .security-stats { grid-template-columns: repeat(2, 1fr); }
+  .admin-permissions .roles-grid { grid-template-columns: 1fr; }
+}
+
+/* Desktop layout: keep single row */
+@media (min-width: 992px) {
+  .admin-permissions .section-header { flex-wrap: nowrap; }
+}
+/* Modal overlay and panel */
+.admin-permissions .modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.admin-permissions .modal-content {
+  background: #fff;
+  width: min(560px, 92vw);
+  border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+  overflow: hidden;
+  animation: modalIn 160ms ease-out;
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+}
+.admin-permissions .modal-header,
+.admin-permissions .modal-footer {
+  padding: 14px 16px;
+  background: #f8f9fa;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.admin-permissions .modal-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  border-top: 1px solid #e9ecef;
+}
+.admin-permissions .modal-body { flex: 1 1 auto; overflow: auto; background: #fff; padding-bottom: 80px; }
+.admin-permissions .modal-title {
+  font-weight: 600;
+  color: var(--primary);
+}
+.admin-permissions .close-modal {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.admin-permissions .modal-body {
+  padding: 16px;
+}
+.admin-permissions .form-group {
+  margin-bottom: 12px;
+}
+.admin-permissions .form-label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+.admin-permissions .form-control {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

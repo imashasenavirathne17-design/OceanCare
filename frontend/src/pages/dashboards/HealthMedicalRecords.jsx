@@ -1,69 +1,186 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearSession, getUser } from '../../lib/token';
 import './healthOfficerDashboard.css';
 import HealthSidebar from './HealthSidebar';
-import { saveMedicalRecord } from '../../lib/healthApi';
+import { saveMedicalRecord, listMedicalRecords, updateMedicalRecord, deleteMedicalRecord, listCrewMembers } from '../../lib/healthApi';
 
 export default function HealthMedicalRecords() {
   const navigate = useNavigate();
   const user = getUser();
-  const onLogout = () => { clearSession(); navigate('/login'); };
+  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api';
+  const UPLOADS_BASE = API_BASE.replace(/\/api$/, '') + '/uploads/medical-records/';
+  const onLogout = () => {
+    clearSession();
+    navigate('/login');
+  };
+
+  const typeLabel = (value) => {
+    const map = {
+      'medical-history': 'Medical History',
+      'examination': 'Examination',
+      'treatment': 'Treatment',
+      'vaccination': 'Vaccination',
+      'chronic': 'Chronic Condition',
+      'Medical History': 'Medical History',
+      'Examination': 'Examination',
+      'Treatment': 'Treatment',
+      'Vaccination': 'Vaccination',
+      'Chronic Condition': 'Chronic Condition',
+    };
+    return map[value] || value || '—';
+  };
 
   // Search/filter state
   const [query, setQuery] = useState('');
-  const [type, setType] = useState('All Record Types');
+  const [type, setType] = useState('All Records');
   const [status, setStatus] = useState('All Status');
+
+  // Modals
   const [addOpen, setAddOpen] = useState(false);
-  const [selectedRecordId, setSelectedRecordId] = useState(null);
+  const [viewOpen, setViewOpen] = useState(false);
+  const [viewRecordId, setViewRecordId] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+
   // Controlled form state for modal
-  const [form, setForm] = useState({ crewId: '', recordType: '', notes: '' });
+  const today = new Date().toISOString().slice(0, 10);
+  const [form, setForm] = useState({ crewId: '', recordType: '', condition: '', date: today, notes: '' });
   const [uploadFiles, setUploadFiles] = useState([]);
+  const [crewOptions, setCrewOptions] = useState([]);
 
-  const rows = useMemo(() => ([
-    { id: 1, name: 'John Doe', crewId: 'CD12345', rtype: 'Medical History', updated: 'Oct 22, 2025', status: 'Complete' },
-    { id: 2, name: 'Maria Rodriguez', crewId: 'CD12346', rtype: 'Examination', updated: 'Oct 20, 2025', status: 'Complete' },
-    { id: 3, name: 'James Wilson', crewId: 'CD12347', rtype: 'Chronic Condition', updated: 'Oct 18, 2025', status: 'Ongoing' },
-    { id: 4, name: 'Lisa Chen', crewId: 'CD12348', rtype: 'Vaccination', updated: 'Oct 15, 2025', status: 'Complete' },
-  ]), []);
+  // Backend records
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  const filtered = rows.filter(r => {
+  const loadRecords = async (params = {}) => {
+    setLoading(true);
+    try {
+      const data = await listMedicalRecords(params);
+      setRecords(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.warn('listMedicalRecords failed', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRecords();
+  }, []);
+
+  // Reload from backend when filters change
+  useEffect(() => {
+    const q = query.trim();
+    const typeParam = type === 'All Records' ? undefined : toDataType(type);
+    loadRecords({ q: q || undefined, type: typeParam });
+  }, [query, type]);
+
+  // Load crew members when modal opens (so list is fresh)
+  useEffect(() => {
+    const loadCrew = async () => {
+      try {
+        const items = await listCrewMembers('');
+        setCrewOptions(Array.isArray(items) ? items : []);
+      } catch (e) {
+        console.warn('listCrewMembers failed', e);
+        setCrewOptions([]);
+      }
+    };
+    if (addOpen) loadCrew();
+  }, [addOpen]);
+
+  const toDataType = (label) => {
+    const map = {
+      'Examinations': 'Examination',
+      'Treatments': 'Treatment',
+      'Vaccinations': 'Vaccination',
+      'Medical History': 'Medical History',
+      'Chronic Condition': 'Chronic Condition',
+    };
+    return map[label] || label;
+  };
+
+  const filtered = records.filter((r) => {
     const q = query.trim().toLowerCase();
-    const matchesQuery = !q || r.name.toLowerCase().includes(q) || r.crewId.toLowerCase().includes(q) || r.rtype.toLowerCase().includes(q);
-    const matchesType = type === 'All Record Types' || r.rtype === type;
-    const matchesStatus = status === 'All Status' || (status === 'Active' && r.status !== 'Archived') || (status === 'Archived' && r.status === 'Archived');
+    const matchesQuery =
+      !q ||
+      (r.crewName || '').toLowerCase().includes(q) ||
+      (r.crewId || '').toLowerCase().includes(q) ||
+      (r.condition || '').toLowerCase().includes(q) ||
+      (r.recordType || '').toLowerCase().includes(q);
+    const matchesType = type === 'All Records' || (r.recordType || '') === toDataType(type);
+    // No backend status for now
+    const matchesStatus = status === 'All Status';
     return matchesQuery && matchesType && matchesStatus;
   });
 
-  const details = (id) => (
+  const openView = (id) => {
+    setViewRecordId(id);
+    setViewOpen(true);
+  };
+
+  const viewDetails = (record) => (
     <div>
-      <h3>Medical Record #{id}</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginTop: 15 }}>
-        <div>
-          <h4>Personal Information</h4>
-          <p><strong>Name:</strong> John Doe</p>
-          <p><strong>Crew ID:</strong> CD12345</p>
-          <p><strong>Position:</strong> Deck Officer</p>
-          <p><strong>Date of Birth:</strong> 15/03/1985</p>
-        </div>
-        <div>
-          <h4>Medical Information</h4>
-          <p><strong>Blood Type:</strong> O+</p>
-          <p><strong>Allergies:</strong> Penicillin</p>
-          <p><strong>Chronic Conditions:</strong> None</p>
-          <p><strong>Last Examination:</strong> 22/10/2025</p>
+      <div style={{ marginBottom: 20 }}>
+        <h4 style={{ color: 'var(--primary)', marginBottom: 15 }}>Record Information</h4>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
+          <div>
+            <strong>Crew Member:</strong> {record.crewName || '—'} ({record.crewId})
+          </div>
+          <div>
+            <strong>Record Type:</strong> {typeLabel(record.recordType)}
+          </div>
+          <div>
+            <strong>Condition:</strong> {record.condition}
+          </div>
+          <div>
+            <strong>Date:</strong> {record.date}
+          </div>
+          <div>
+            <strong>Status:</strong> <span className="status-badge">—</span>
+          </div>
         </div>
       </div>
-      <div style={{ marginTop: 20 }}>
-        <h4>Medical History</h4>
-        <p>Patient has a history of seasonal allergies. No major surgeries. Family history of hypertension.</p>
+
+      <div style={{ marginBottom: 20 }}>
+        <h4 style={{ color: 'var(--primary)', marginBottom: 10 }}>Clinical Notes</h4>
+        <p style={{ whiteSpace: 'pre-wrap' }}>{record.notes || '—'}</p>
       </div>
-      <div style={{ marginTop: 20 }}>
-        <h4>Attached Documents</h4>
+
+      <div style={{ marginBottom: 20 }}>
+        <h4 style={{ color: 'var(--primary)', marginBottom: 10 }}>Attachments</h4>
         <ul>
-          <li><a href="#">Physical Exam Report (22/10/2025)</a></li>
-          <li><a href="#">Blood Test Results (15/09/2025)</a></li>
+          {(record.files || []).length === 0 && <li style={{ color: '#777' }}>No attachments</li>}
+          {(record.files || []).map((f, idx) => (
+            <li key={idx}>
+              <a href={`${UPLOADS_BASE}${f.filename}`} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)' }}>
+                {f.originalname || f.filename}
+              </a>
+            </li>
+          ))}
         </ul>
+      </div>
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button className="btn btn-outline" onClick={() => setViewOpen(false)}>
+          Close
+        </button>
+        <button className="btn btn-primary" onClick={() => {
+          setViewOpen(false);
+          if (record && record._id) {
+            setEditingId(record._id);
+            setForm({
+              crewId: record.crewId || '',
+              recordType: record.recordType || '',
+              condition: record.condition || '',
+              date: record.date || today,
+              notes: record.notes || '',
+            });
+          }
+          setAddOpen(true);
+        }}>
+          Edit Record
+        </button>
       </div>
     </div>
   );
@@ -76,189 +193,284 @@ export default function HealthMedicalRecords() {
 
         {/* Main Content */}
         <main className="main-content">
-          {/* Header */}
-          <div className="dash-header">
-            <h2>Medical Records Management</h2>
+          <div className="header">
+            <h2>Medical Records</h2>
             <div className="user-info">
-              <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || 'Health Officer')}&background=2a9d8f&color=fff`} alt="User" />
+              <img
+                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || 'Health Officer')}&background=2a9d8f&color=fff`}
+                alt="User"
+              />
               <div>
-                <div>{user?.fullName || 'Dr. Sarah Johnson'}</div>
-                <small>Health Officer | MV Ocean Explorer</small>
+                <div>{user?.fullName}</div>
+                <small>Health Officer</small>
               </div>
               <div className="status-badge status-active">Active</div>
             </div>
           </div>
-
-          {/* Search and Filter */}
-          <div className="dashboard-section">
-            <div className="section-header">
-              <div className="section-title">Search Records</div>
-              <div className="section-actions">
-                <button className="btn btn-primary" onClick={() => { setAddOpen(true); }}>
+          <div className="page-content">
+            <div className="page-header">
+              <div className="page-title">Crew Medical Records</div>
+              <div className="page-actions">
+                <button className="btn btn-outline">
+                  <i className="fas fa-download"></i> Export
+                </button>
+                <button className="btn btn-primary" onClick={() => setAddOpen(true)}>
                   <i className="fas fa-plus"></i> Add New Record
                 </button>
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 15 }}>
-              <input value={query} onChange={(e) => setQuery(e.target.value)} type="text" placeholder="Search by name, ID, or condition..." style={{ padding: 10, border: '1px solid #ddd', borderRadius: 4 }} />
-              <select value={type} onChange={(e) => setType(e.target.value)} style={{ padding: 10, border: '1px solid #ddd', borderRadius: 4 }}>
-                <option>All Record Types</option>
+
+            <div className="search-filter" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'nowrap' }}>
+              <div className="search-box" style={{ flex: 1, minWidth: 260, maxWidth: 420, display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  placeholder="Search by crew name, ID, or condition..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </div>
+              <select className="filter-select" value={type} onChange={(e) => setType(e.target.value)} style={{ width: 180, flex: '0 0 auto' }}>
+                <option>All Records</option>
                 <option>Medical History</option>
-                <option>Examination</option>
-                <option>Treatment</option>
-                <option>Vaccination</option>
+                <option>Examinations</option>
+                <option>Treatments</option>
+                <option>Vaccinations</option>
+                <option>Chronic Condition</option>
               </select>
-              <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ padding: 10, border: '1px solid #ddd', borderRadius: 4 }}>
+              <select className="filter-select" value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 180, flex: '0 0 auto' }}>
                 <option>All Status</option>
                 <option>Active</option>
-                <option>Archived</option>
+                <option>Resolved</option>
+                <option>Chronic</option>
+                <option>Completed</option>
               </select>
-              <button className="btn btn-primary" onClick={() => { /* filters applied live */ }}>Search</button>
             </div>
-          </div>
 
-          {/* Records Table */}
-          <div className="dashboard-section">
-            <div className="section-header">
-              <div className="section-title">Crew Medical Records</div>
-              <div className="section-actions"><button className="btn btn-outline"><i className="fas fa-download"></i> Export</button></div>
-            </div>
             <div className="table-responsive">
               <table>
                 <thead>
                   <tr>
                     <th>Crew Member</th>
-                    <th>ID</th>
                     <th>Record Type</th>
-                    <th>Last Updated</th>
+                    <th>Condition</th>
+                    <th>Date</th>
                     <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((r) => (
-                    <tr key={r.id}>
-                      <td>{r.name}</td>
-                      <td>{r.crewId}</td>
-                      <td>{r.rtype}</td>
-                      <td>{r.updated}</td>
+                    <tr key={r._id}>
                       <td>
-                        <span className={`status-indicator ${r.status === 'Complete' ? 'status-completed' : 'status-pending'}`}></span> {r.status}
+                        {(r.crewName || '—')} ({r.crewId})
                       </td>
+                      <td>{r.recordType}</td>
+                      <td>{r.condition}</td>
+                      <td>{r.date}</td>
                       <td>
-                        <button className="btn btn-outline" onClick={() => setSelectedRecordId(r.id)}>View</button>
-                        <button className="btn btn-outline" onClick={() => setAddOpen(true)} style={{ marginLeft: 8 }}>Edit</button>
+                        <span className="status-badge">—</span>
+                      </td>
+                      <td className="action-buttons">
+                        <button className="btn btn-outline btn-sm" onClick={() => openView(r._id)}>
+                          View
+                        </button>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          onClick={() => {
+                            setEditingId(r._id);
+                            setForm({
+                              crewId: r.crewId || '',
+                              recordType: r.recordType || '',
+                              condition: r.condition || '',
+                              date: r.date || today,
+                              notes: r.notes || '',
+                            });
+                            setAddOpen(true);
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          onClick={async () => {
+                            if (!window.confirm('Delete this record?')) return;
+                            try {
+                              await deleteMedicalRecord(r._id);
+                              await loadRecords();
+                            } catch (e) {
+                              alert('Failed to delete');
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 15 }}>
-              <div>Showing 1-{Math.min(4, filtered.length)} of {filtered.length} records</div>
-              <div>
-                <button className="btn btn-outline">Previous</button>
-                <button className="btn btn-primary" style={{ marginLeft: 8 }}>Next</button>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 }}>
+              <div style={{ color: '#777', fontSize: 14 }}>Showing 1-{Math.min(5, filtered.length)} of {filtered.length} records</div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button className="btn btn-outline btn-sm">Previous</button>
+                <button className="btn btn-outline btn-sm">Next</button>
               </div>
             </div>
           </div>
-
-          {/* Record Details */}
-          {selectedRecordId && (
-            <div className="dashboard-section" id="recordDetails">
-              <div className="section-header">
-                <div className="section-title">Record Details</div>
-                <div className="section-actions">
-                  <button className="btn btn-outline" onClick={() => window.print()}><i className="fas fa-print"></i> Print</button>
-                  <button className="btn btn-primary" onClick={() => setSelectedRecordId(null)} style={{ marginLeft: 8 }}><i className="fas fa-times"></i> Close</button>
-                </div>
-              </div>
-              <div id="recordContent">{details(selectedRecordId)}</div>
-            </div>
-          )}
         </main>
       </div>
 
       {/* Add Medical Record Modal */}
       {addOpen && (
-        <div className="modal" onClick={(e) => e.target.classList.contains('modal') && setAddOpen(false)}>
-          <div className="modal-content">
+        <div className="modal" style={{ display: 'flex' }} onClick={(e) => e.target.classList.contains('modal') && setAddOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 className="modal-title">Add Medical Record</h3>
-              <button className="close-modal" onClick={() => setAddOpen(false)}>&times;</button>
+              <h3 className="modal-title">{editingId ? 'Edit' : 'Add'} Medical Record</h3>
+              <button className="close-modal" onClick={() => setAddOpen(false)}>
+                &times;
+              </button>
             </div>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              if (!form.crewId || !form.recordType) {
-                alert('Please select a crew member and record type.');
-                return;
-              }
-              try {
-                await saveMedicalRecord({ crewId: form.crewId, type: form.recordType, notes: form.notes }, uploadFiles);
-                alert('Medical record saved successfully!');
-                setAddOpen(false);
-                setForm({ crewId: '', recordType: '', notes: '' });
-                setUploadFiles([]);
-              } catch (err) {
-                console.warn('saveMedicalRecord failed', err);
-                alert('Backend unavailable. Your record could not be saved.');
-              }
-            }}>
-              <div style={{ marginBottom: 15 }}>
-                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Crew Member</label>
-                <select value={form.crewId} onChange={(e) => setForm((f) => ({ ...f, crewId: e.target.value }))} style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4 }} required>
-                  <option value="">Select crew member</option>
-                  <option value="CD12345">John Doe (CD12345)</option>
-                  <option value="CD12346">Maria Rodriguez (CD12346)</option>
-                  <option value="CD12347">James Wilson (CD12347)</option>
-                </select>
-              </div>
-              <div style={{ marginBottom: 15 }}>
-                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Record Type</label>
-                <select value={form.recordType} onChange={(e) => setForm((f) => ({ ...f, recordType: e.target.value }))} style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4 }} required>
-                  <option value="">Select record type</option>
-                  <option value="medical_history">Medical History</option>
-                  <option value="examination">Examination</option>
-                  <option value="treatment">Treatment</option>
-                  <option value="vaccination">Vaccination</option>
-                  <option value="chronic_condition">Chronic Condition</option>
-                </select>
-              </div>
-
-              {/* Dynamic fields */}
-              {form.recordType === 'medical_history' && (
-                <div style={{ marginBottom: 15 }}>
-                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Allergies</label>
-                  <input type="text" style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4 }} placeholder="List any allergies" />
-                  <label style={{ display: 'block', margin: '10px 0 5px', fontWeight: 600 }}>Previous Surgeries</label>
-                  <textarea style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4, minHeight: 60 }} placeholder="List any previous surgeries"></textarea>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!form.crewId || !form.recordType || !form.condition) {
+                  alert('Please fill in required fields.');
+                  return;
+                }
+                try {
+                  if (editingId) {
+                    await updateMedicalRecord(editingId, { crewId: form.crewId, recordType: form.recordType, condition: form.condition, date: form.date, notes: form.notes }, uploadFiles);
+                    alert('Medical record updated successfully!');
+                  } else {
+                    await saveMedicalRecord(
+                      { crewId: form.crewId, recordType: form.recordType, condition: form.condition, date: form.date, notes: form.notes },
+                      uploadFiles
+                    );
+                    alert('Medical record added successfully!');
+                  }
+                  setAddOpen(false);
+                  setForm({ crewId: '', recordType: '', condition: '', date: today, notes: '' });
+                  setUploadFiles([]);
+                  setEditingId(null);
+                  await loadRecords();
+                } catch (err) {
+                  console.warn('saveMedicalRecord failed', err);
+                  alert('Backend unavailable. Your record could not be saved.');
+                }
+              }}
+            >
+              <div className="form-grid">
+                <div className="form-group">
+                  <label htmlFor="crewMember">Crew Member *</label>
+                  <select
+                    id="crewMember"
+                    className="form-control"
+                    required
+                    value={form.crewId}
+                    onChange={(e) => setForm((f) => ({ ...f, crewId: e.target.value }))}
+                  >
+                    <option value="">Select crew member</option>
+                    {crewOptions.map((m) => (
+                      <option key={m.crewId} value={m.crewId}>
+                        {m.fullName} ({m.crewId})
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              )}
-              {form.recordType === 'examination' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15, marginBottom: 15 }}>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Blood Pressure</label>
-                    <input type="text" style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4 }} placeholder="e.g., 120/80" />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Heart Rate</label>
-                    <input type="number" style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4 }} placeholder="BPM" />
-                  </div>
+
+                <div className="form-group">
+                  <label htmlFor="recordType">Record Type *</label>
+                  <select
+                    id="recordType"
+                    className="form-control"
+                    required
+                    value={form.recordType}
+                    onChange={(e) => setForm((f) => ({ ...f, recordType: e.target.value }))}
+                  >
+                    <option value="">Select type</option>
+                    <option value="medical-history">Medical History</option>
+                    <option value="examination">Examination</option>
+                    <option value="treatment">Treatment</option>
+                    <option value="vaccination">Vaccination</option>
+                    <option value="chronic">Chronic Condition</option>
+                  </select>
                 </div>
-              )}
 
-              <div style={{ marginBottom: 15 }}>
-                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Notes</label>
-                <textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4, minHeight: 100 }}></textarea>
+                <div className="form-group">
+                  <label htmlFor="condition">Condition/Diagnosis *</label>
+                  <input
+                    type="text"
+                    id="condition"
+                    className="form-control"
+                    required
+                    value={form.condition}
+                    onChange={(e) => setForm((f) => ({ ...f, condition: e.target.value }))}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="recordDate">Record Date *</label>
+                  <input
+                    type="date"
+                    id="recordDate"
+                    className="form-control"
+                    required
+                    value={form.date}
+                    onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+                  />
+                </div>
               </div>
 
-              <div style={{ marginBottom: 15 }}>
-                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Upload File</label>
-                <input type="file" multiple onChange={(e) => setUploadFiles(Array.from(e.target.files || []))} style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4 }} />
+              <div className="form-group">
+                <label htmlFor="notes">Clinical Notes</label>
+                <textarea
+                  id="notes"
+                  className="form-control"
+                  rows="4"
+                  placeholder="Enter clinical notes, observations, or recommendations..."
+                  value={form.notes}
+                  onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                ></textarea>
               </div>
 
-              <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>Save Record</button>
+              <div className="form-group">
+                <label htmlFor="attachments">Attachments</label>
+                <input
+                  type="file"
+                  id="attachments"
+                  className="form-control"
+                  multiple
+                  onChange={(e) => setUploadFiles(Array.from(e.target.files || []))}
+                />
+                <small style={{ color: '#777' }}>You can upload lab results, scans, or other documents</small>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+                <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => { setAddOpen(false); setEditingId(null); }}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
+                  {editingId ? 'Update Record' : 'Save Record'}
+                </button>
+              </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* View Record Modal */}
+      {viewOpen && (
+        <div className="modal" style={{ display: 'flex' }} onClick={(e) => e.target.classList.contains('modal') && setViewOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">Medical Record Details</h3>
+              <button className="close-modal" onClick={() => setViewOpen(false)}>&times;</button>
+            </div>
+            <div id="recordDetails">
+              {viewRecordId ? viewDetails(records.find((r) => r._id === viewRecordId) || records[0] || {}) : null}
+            </div>
           </div>
         </div>
       )}

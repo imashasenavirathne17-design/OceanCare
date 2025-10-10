@@ -20,13 +20,28 @@ export default function CrewSidebar({ onLogout }) {
           </NavLink>
         </li>
         <li>
-          <NavLink to="/dashboard/crew/health-check" className={({ isActive }) => (isActive ? 'active' : '')}>
-            <i className="fas fa-heartbeat"></i> Health Check
+          <NavLink to="/dashboard/crew/records" className={({ isActive }) => (isActive ? 'active' : '')}>
+            <i className="fas fa-file-medical"></i> Health Records
           </NavLink>
         </li>
         <li>
-          <NavLink to="/dashboard/crew/records" className={({ isActive }) => (isActive ? 'active' : '')}>
-            <i className="fas fa-file-medical"></i> Health Records
+          <NavLink to="/dashboard/crew/examinations" className={({ isActive }) => (isActive ? 'active' : '')}>
+            <i className="fas fa-stethoscope"></i> Examinations
+          </NavLink>
+        </li>
+        <li>
+          <NavLink to="/dashboard/crew/chronic" className={({ isActive }) => (isActive ? 'active' : '')}>
+            <i className="fas fa-notes-medical"></i> Chronic Tracking
+          </NavLink>
+        </li>
+        <li>
+          <NavLink to="/dashboard/crew/mental-health" className={({ isActive }) => (isActive ? 'active' : '')}>
+            <i className="fas fa-brain"></i> Mental Health
+          </NavLink>
+        </li>
+        <li>
+          <NavLink to="/dashboard/crew/vaccinations" className={({ isActive }) => (isActive ? 'active' : '')}>
+            <i className="fas fa-syringe"></i> Vaccinations
           </NavLink>
         </li>
         <li>
