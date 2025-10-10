@@ -14,6 +14,7 @@ const examinationRoutes = require('./routes/examinationRoutes');
 const healthRoutes = require('./routes/healthRoutes');
 const chronicIllnessRoutes = require('./routes/chronicIllnessRoutes');
 const reminderRoutes = require('./routes/reminderRoutes');
+const adminAnnouncementRoutes = require('./routes/adminAnnouncementRoutes');
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.get('/api/health', (req, res) => {
   app.use('/api/health/exams', examinationRoutes);
   app.use('/api/health/chronic', chronicIllnessRoutes);
   app.use('/api/health/reminders', reminderRoutes);
+  app.use('/api/admin/announcements', adminAnnouncementRoutes);
   app.use('/api/health', healthRoutes);
 
   const PORT = process.env.PORT || 5000;

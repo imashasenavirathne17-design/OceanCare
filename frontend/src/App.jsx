@@ -50,6 +50,7 @@ import AdminUserManagement from './pages/dashboards/AdminUserManagement';
 import AdminPermissions from './pages/dashboards/AdminPermissions';
 import AdminCompliance from './pages/dashboards/AdminCompliance';
 import AdminReports from './pages/dashboards/AdminReports';
+import AdminAnnouncements from './pages/dashboards/AdminAnnouncements';
 import HealthMedicalRecords from './pages/dashboards/HealthMedicalRecords';
 import HealthExamination from './pages/dashboards/HealthExamination';
 import HealthChronic from './pages/dashboards/HealthChronic';
@@ -144,6 +145,7 @@ function App() {
           <Route path="/dashboard/admin" element={<AdminDashboard />} />
           <Route path="/dashboard/admin/users" element={<AdminUserManagement />} />
           <Route path="/dashboard/admin/permissions" element={<AdminPermissions />} />
+          <Route path="/dashboard/admin/announcements" element={<AdminAnnouncements />} />
           <Route path="/dashboard/admin/system-config" element={<AdminSystemConfiguration />} />
           <Route path="/dashboard/admin/compliance" element={<AdminCompliance />} />
           <Route path="/dashboard/admin/integrations" element={<AdminIntegrations />} />
