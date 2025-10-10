@@ -1,17 +1,45 @@
-import React, { useMemo, useState } from 'react';
-import { getUser } from '../../lib/token';
+import React, { useMemo, useState, useEffect } from 'react';
+import { getUser, getToken } from '../../lib/token';
 import InventorySidebar from './InventorySidebar';
 import './inventoryExpiryTracking.css';
 
 export default function InventoryExpiryTracking() {
   const user = getUser();
-  const [items] = useState([
-    { id: 'e1', name: 'Pain Relievers', category: 'Medication', expiry: '2023-10-20', qty: 45 },
-    { id: 'e2', name: 'Antibiotic Ointment', category: 'Medication', expiry: '2023-10-28', qty: 22 },
-    { id: 'e3', name: 'Epinephrine Auto-injectors', category: 'Emergency Equipment', expiry: '2023-11-05', qty: 8 },
-    { id: 'e4', name: 'Defibrillator Pads', category: 'Emergency Equipment', expiry: '2023-12-05', qty: 8 },
-    { id: 'e5', name: 'Saline Solution', category: 'Medical Supply', expiry: '2024-01-15', qty: 30 },
-  ]);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  // Fetch items from backend
+  useEffect(() => {
+    let abort = false;
+    async function load() {
+      setLoading(true);
+      setError('');
+      try {
+        const res = await fetch('/api/inventory', {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        });
+        if (!res.ok) throw new Error('Failed to load inventory');
+        const data = await res.json();
+        const mapped = (data.items || []).map((it) => ({
+          id: it._id || it.id,
+          name: it.name,
+          category: it.category,
+          expiry: it.expiry ? String(it.expiry).slice(0, 10) : '',
+          qty: it.qty,
+        }));
+        if (!abort) {
+          setItems(mapped);
+        }
+      } catch (e) {
+        if (!abort) setError(e.message || 'Error loading inventory');
+      } finally {
+        if (!abort) setLoading(false);
+      }
+    }
+    load();
+    return () => { abort = true; };
+  }, []);
 
   const now = new Date();
   const daysTo = (d) => Math.ceil((new Date(d) - now) / (1000 * 60 * 60 * 24));
@@ -55,6 +83,9 @@ export default function InventoryExpiryTracking() {
               <div className="status-badge status-active">Online</div>
             </div>
           </div>
+
+          {loading && <div className="info-banner">Loading inventory…</div>}
+          {!!error && <div className="error-banner">{error}</div>}
 
           {/* Stats */}
           <div className="expiry-stats">
