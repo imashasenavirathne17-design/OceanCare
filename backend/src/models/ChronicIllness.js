@@ -87,9 +87,11 @@ const ChronicIllnessSchema = new mongoose.Schema(
   }
 );
 
-// Index for efficient queries
+// Index for efficient queries - allows multiple records per crew member
 ChronicIllnessSchema.index({ crewId: 1, status: 1 });
+ChronicIllnessSchema.index({ crewId: 1, primaryCondition: 1 });
 ChronicIllnessSchema.index({ primaryCondition: 1 });
 ChronicIllnessSchema.index({ nextCheckup: 1 });
+ChronicIllnessSchema.index({ diagnosisDate: -1 });
 
 module.exports = mongoose.model('ChronicIllness', ChronicIllnessSchema);

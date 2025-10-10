@@ -402,11 +402,14 @@ export default function HealthChronic() {
                     </thead>
                     <tbody>
                       {filteredPatients.map((p) => (
-                        <tr key={p.id}>
+                        <tr key={p._id || p.id}>
                           <td>
                             <div className="patient-cell">
                               <div className="name">{p.crewName || crewNameById[p.crewId] || 'Unknown'}</div>
                               <div className="id">{p.crewId}</div>
+                              {p.createdAt && <div className="record-date" style={{ fontSize: '0.75em', color: '#6b7280' }}>
+                                Record: {new Date(p.createdAt).toLocaleDateString()}
+                              </div>}
                             </div>
                           </td>
                           <td className="nowrap">{p.primaryCondition || (Array.isArray(p.conditions) ? p.conditions.join(', ') : p.conditions)}</td>
@@ -424,10 +427,10 @@ export default function HealthChronic() {
                             </span>
                           </td>
                           <td className="chronic-actions">
-                            <button className="btn btn-outline btn-sm" onClick={() => logReading(p.id)}>Log Reading</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => viewPatient(p.id)}>View</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => editPatient(p.id)}>Edit</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => deletePatient(p.id)}>Remove</button>
+                            <button className="btn btn-outline btn-sm" onClick={() => logReading(p._id || p.id)}>Log Reading</button>
+                            <button className="btn btn-outline btn-sm" onClick={() => viewPatient(p._id || p.id)}>View</button>
+                            <button className="btn btn-outline btn-sm" onClick={() => editPatient(p._id || p.id)}>Edit</button>
+                            <button className="btn btn-outline btn-sm" onClick={() => deletePatient(p._id || p.id)}>Remove</button>
                           </td>
                         </tr>
                       ))}
@@ -749,7 +752,7 @@ export default function HealthChronic() {
                             crewName: selectedCrew?.fullName || ''
                           }));
                         }} 
-                        disabled={editMode || loadingCrew}
+                        disabled={loadingCrew}
                       >
                         <option value="">{loadingCrew ? 'Loading crew members...' : 'Select crew member'}</option>
                         {crewMembers.map((crew) => (
@@ -762,7 +765,7 @@ export default function HealthChronic() {
                     </div>
                     <div className="form-group">
                       <label htmlFor="conditionType">Condition *</label>
-                      <select id="conditionType" className="form-control" required value={addPatientForm.condition} onChange={(e) => setAddPatientForm(f => ({ ...f, condition: e.target.value }))} disabled={editMode}>
+                      <select id="conditionType" className="form-control" required value={addPatientForm.condition} onChange={(e) => setAddPatientForm(f => ({ ...f, condition: e.target.value }))}>
                         <option value="">Select condition</option>
                         <option value="diabetes">Type 2 Diabetes</option>
                         <option value="hypertension">Hypertension</option>
@@ -774,7 +777,7 @@ export default function HealthChronic() {
                     </div>
                     <div className="form-group">
                       <label htmlFor="diagnosisDate">Diagnosis Date *</label>
-                      <input id="diagnosisDate" type="date" className="form-control" required value={addPatientForm.dx} onChange={(e) => setAddPatientForm(f => ({ ...f, dx: e.target.value }))} disabled={editMode} />
+                      <input id="diagnosisDate" type="date" className="form-control" required value={addPatientForm.dx} onChange={(e) => setAddPatientForm(f => ({ ...f, dx: e.target.value }))} />
                     </div>
                     <div className="form-group">
                       <label htmlFor="severity">Severity *</label>

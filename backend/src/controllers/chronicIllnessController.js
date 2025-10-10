@@ -22,13 +22,8 @@ exports.createPatient = async (req, res) => {
       medications
     } = req.body;
 
-    // Check if patient already exists
-    const existingPatient = await ChronicIllness.findOne({ crewId });
-    if (existingPatient) {
-      return res.status(400).json({ 
-        message: 'Patient with this crew ID already exists in chronic illness tracking' 
-      });
-    }
+    // Allow multiple chronic illness records for the same crew member
+    // Each record can track different conditions or time periods
 
     const patient = await ChronicIllness.create({
       crewId,

@@ -13,6 +13,7 @@ const emergencyProtocolRoutes = require('./routes/emergencyProtocolRoutes');
 const examinationRoutes = require('./routes/examinationRoutes');
 const healthRoutes = require('./routes/healthRoutes');
 const chronicIllnessRoutes = require('./routes/chronicIllnessRoutes');
+const reminderRoutes = require('./routes/reminderRoutes');
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.get('/api/health', (req, res) => {
   app.use('/api/emergency-protocols', emergencyProtocolRoutes);
   app.use('/api/health/exams', examinationRoutes);
   app.use('/api/health/chronic', chronicIllnessRoutes);
+  app.use('/api/health/reminders', reminderRoutes);
   app.use('/api/health', healthRoutes);
 
   const PORT = process.env.PORT || 5000;
