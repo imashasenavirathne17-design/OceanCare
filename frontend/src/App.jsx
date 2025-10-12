@@ -64,10 +64,8 @@ import HealthInventoryAlerts from './pages/dashboards/HealthInventoryAlerts';
 import HealthEducation from './pages/dashboards/HealthEducation';
 import HealthReports from './pages/dashboards/HealthReports';
 import InventoryWasteDisposal from './pages/dashboards/InventoryWasteDisposal';
-import AdminSystemConfiguration from './pages/dashboards/AdminSystemConfiguration';
 import HealthMental from './pages/dashboards/HealthMental';
 import HealthEmergency from './pages/dashboards/HealthEmergency';
-import AdminIntegrations from './pages/dashboards/AdminIntegrations';
 import HealthPermissions from './pages/dashboards/HealthPermissions';
 
 function App() {
@@ -166,9 +164,7 @@ function App() {
           <Route path="/dashboard/admin/users" element={<AdminUserManagement />} />
           <Route path="/dashboard/admin/permissions" element={<AdminPermissions />} />
           <Route path="/dashboard/admin/announcements" element={<AdminAnnouncements />} />
-          <Route path="/dashboard/admin/system-config" element={<AdminSystemConfiguration />} />
           <Route path="/dashboard/admin/compliance" element={<AdminCompliance />} />
-          <Route path="/dashboard/admin/integrations" element={<AdminIntegrations />} />
           <Route path="/dashboard/admin/reports" element={<AdminReports />} />
         </Route>
 

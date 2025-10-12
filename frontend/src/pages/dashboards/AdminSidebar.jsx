@@ -12,17 +12,13 @@ export default function AdminSidebar({ onLogout }) {
     // Prefer pathname for routed pages
     if (pathname.includes('/dashboard/admin/users')) return 'users';
     if (pathname.includes('/dashboard/admin/permissions')) return 'permissions';
-    if (pathname.includes('/dashboard/admin/system-config')) return 'config';
     if (pathname.includes('/dashboard/admin/compliance')) return 'compliance';
-    if (pathname.includes('/dashboard/admin/integrations')) return 'integrations';
     if (pathname.includes('/dashboard/admin/announcements')) return 'announcements';
     if (pathname.includes('/dashboard/admin/reports')) return 'reports';
     // Fallback to hashes for in-page sections
     if (hash && hash !== '#') {
       if (hash.includes('permissions')) return 'permissions';
-      if (hash.includes('config')) return 'config';
       if (hash.includes('compliance')) return 'compliance';
-      if (hash.includes('integrations')) return 'integrations';
       if (hash.includes('announcements')) return 'announcements';
       if (hash.includes('reports')) return 'reports';
     }
@@ -58,18 +54,8 @@ export default function AdminSidebar({ onLogout }) {
           </Link>
         </li>
         <li>
-          <Link to="/dashboard/admin/system-config" className={active === 'config' ? 'active' : ''} onClick={() => setActive('config')}>
-            <i className="fas fa-cogs"></i> System Configuration
-          </Link>
-        </li>
-        <li>
           <Link to="/dashboard/admin/compliance" className={active === 'compliance' ? 'active' : ''} onClick={() => setActive('compliance')}>
             <i className="fas fa-clipboard-check"></i> Compliance & Audit
-          </Link>
-        </li>
-        <li>
-          <Link to="/dashboard/admin/integrations" className={active === 'integrations' ? 'active' : ''} onClick={() => setActive('integrations')}>
-            <i className="fas fa-plug"></i> Integrations
           </Link>
         </li>
         <li>
