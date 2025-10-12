@@ -7,7 +7,9 @@ import './InventorySidebar.css';
 */
 export default function InventorySidebar({ onLogout }) {
   const { pathname } = useLocation();
-  const initialActive = pathname.includes('/dashboard/inventory/items')
+  const initialActive = pathname.includes('/dashboard/inventory/messaging')
+    ? 'messaging'
+    : pathname.includes('/dashboard/inventory/items')
     ? 'inventory-items'
     : pathname.includes('/dashboard/inventory/stock')
     ? 'stock-management'
@@ -32,7 +34,8 @@ export default function InventorySidebar({ onLogout }) {
 
   // Keep active state in sync with the URL on navigation
   useEffect(() => {
-    if (pathname.includes('/dashboard/inventory/items')) setActive('inventory-items');
+    if (pathname.includes('/dashboard/inventory/messaging')) setActive('messaging');
+    else if (pathname.includes('/dashboard/inventory/items')) setActive('inventory-items');
     else if (pathname.includes('/dashboard/inventory/stock')) setActive('stock-management');
     else if (pathname.includes('/dashboard/inventory/expiry')) setActive('expiry-tracking');
     else if (pathname.includes('/dashboard/inventory/zones')) setActive('storage-zones');
@@ -80,6 +83,11 @@ export default function InventorySidebar({ onLogout }) {
         <li>
           <Link to="/dashboard/inventory/reports" className={active === 'reports' ? 'active' : ''} onClick={() => setActive('reports')}>
             <i className="fas fa-chart-bar"></i> Reports
+          </Link>
+        </li>
+        <li>
+          <Link to="/dashboard/inventory/messaging" className={active === 'messaging' ? 'active' : ''} onClick={() => setActive('messaging')}>
+            <i className="fas fa-comments"></i> Messaging
           </Link>
         </li>
         <li>

@@ -10,6 +10,7 @@ export default function AdminSidebar({ onLogout }) {
 
   const initialActive = useMemo(() => {
     // Prefer pathname for routed pages
+    if (pathname.includes('/dashboard/admin/messaging')) return 'messaging';
     if (pathname.includes('/dashboard/admin/users')) return 'users';
     if (pathname.includes('/dashboard/admin/permissions')) return 'permissions';
     if (pathname.includes('/dashboard/admin/system-config')) return 'config';
@@ -80,6 +81,11 @@ export default function AdminSidebar({ onLogout }) {
         <li>
           <Link to="/dashboard/admin/reports" className={active === 'reports' ? 'active' : ''} onClick={() => setActive('reports')}>
             <i className="fas fa-chart-bar"></i> Reports
+          </Link>
+        </li>
+        <li>
+          <Link to="/dashboard/admin/messaging" className={active === 'messaging' ? 'active' : ''} onClick={() => setActive('messaging')}>
+            <i className="fas fa-comments"></i> Messaging
           </Link>
         </li>
         <li>

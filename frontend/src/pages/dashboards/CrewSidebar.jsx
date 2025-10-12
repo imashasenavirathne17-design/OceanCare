@@ -53,6 +53,11 @@ export default function CrewSidebar({ onLogout }) {
           </NavLink>
         </li>
         <li>
+          <NavLink to="/dashboard/crew/messaging" className={({ isActive }) => (isActive ? 'active' : '')}>
+            <i className="fas fa-comments"></i> Messaging
+          </NavLink>
+        </li>
+        <li>
           <NavLink to="/dashboard/crew/emergency" className={({ isActive }) => (isActive ? 'active' : '')}>
             <i className="fas fa-plus-circle"></i> Emergency
           </NavLink>

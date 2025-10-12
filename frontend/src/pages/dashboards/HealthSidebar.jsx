@@ -40,6 +40,11 @@ export default function HealthSidebar({ onLogout }) {
           </NavLink>
         </li>
         <li>
+          <NavLink to="/dashboard/health/messaging" className={({ isActive }) => (isActive ? 'active' : '')}>
+            <i className="fas fa-comments"></i> Messaging
+          </NavLink>
+        </li>
+        <li>
           <NavLink to="/dashboard/health/mental-health" className={({ isActive }) => (isActive ? 'active' : '')}>
             <i className="fas fa-brain"></i> Mental Health
           </NavLink>
