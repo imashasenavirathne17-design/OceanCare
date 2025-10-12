@@ -1,389 +1,423 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getUser } from '../../lib/token';
 import EmergencySidebar from './EmergencySidebar';
+import { getUser } from '../../lib/token';
+import './emergencyOfficerDashboard.css';
+import { listCrewProfiles, getCrewProfile } from '../../lib/emergencyCrewApi';
+
+const RISK_OPTIONS = [
+  { value: 'all', label: 'All Risk Levels' },
+  { value: 'critical', label: 'Critical' },
+  { value: 'elevated', label: 'Elevated' },
+  { value: 'stable', label: 'Stable' },
+];
+
+const STATUS_OPTIONS = [
+  { value: 'all', label: 'All Statuses' },
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+  { value: 'suspended', label: 'Suspended' },
+];
+
+const riskLabel = (risk) => {
+  const match = RISK_OPTIONS.find((r) => r.value === risk);
+  return match ? match.label : 'Unknown';
+};
+
+const statusLabel = (status) => {
+  if (!status) return 'Unknown';
+  return status.charAt(0).toUpperCase() + status.slice(1);
+};
 
 export default function EmergencyCrewProfiles() {
-  const user = getUser();
   const navigate = useNavigate();
+  const user = getUser();
 
-  const userFullName = user?.fullName || 'Emergency Officer';
-  const userRole = user?.role ? (user.role.charAt(0).toUpperCase() + user.role.slice(1)) : 'Emergency Officer';
-  const userVessel = user?.vessel || 'MV Ocean Explorer';
-  const userAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(userFullName)}&background=e63946&color=fff`;
+  const [filters, setFilters] = useState({ q: '', risk: 'all', status: 'all' });
+  const [crew, setCrew] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const [filters, setFilters] = useState({
-    q: '',
-    risk: 'All Risk Levels',
-    dept: 'All Departments',
-  });
-
-  const crew = useMemo(() => ([
-    {
-      id: 'CREW-045',
-      name: 'John Davis',
-      position: 'Engine Technician',
-      status: 'CRITICAL',
-      statusClass: 'status-critical',
-      avatarBg: 'e63946',
-      details: {
-        age: 42,
-        blood: 'A+',
-        lastCheck: 'Today, 10:24 AM',
-      },
-      risks: ['Hypertension', 'Cardiac History', 'High Stress'],
-    },
-    {
-      id: 'CREW-128',
-      name: 'Maria Rodriguez',
-      position: 'Deck Officer',
-      status: 'MONITORING',
-      statusClass: 'status-monitoring',
-      avatarBg: '3a86ff',
-      details: {
-        age: 35,
-        blood: 'O-',
-        lastCheck: 'Today, 10:15 AM',
-      },
-      risks: ['Asthma', 'Seasonal Allergies'],
-    },
-    {
-      id: 'CREW-312',
-      name: 'Robert Chen',
-      position: 'Cook',
-      status: 'STABLE',
-      statusClass: 'status-stable',
-      avatarBg: 'f4a261',
-      details: {
-        age: 28,
-        blood: 'B+',
-        lastCheck: 'Today, 09:45 AM',
-      },
-      risks: ['Mild Hypertension'],
-    },
-  ]), []);
-
-  const [selected, setSelected] = useState(null); // selected crew for detail view
+  const [selectedId, setSelectedId] = useState(null);
+  const [selectedProfile, setSelectedProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
+  const [detailOpen, setDetailOpen] = useState(false);
 
-  const filtered = crew.filter((c) => {
-    if (filters.q && !(`${c.name} ${c.position} ${c.id}`.toLowerCase().includes(filters.q.toLowerCase()))) return false;
-    if (filters.risk !== 'All Risk Levels') {
-      if (filters.risk === 'Critical' && c.status !== 'CRITICAL') return false;
-      if (filters.risk === 'High' && c.status !== 'MONITORING') return false; // mapping demo
-      if (filters.risk === 'Low' && c.status !== 'STABLE') return false;
-    }
-    if (filters.dept !== 'All Departments') {
-      // demo – no real dept field, accept all
-    }
-    return true;
-  });
+  useEffect(() => {
+    let ignore = false;
+    const load = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const params = {
+          q: filters.q || undefined,
+          risk: filters.risk,
+          status: filters.status,
+        };
+        const data = await listCrewProfiles(params);
+        if (!ignore) setCrew(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('listCrewProfiles error', err);
+        if (!ignore) setError('Failed to load crew profiles');
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    };
+    load();
+    return () => { ignore = true; };
+  }, [filters.q, filters.risk, filters.status]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    let ignore = false;
+    const load = async () => {
+      setProfileLoading(true);
+      try {
+        const data = await getCrewProfile(selectedId);
+        if (!ignore) {
+          setSelectedProfile(data);
+          setActiveTab('overview');
+        }
+      } catch (err) {
+        console.error('getCrewProfile error', err);
+        if (!ignore) setSelectedProfile(null);
+      } finally {
+        if (!ignore) setProfileLoading(false);
+      }
+    };
+    load();
+    return () => { ignore = true; };
+  }, [selectedId]);
+
+  const filtered = useMemo(() => {
+    const needle = filters.q.trim().toLowerCase();
+    return crew.filter((item) => {
+      if (filters.risk !== 'all' && item.riskLevel !== filters.risk) return false;
+      if (filters.status !== 'all' && item.status !== filters.status) return false;
+      if (!needle) return true;
+      const haystack = `${item.fullName} ${item.crewId} ${item.email} ${item.position} ${item.department}`.toLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [crew, filters]);
+
+  const userAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || 'Emergency Officer')}&background=e63946&color=fff`;
+
+  const openDetail = (id) => {
+    setSelectedId(id);
+    setDetailOpen(true);
+  };
+
+  const closeDetail = () => {
+    setDetailOpen(false);
+    setSelectedId(null);
+    setSelectedProfile(null);
+    setActiveTab('overview');
+  };
 
   return (
     <div className="dashboard-container emergency-dashboard">
-      {/* Small inline style block to mirror Alerts/Protocols card UX */}
       <style>{`
-        .main-content { padding: 20px; }
-        .header { display:flex; justify-content:space-between; align-items:center; margin-bottom:30px; padding:18px 22px; background:#fff; border-radius:14px; box-shadow:0 4px 12px rgba(0,0,0,.06); }
-        .header h2 { color:#e63946; font-size:24px; font-weight:700; margin:0; }
-        .user-info { display:flex; align-items:center; gap:10px; }
-        .user-info img { width:40px; height:40px; border-radius:50%; margin-right:8px; }
-        .user-info .meta { display:flex; flex-direction:column; }
-        .user-info .meta .name { color:#343a40; font-weight:600; line-height:1.2; }
-        .user-info .meta small { color:#6c757d; line-height:1.2; }
-        .status-badge { padding:6px 12px; border-radius:9999px; font-size:12px; font-weight:600; margin-left:10px; border:1px solid rgba(230,57,70,.35); background:rgba(230,57,70,.12); color:#e63946; }
-
-        .search-filters { background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,.05); padding:20px; margin-bottom:20px; display:flex; flex-wrap:wrap; gap:15px; align-items:center; }
-        .search-box { display:flex; align-items:center; background:#fff; border:1px solid #ddd; border-radius:4px; padding:0 10px; flex:1; max-width:300px; }
-        .search-box input { border:none; padding:8px 10px; width:100%; outline:none; }
-        .filter-group { display:flex; flex-direction:column; }
-        .filter-label { font-size:14px; margin-bottom:5px; color:#666; font-weight:500; }
-        .filter-select { padding:8px 12px; border:1px solid #ddd; border-radius:4px; background:#fff; min-width:150px; }
-        .btn { padding:8px 15px; border:none; border-radius:4px; cursor:pointer; font-weight:500; transition:.3s; display:inline-flex; align-items:center; }
-        .btn i { margin-right:5px; }
-        .btn-primary { background:#e63946; color:#fff; }
-
-        .crew-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:25px; margin-bottom:30px; }
-        .crew-card { background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,.05); overflow:hidden; transition:transform .3s; }
-        .crew-card:hover { transform: translateY(-5px); }
-        .crew-header { padding:20px; display:flex; align-items:center; border-bottom:1px solid #eee; }
-        .crew-avatar { width:70px; height:70px; border-radius:50%; margin-right:15px; object-fit:cover; }
-        .crew-info { flex:1; }
-        .crew-name { font-size:18px; font-weight:600; margin-bottom:5px; }
-        .crew-position { font-size:14px; color:#777; margin-bottom:5px; }
-        .crew-status { padding:4px 8px; border-radius:12px; font-size:12px; font-weight:600; }
-        .status-critical { background:rgba(230,57,70,.2); color:#e63946; }
-        .status-monitoring { background:rgba(244,162,97,.2); color:#f4a261; }
-        .status-stable { background:rgba(42,157,143,.2); color:#2a9d8f; }
-        .crew-body { padding:20px; }
-        .crew-details { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:15px; }
-        .detail-item { display:flex; flex-direction:column; }
-        .detail-label { font-size:12px; color:#777; margin-bottom:3px; }
-        .detail-value { font-size:14px; font-weight:500; }
-        .risk-factors { margin-bottom:15px; }
-        .risk-title { font-size:14px; font-weight:600; margin-bottom:8px; color:#343a40; }
-        .risk-tags { display:flex; flex-wrap:wrap; gap:5px; }
-        .risk-tag { padding:3px 8px; background:#fff5f5; border-radius:12px; font-size:11px; color:#e63946; }
-        .risk-tag.warning { background:#fff4e5; color:#f4a261; }
-        .risk-tag.info { background:#e3f2fd; color:#3a86ff; }
-        .crew-footer { display:flex; justify-content:space-between; padding:15px 20px; border-top:1px solid #eee; }
-
-        .profile-detail { background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,.05); padding:25px; margin-bottom:30px; }
-        .profile-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:25px; }
-        .profile-main { display:flex; align-items:flex-start; }
-        .profile-avatar { width:100px; height:100px; border-radius:50%; margin-right:20px; object-fit:cover; }
-        .profile-name { font-size:24px; font-weight:600; margin-bottom:5px; }
-        .profile-meta { display:flex; flex-wrap:wrap; gap:15px; margin-bottom:10px; }
-        .profile-meta-item { display:flex; align-items:center; font-size:14px; color:#666; }
-        .profile-meta-item i { margin-right:5px; color:#e63946; }
-        .profile-actions { display:flex; gap:10px; }
-        .tabs { display:flex; border-bottom:1px solid #eee; margin-bottom:20px; }
-        .tab { padding:12px 20px; cursor:pointer; border-bottom:3px solid transparent; font-weight:500; }
-        .tab.active { border-bottom:3px solid #e63946; color:#e63946; }
-        .info-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:20px; margin-bottom:25px; }
-        .info-card { background:#f8f9fa; border-radius:8px; padding:15px; }
-        .info-card-title { font-size:16px; font-weight:600; margin-bottom:10px; color:#e63946; }
-        .info-item { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #eee; }
-        .info-item:last-child { border-bottom:none; }
-        .vitals-chart { height:200px; background:#f8f9fa; border-radius:8px; margin-bottom:25px; display:flex; align-items:center; justify-content:center; color:#777; }
-
-        @media (max-width: 992px) {
-          .dashboard-container { flex-direction: column; }
-          .sidebar { width: 100%; height: auto; }
-          .sidebar-menu { display:flex; overflow-x:auto; }
-          .sidebar-menu li { margin-bottom:0; margin-right:10px; }
-          .sidebar-menu a { padding:10px 15px; border-left:none; border-bottom:3px solid transparent; }
-          .sidebar-menu a:hover, .sidebar-menu a.active { border-left:none; border-bottom:3px solid #fff; }
-        }
+        .crew-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:24px; align-items:stretch; }
+        .crew-card { display:flex; flex-direction:column; padding:22px; border-radius:16px; border:1px solid #f5ccd1; background:#fff; box-shadow:0 16px 28px rgba(230,57,70,0.08); transition:transform .2s ease, box-shadow .2s ease; }
+        .crew-card:hover { transform:translateY(-6px); box-shadow:0 22px 36px rgba(230,57,70,0.14); }
+        .crew-card-header { display:flex; align-items:center; gap:16px; margin-bottom:18px; }
+        .crew-avatar { width:60px; height:60px; border-radius:18px; object-fit:cover; box-shadow:0 6px 12px rgba(0,0,0,0.08); }
+        .crew-heading { display:flex; flex-direction:column; gap:4px; }
+        .crew-name { font-size:18px; font-weight:700; color:#343a40; }
+        .crew-position { font-size:13px; color:#6c757d; }
+        .crew-card-body { flex:1; display:flex; flex-direction:column; gap:18px; }
+        .crew-meta { display:grid; grid-template-columns:repeat(2, minmax(110px, 1fr)); gap:12px; }
+        .crew-meta-item { background:#fff7f7; border-radius:12px; padding:12px; font-size:13px; color:#495057; border:1px solid #fde1e5; }
+        .crew-meta-label { display:block; font-size:11px; letter-spacing:0.5px; text-transform:uppercase; color:#b98991; margin-bottom:6px; }
+        .crew-risk { display:flex; justify-content:space-between; align-items:center; }
+        .crew-risk span { font-size:12px; color:#6c757d; }
+        .risk-chip { display:inline-flex; align-items:center; padding:6px 12px; border-radius:999px; font-size:12px; font-weight:600; text-transform:capitalize; box-shadow:0 4px 8px rgba(0,0,0,0.05); }
+        .risk-critical { background:rgba(230,57,70,0.15); color:#c32835; }
+        .risk-elevated { background:rgba(244,162,97,0.18); color:#b5632e; }
+        .risk-stable { background:rgba(42,157,143,0.18); color:#1c7d6d; }
+        .crew-card-footer { display:flex; gap:12px; margin-top:24px; }
+        .crew-card-footer .btn { flex:1; display:inline-flex; justify-content:center; align-items:center; padding:12px 0; border-radius:999px; font-size:13px; font-weight:600; letter-spacing:0.3px; }
+        .crew-view-btn { background:linear-gradient(135deg, #e63946 0%, #b3202c 100%); border:none; color:#fff; box-shadow:0 10px 18px rgba(230,57,70,0.25); }
+        .crew-view-btn:hover { box-shadow:0 14px 24px rgba(230,57,70,0.32); transform:translateY(-1px); }
+        .crew-action-secondary { background:#fff; color:#b3202c; border:1px solid #f3c2c5; }
+        .crew-action-secondary:hover { background:#fff0f1; }
+        .profile-section { margin-top:32px; }
+        .info-list { list-style:none; padding:0; margin:0; }
+        .info-list li { padding:10px 0; border-bottom:1px solid #f1d4d6; display:flex; justify-content:space-between; font-size:14px; color:#495057; }
+        .info-list li:last-child { border-bottom:none; }
+        .records-table { width:100%; border-collapse:collapse; }
+        .records-table th, .records-table td { padding:12px 14px; border-bottom:1px solid #f1d4d6; text-align:left; font-size:13px; color:#495057; }
+        .records-table th { background:#fff0f1; font-weight:600; color:#b3202c; }
+        .scroll-container { max-height:320px; overflow-y:auto; border:1px solid #f6dfe1; border-radius:12px; }
+        .detail-modal { position:fixed; inset:0; background:rgba(17,24,39,0.52); display:flex; justify-content:center; align-items:center; padding:32px; z-index:999; backdrop-filter:blur(4px); }
+        .detail-card { position:relative; background:#fff; border-radius:22px; width:min(960px, 95vw); max-height:90vh; overflow:hidden; box-shadow:0 30px 60px rgba(15,23,42,0.28); display:flex; flex-direction:column; }
+        .detail-header { padding:26px 32px; border-bottom:1px solid #f3c2c5; display:flex; justify-content:space-between; align-items:center; gap:20px; background:linear-gradient(135deg, rgba(230,57,70,0.12) 0%, rgba(255,240,241,0.8) 100%); }
+        .detail-title { display:flex; flex-direction:column; gap:6px; }
+        .detail-title h3 { margin:0; font-size:24px; font-weight:700; color:#b3202c; }
+        .detail-subtitle { font-size:13px; color:#6c757d; letter-spacing:0.3px; }
+        .detail-close { background:transparent; border:none; color:#b3202c; font-size:18px; cursor:pointer; padding:8px; }
+        .detail-body { padding:28px 32px; overflow-y:auto; }
+        .detail-pill-row { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:24px; }
+        .detail-pill { background:#fff7f7; border:1px solid #fde1e5; border-radius:14px; padding:12px 18px; font-size:13px; font-weight:600; color:#b3202c; display:flex; align-items:center; gap:8px; box-shadow:0 8px 16px rgba(255,189,199,0.25); }
+        .detail-columns { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:24px; }
+        .detail-card-section { background:#fff7f7; border:1px solid #fde1e5; border-radius:16px; padding:20px; }
+        .detail-card-section h4 { margin:0 0 12px; font-size:16px; font-weight:600; color:#c32835; }
+        .detail-info-list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:10px; font-size:13px; color:#495057; }
+        .detail-info-item { display:flex; justify-content:space-between; gap:12px; }
+        .detail-info-item span:first-child { font-weight:600; color:#c32835; }
+        .detail-tabs { display:flex; gap:18px; margin:26px 0 16px; border-bottom:1px solid #f3c2c5; }
+        .detail-tab { padding:10px 2px; font-size:13px; font-weight:600; color:#b98991; cursor:pointer; border-bottom:3px solid transparent; text-transform:uppercase; letter-spacing:0.4px; }
+        .detail-tab.active { color:#b3202c; border-color:#b3202c; }
+        .latest-summary { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); gap:16px; margin-top:16px; }
+        .latest-tile { background:#fff; border:1px dashed #f3c2c5; border-radius:14px; padding:16px; font-size:13px; color:#495057; }
+        .latest-tile span { display:block; font-weight:600; color:#b3202c; margin-bottom:6px; }
         @media (max-width: 768px) {
-          .header { flex-direction:column; align-items:flex-start; }
-          .user-info { margin-top:15px; }
-          .search-filters { flex-direction:column; align-items:flex-start; }
-          .search-box { max-width:100%; width:100%; }
-          .filter-group, .filter-select { width:100%; }
-          .crew-grid { grid-template-columns:1fr; }
-          .profile-header { flex-direction:column; }
-          .profile-actions { margin-top:15px; width:100%; justify-content:flex-start; }
-          .tabs { overflow-x:auto; }
-        }
-        @media (max-width: 480px) {
-          .crew-details { grid-template-columns:1fr; }
-          .crew-footer { flex-direction:column; gap:10px; }
-          .profile-main { flex-direction:column; text-align:center; }
-          .profile-avatar { margin-right:0; margin-bottom:15px; }
-          .info-grid { grid-template-columns:1fr; }
+          .detail-card { padding-bottom:16px; }
+          .detail-body { padding:22px 20px; }
         }
       `}</style>
 
-      {/* Sidebar */}
       <EmergencySidebar onLogout={() => navigate('/')} />
 
-      {/* Main Content */}
       <div className="main-content">
-        <div className="header">
+        <div className="dash-header">
           <h2>Crew Health Profiles</h2>
           <div className="user-info">
-            <img src={userAvatarUrl} alt="User" />
-            <div className="meta">
-              <div className="name">{userFullName}</div>
-              <small>{`${userRole} | ${userVessel}`}</small>
+            <img src={userAvatar} alt="Emergency Officer" />
+            <div>
+              <div>{user?.fullName || 'Emergency Officer'}</div>
+              <small>{user?.vessel || 'MV Ocean Explorer'}</small>
             </div>
             <div className="status-badge status-active">On Duty</div>
           </div>
         </div>
 
-        {/* Search and Filters */}
-        <div className="search-filters">
-          <div className="search-box">
-            <i className="fas fa-search" />
-            <input
-              type="text"
-              placeholder="Search crew members..."
-              value={filters.q}
-              onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
-            />
+        <section className="panel">
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Search crew</label>
+              <input
+                className="form-control"
+                placeholder="Search by name, crew ID, position..."
+                value={filters.q}
+                onChange={(e) => setFilters((prev) => ({ ...prev, q: e.target.value }))}
+              />
+            </div>
+            <div className="form-group">
+              <label>Risk level</label>
+              <select
+                className="form-control"
+                value={filters.risk}
+                onChange={(e) => setFilters((prev) => ({ ...prev, risk: e.target.value }))}
+              >
+                {RISK_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Account status</label>
+              <select
+                className="form-control"
+                value={filters.status}
+                onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+              >
+                {STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
+          {error && <div className="error-message" style={{ marginTop: 12 }}>{error}</div>}
+        </section>
 
-          <div className="filter-group">
-            <label className="filter-label">Risk Level</label>
-            <select
-              className="filter-select"
-              value={filters.risk}
-              onChange={(e) => setFilters((f) => ({ ...f, risk: e.target.value }))}
-            >
-              <option>All Risk Levels</option>
-              <option>Critical</option>
-              <option>High</option>
-              <option>Medium</option>
-              <option>Low</option>
-            </select>
+        <section className="panel">
+          <div className="section-header">
+            <div className="section-title">Crew Overview</div>
+            <div className="section-subtitle">{loading ? 'Loading crew roster…' : `${filtered.length} crew members`}</div>
           </div>
-
-          <div className="filter-group">
-            <label className="filter-label">Department</label>
-            <select
-              className="filter-select"
-              value={filters.dept}
-              onChange={(e) => setFilters((f) => ({ ...f, dept: e.target.value }))}
-            >
-              <option>All Departments</option>
-              <option>Engineering</option>
-              <option>Deck</option>
-              <option>Medical</option>
-              <option>Catering</option>
-            </select>
-          </div>
-
-          <button className="btn btn-primary" onClick={() => alert('Filters applied successfully')}>
-            <i className="fas fa-filter" /> Apply Filters
-          </button>
-          <button className="btn" onClick={() => alert('Refreshing crew data...')}>
-            <i className="fas fa-sync-alt" /> Refresh
-          </button>
-        </div>
-
-        {/* Crew Grid */}
-        <div className="crew-grid">
-          {filtered.map((c) => (
-            <div className="crew-card" key={c.id}>
-              <div className="crew-header">
-                <img
-                  src={`https://ui-avatars.com/api/?name=${encodeURIComponent(c.name)}&size=70&background=${c.avatarBg}&color=fff`}
-                  alt={c.name}
-                  className="crew-avatar"
-                />
-                <div className="crew-info">
-                  <div className="crew-name">{c.name}</div>
-                  <div className="crew-position">{c.position}</div>
-                  <div className={`crew-status ${c.statusClass}`}>{c.status}</div>
-                </div>
-              </div>
-              <div className="crew-body">
-                <div className="crew-details">
-                  <div className="detail-item">
-                    <div className="detail-label">ID</div>
-                    <div className="detail-value">{c.id}</div>
-                  </div>
-                  <div className="detail-item">
-                    <div className="detail-label">Age</div>
-                    <div className="detail-value">{c.details.age}</div>
-                  </div>
-                  <div className="detail-item">
-                    <div className="detail-label">Blood Type</div>
-                    <div className="detail-value">{c.details.blood}</div>
-                  </div>
-                  <div className="detail-item">
-                    <div className="detail-label">Last Check</div>
-                    <div className="detail-value">{c.details.lastCheck}</div>
-                  </div>
-                </div>
-                <div className="risk-factors">
-                  <div className="risk-title">Risk Factors</div>
-                  <div className="risk-tags">
-                    {c.risks.map((r, i) => (
-                      <div key={i} className={`risk-tag ${r.includes('High') || r.includes('Asthma') ? 'warning' : r.includes('Mild') ? 'info' : ''}`}>
-                        {r}
+          {loading ? (
+            <div className="empty"><div className="desc">Loading crew profiles...</div></div>
+          ) : filtered.length === 0 ? (
+            <div className="empty">
+              <div className="title">No crew members found</div>
+              <div className="desc">Adjust search or filters to broaden results.</div>
+            </div>
+          ) : (
+            <div className="crew-grid">
+              {filtered.map((c) => {
+                const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(c.fullName || 'Crew')}&background=e63946&color=fff`;
+                return (
+                  <div key={c.id || c.crewId} className="crew-card">
+                    <div className="crew-card-header">
+                      <img src={avatar} alt={c.fullName} className="crew-avatar" />
+                      <div className="crew-heading">
+                        <div className="crew-name">{c.fullName}</div>
+                        <div className="crew-position">{c.position || 'Role not set'}</div>
                       </div>
-                    ))}
+                    </div>
+                    <div className="crew-card-body">
+                      <div className="crew-meta">
+                        <div className="crew-meta-item">
+                          <span className="crew-meta-label">Crew ID</span>
+                          <span>{c.crewId || '—'}</span>
+                        </div>
+                        <div className="crew-meta-item">
+                          <span className="crew-meta-label">Department</span>
+                          <span>{c.department || '—'}</span>
+                        </div>
+                        <div className="crew-meta-item">
+                          <span className="crew-meta-label">Blood Group</span>
+                          <span>{c.bloodGroup || 'Unknown'}</span>
+                        </div>
+                        <div className="crew-meta-item">
+                          <span className="crew-meta-label">Records</span>
+                          <span>{c.recordCount ?? 0}</span>
+                        </div>
+                      </div>
+                      <div className="crew-risk">
+                        <span>Risk assessment</span>
+                        <span className={`risk-chip risk-${c.riskLevel || 'stable'}`}>{riskLabel(c.riskLevel)}</span>
+                      </div>
+                    </div>
+                    <div className="crew-card-footer">
+                      <button className="btn crew-view-btn" onClick={() => openDetail(c.crewId || c.id)}>
+                        <i className="fas fa-eye" /> View
+                      </button>
+                      <button className="btn crew-action-secondary" onClick={() => openDetail(c.crewId || c.id)}>
+                        <i className="fas fa-heartbeat" /> Monitor
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {detailOpen && (
+          <div className="detail-modal" onClick={closeDetail}>
+            <div className="detail-card" onClick={(e) => e.stopPropagation()}>
+              <div className="detail-header">
+                <div className="detail-title">
+                  <h3>{selectedProfile?.personal?.fullName || 'Crew Member'}</h3>
+                  <div className="detail-subtitle">
+                    {selectedProfile?.personal?.crewId ? `Crew ID ${selectedProfile.personal.crewId}` : 'No Crew ID'}
+                    {selectedProfile?.personal?.department ? ` • ${selectedProfile.personal.department}` : ''}
                   </div>
                 </div>
-              </div>
-              <div className="crew-footer">
-                <button className="btn btn-primary btn-sm" onClick={() => { setSelected(c); setActiveTab('overview'); }}>
-                  <i className="fas fa-eye" /> View Profile
+                <button className="detail-close" onClick={closeDetail} aria-label="Close detail">
+                  <i className="fas fa-times" />
                 </button>
-                <button className="btn btn-warning btn-sm" onClick={() => alert('Monitoring enabled') }>
-                  <i className="fas fa-heartbeat" /> Monitor
-                </button>
+              </div>
+
+              <div className="detail-body">
+                {profileLoading ? (
+                  <div className="empty"><div className="desc">Fetching crew details…</div></div>
+                ) : !selectedProfile ? (
+                  <div className="empty"><div className="desc">Unable to load crew information.</div></div>
+                ) : (
+                  <>
+                    <div className="detail-pill-row">
+                      <div className="detail-pill"><i className="fas fa-heartbeat" /> Risk: {riskLabel(selectedProfile.medical?.riskLevel)}</div>
+                      <div className="detail-pill"><i className="fas fa-notes-medical" /> Records: {selectedProfile.medical?.recordCount ?? 0}</div>
+                      <div className="detail-pill"><i className="fas fa-user-clock" /> Status: {statusLabel(selectedProfile.personal?.status)}</div>
+                      {selectedProfile.personal?.age !== null && selectedProfile.personal?.age !== undefined && (
+                        <div className="detail-pill"><i className="fas fa-birthday-cake" /> Age: {selectedProfile.personal.age}</div>
+                      )}
+                    </div>
+
+                    <div className="detail-columns">
+                      <div className="detail-card-section">
+                        <h4>Personal Information</h4>
+                        <ul className="detail-info-list">
+                          <li className="detail-info-item"><span>Full Name</span><span>{selectedProfile.personal?.fullName || '—'}</span></li>
+                          <li className="detail-info-item"><span>Crew ID</span><span>{selectedProfile.personal?.crewId || '—'}</span></li>
+                          <li className="detail-info-item"><span>Role</span><span>{selectedProfile.personal?.role || '—'}</span></li>
+                          <li className="detail-info-item"><span>Department</span><span>{selectedProfile.personal?.department || '—'}</span></li>
+                          <li className="detail-info-item"><span>Vessel</span><span>{selectedProfile.personal?.vessel || '—'}</span></li>
+                          <li className="detail-info-item"><span>Nationality</span><span>{selectedProfile.personal?.nationality || '—'}</span></li>
+                          <li className="detail-info-item"><span>Gender</span><span>{selectedProfile.personal?.gender || '—'}</span></li>
+                        </ul>
+                      </div>
+
+                      <div className="detail-card-section">
+                        <h4>Medical Information</h4>
+                        <ul className="detail-info-list">
+                          <li className="detail-info-item"><span>Blood Group</span><span>{selectedProfile.medical?.bloodGroup || 'Unknown'}</span></li>
+                          <li className="detail-info-item"><span>Risk Level</span><span>{riskLabel(selectedProfile.medical?.riskLevel)}</span></li>
+                          <li className="detail-info-item"><span>Emergency Contact</span><span>{selectedProfile.medical?.emergencyContact?.name ? `${selectedProfile.medical.emergencyContact.name}${selectedProfile.medical.emergencyContact.phone ? ' • ' + selectedProfile.medical.emergencyContact.phone : ''}` : '—'}</span></li>
+                          <li className="detail-info-item"><span>Total Records</span><span>{selectedProfile.medical?.recordCount ?? 0}</span></li>
+                        </ul>
+                      </div>
+                    </div>
+
+                    <div className="detail-tabs">
+                      {['overview', 'records'].map((tab) => (
+                        <div
+                          key={tab}
+                          className={`detail-tab ${activeTab === tab ? 'active' : ''}`}
+                          onClick={() => setActiveTab(tab)}
+                        >
+                          {tab === 'overview' ? 'Overview' : 'Medical Records'}
+                        </div>
+                      ))}
+                    </div>
+
+                    {activeTab === 'overview' && (
+                      <div>
+                        <div className="detail-card-section" style={{ borderStyle: 'dashed', marginBottom: 24 }}>
+                          <h4>Latest Medical Summary</h4>
+                          {selectedProfile.medical?.latestRecord ? (
+                            <div className="latest-summary">
+                              <div className="latest-tile"><span>Date</span>{selectedProfile.medical.latestRecord.date || '—'}</div>
+                              <div className="latest-tile"><span>Type</span>{selectedProfile.medical.latestRecord.recordType || '—'}</div>
+                              <div className="latest-tile"><span>Condition</span>{selectedProfile.medical.latestRecord.condition || '—'}</div>
+                              <div className="latest-tile"><span>Notes</span>{selectedProfile.medical.latestRecord.notes || 'No notes recorded.'}</div>
+                            </div>
+                          ) : (
+                            <div className="empty"><div className="desc">No recent medical records available.</div></div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {activeTab === 'records' && (
+                      <div className="detail-card-section" style={{ background:'#fff', borderColor:'#f3c2c5' }}>
+                        <h4>Medical Record History</h4>
+                        {selectedProfile.timeline?.records?.length ? (
+                          <div className="scroll-container">
+                            <table className="records-table">
+                              <thead>
+                                <tr>
+                                  <th>Date</th>
+                                  <th>Type</th>
+                                  <th>Condition</th>
+                                  <th>Notes</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {selectedProfile.timeline.records.map((rec) => (
+                                  <tr key={rec.id}>
+                                    <td>{rec.date || '—'}</td>
+                                    <td>{rec.recordType || '—'}</td>
+                                    <td>{rec.condition || '—'}</td>
+                                    <td>{rec.notes ? rec.notes.slice(0, 100) + (rec.notes.length > 100 ? '…' : '') : '—'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="empty"><div className="desc">No records logged yet.</div></div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
-          ))}
-        </div>
-
-        {/* Detailed Profile View */}
-        {selected && (
-          <div className="profile-detail">
-            <div className="profile-header">
-              <div className="profile-main">
-                <img
-                  src={`https://ui-avatars.com/api/?name=${encodeURIComponent(selected.name)}&size=100&background=e63946&color=fff`}
-                  alt={selected.name}
-                  className="profile-avatar"
-                />
-                <div className="profile-info">
-                  <div className="profile-name">{selected.name}</div>
-                  <div className="profile-meta">
-                    <div className="profile-meta-item"><i className="fas fa-id-badge" /><span>{selected.id}</span></div>
-                    <div className="profile-meta-item"><i className="fas fa-briefcase" /><span>{selected.position}</span></div>
-                    <div className="profile-meta-item"><i className="fas fa-map-marker-alt" /><span>Medical Bay</span></div>
-                    <div className="profile-meta-item"><i className="fas fa-phone" /><span>Ext. 245</span></div>
-                  </div>
-                  <div className={`crew-status ${selected.statusClass}`}>{selected.status} CONDITION</div>
-                </div>
-              </div>
-              <div className="profile-actions">
-                <button className="btn btn-primary" onClick={() => window.print()}><i className="fas fa-print" /> Print</button>
-                <button className="btn" onClick={() => setSelected(null)}><i className="fas fa-times" /> Close</button>
-              </div>
-            </div>
-
-            <div className="tabs">
-              {['overview','medical','vitals','medications','contacts'].map(t => (
-                <div
-                  key={t}
-                  className={`tab ${activeTab === t ? 'active' : ''}`}
-                  onClick={() => setActiveTab(t)}
-                >
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </div>
-              ))}
-            </div>
-
-            {/* Overview Tab */}
-            {activeTab === 'overview' && (
-              <div className="tab-content active" id="overview">
-                <div className="info-grid">
-                  <div className="info-card">
-                    <div className="info-card-title">Personal Information</div>
-                    <div className="info-item"><div className="info-label">Age</div><div className="info-value">{selected.details.age}</div></div>
-                    <div className="info-item"><div className="info-label">Date of Birth</div><div className="info-value">June 15, 1981</div></div>
-                    <div className="info-item"><div className="info-label">Nationality</div><div className="info-value">American</div></div>
-                    <div className="info-item"><div className="info-label">Blood Type</div><div className="info-value">{selected.details.blood}</div></div>
-                  </div>
-                  <div className="info-card">
-                    <div className="info-card-title">Medical Information</div>
-                    <div className="info-item"><div className="info-label">Primary Condition</div><div className="info-value">Hypertension</div></div>
-                    <div className="info-item"><div className="info-label">Allergies</div><div className="info-value">Penicillin, Shellfish</div></div>
-                    <div className="info-item"><div className="info-label">Last Physical</div><div className="info-value">Oct 10, 2023</div></div>
-                    <div className="info-item"><div className="info-label">Vaccination Status</div><div className="info-value">Up to date</div></div>
-                  </div>
-                  <div className="info-card">
-                    <div className="info-card-title">Risk Assessment</div>
-                    <div className="info-item"><div className="info-label">Overall Risk</div><div className="info-value">High</div></div>
-                    <div className="info-item"><div className="info-label">Cardiac Risk</div><div className="info-value">Critical</div></div>
-                    <div className="info-item"><div className="info-label">Respiratory Risk</div><div className="info-value">Low</div></div>
-                    <div className="info-item"><div className="info-label">Stress Level</div><div className="info-value">High</div></div>
-                  </div>
-                </div>
-                <div className="info-card">
-                  <div className="info-card-title">Current Health Status</div>
-                  <div className="vitals-chart">[Vital Signs Chart Would Appear Here]</div>
-                  <div className="info-grid">
-                    <div className="info-item"><div className="info-label">Heart Rate</div><div className="info-value">145 bpm <span style={{color:'#e63946'}}>(High)</span></div></div>
-                    <div className="info-item"><div className="info-label">Blood Pressure</div><div className="info-value">165/95 mmHg <span style={{color:'#e63946'}}>(High)</span></div></div>
-                    <div className="info-item"><div className="info-label">Temperature</div><div className="info-value">37.1°C <span style={{color:'#2a9d8f'}}>(Normal)</span></div></div>
-                    <div className="info-item"><div className="info-label">Oxygen Saturation</div><div className="info-value">92% <span style={{color:'#f4a261'}}>(Low)</span></div></div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Placeholder content for other tabs */}
-            {activeTab !== 'overview' && (
-              <div className="tab-content active" id={activeTab}>
-                <div style={{padding:'20px', color:'#777'}}>Content for the "{activeTab}" tab would appear here.</div>
-              </div>
-            )}
           </div>
         )}
       </div>

@@ -126,20 +126,35 @@ const __mockVaccinations = () => {
   ];
 };
 
-export const listVaccinations = async (filter = 'all') => {
+export const listVaccinations = async (params = {}) => {
   if (String(import.meta.env.VITE_USE_MOCKS).toLowerCase() === 'true') {
     return __mockVaccinations();
   }
   try {
-    const { data } = await api.get('/health/vaccinations', { params: { filter } });
+    const { data } = await api.get('/health/vaccinations', { params });
     return data;
   } catch (e) {
     return __mockVaccinations();
   }
 };
 
-export const markVaccinationComplete = async ({ crewId, vaccine }) => {
-  const { data } = await api.post('/health/vaccinations/complete', { crewId, vaccine });
+export const createVaccination = async (payload) => {
+  const { data } = await api.post('/health/vaccinations', payload);
+  return data;
+};
+
+export const updateVaccination = async (id, payload) => {
+  const { data } = await api.put(`/health/vaccinations/${id}`, payload);
+  return data;
+};
+
+export const deleteVaccination = async (id) => {
+  const { data } = await api.delete(`/health/vaccinations/${id}`);
+  return data;
+};
+
+export const markVaccinationComplete = async (id) => {
+  const { data } = await api.post(`/health/vaccinations/${id}/complete`);
   return data;
 };
 
@@ -155,6 +170,101 @@ export const listInventory = async () => {
 
 export const requestRestock = async ({ item, qty }) => {
   const { data } = await api.post('/inventory/restock', { item, qty });
+  return data;
+};
+
+export const listHealthEmergencies = async (params = {}) => {
+  const { data } = await api.get('/health/emergencies', { params });
+  return data;
+};
+
+export const getHealthEmergency = async (id) => {
+  const { data } = await api.get(`/health/emergencies/${id}`);
+  return data;
+};
+
+export const createHealthEmergency = async (payload) => {
+  const { data } = await api.post('/health/emergencies', payload);
+  return data;
+};
+
+export const updateHealthEmergency = async (id, payload) => {
+  const { data } = await api.put(`/health/emergencies/${id}`, payload);
+  return data;
+};
+
+export const deleteHealthEmergency = async (id) => {
+  const { data } = await api.delete(`/health/emergencies/${id}`);
+  return data;
+};
+
+export const acknowledgeHealthEmergency = async (id) => {
+  const { data } = await api.post(`/health/emergencies/${id}/acknowledge`);
+  return data;
+};
+
+export const resolveHealthEmergency = async (id, payload = {}) => {
+  const { data } = await api.post(`/health/emergencies/${id}/resolve`, payload);
+  return data;
+};
+
+export const listInventoryAlerts = async (params = {}) => {
+  const { data } = await api.get('/health/inventory-alerts', { params });
+  return data;
+};
+
+export const listHealthEducation = async (params = {}) => {
+  const { data } = await api.get('/health/education', { params });
+  return data;
+};
+
+export const getHealthEducation = async (id) => {
+  const { data } = await api.get(`/health/education/${id}`);
+  return data;
+};
+
+export const createHealthEducation = async (payload) => {
+  const { data } = await api.post('/health/education', payload);
+  return data;
+};
+
+export const updateHealthEducation = async (id, payload) => {
+  const { data } = await api.put(`/health/education/${id}`, payload);
+  return data;
+};
+
+export const deleteHealthEducation = async (id) => {
+  const { data } = await api.delete(`/health/education/${id}`);
+  return data;
+};
+
+export const recordHealthEducationEngagement = async (id, payload) => {
+  const { data } = await api.post(`/health/education/${id}/engagement`, payload);
+  return data;
+};
+
+export const createInventoryAlert = async (payload) => {
+  const { data } = await api.post('/health/inventory-alerts', payload);
+  return data;
+};
+
+export const updateInventoryAlert = async (id, payload) => {
+  const { data } = await api.put(`/health/inventory-alerts/${id}`, payload);
+  return data;
+};
+
+export const deleteInventoryAlert = async (id) => {
+  const { data } = await api.delete(`/health/inventory-alerts/${id}`);
+  return data;
+};
+
+export const acknowledgeInventoryAlert = async (id) => {
+  const { data } = await api.post(`/health/inventory-alerts/${id}/acknowledge`);
+  return data;
+};
+
+export const resolveInventoryAlert = async (id) => {
+  const { data } = await api.post(`/health/inventory-alerts/${id}/resolve`);
   return data;
 };
 

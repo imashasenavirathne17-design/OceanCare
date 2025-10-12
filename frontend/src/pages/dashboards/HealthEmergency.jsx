@@ -1,372 +1,858 @@
-import React, { useMemo, useState } from 'react';
-import './healthEmergency.css';
-import HealthSidebar from './HealthSidebar';
-import { getUser, clearSession } from '../../lib/token';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import HealthSidebar from './HealthSidebar';
+import './healthOfficerDashboard.css';
+import './healthEmergency.css';
+import { clearSession, getUser } from '../../lib/token';
+import {
+  listHealthEmergencies,
+  createHealthEmergency,
+  updateHealthEmergency,
+  deleteHealthEmergency,
+  acknowledgeHealthEmergency,
+  resolveHealthEmergency,
+  listCrewMembers,
+} from '../../lib/healthApi';
+
+const STATUS_OPTIONS = [
+  { value: 'all', label: 'All Statuses' },
+  { value: 'reported', label: 'Reported' },
+  { value: 'acknowledged', label: 'Acknowledged' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'resolved', label: 'Resolved' },
+  { value: 'closed', label: 'Closed' },
+];
+
+const SEVERITY_OPTIONS = [
+  { value: 'all', label: 'All Severities' },
+  { value: 'low', label: 'Low' },
+  { value: 'moderate', label: 'Moderate' },
+  { value: 'high', label: 'High' },
+  { value: 'critical', label: 'Critical' },
+];
+
+const PRIORITY_OPTIONS = [
+  { value: 'all', label: 'All Priorities' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+];
+
+const EMERGENCY_TYPE_OPTIONS = ['Medical', 'Trauma', 'Respiratory', 'Cardiac', 'Allergic Reaction', 'Neurological', 'Other'];
+
+const RECIPIENT_OPTIONS = [
+  { key: 'captain', label: 'Captain' },
+  { key: 'first-officer', label: 'First Officer' },
+  { key: 'emergency-team', label: 'Emergency Team' },
+  { key: 'all-hands', label: 'All Hands' },
+];
+
+const defaultRecipients = () => ({
+  captain: true,
+  'first-officer': true,
+  'emergency-team': true,
+  'all-hands': false,
+});
+
+const defaultForm = () => ({
+  patientName: '',
+  crewId: '',
+  emergencyType: 'Medical',
+  severity: 'high',
+  priority: 'high',
+  status: 'reported',
+  location: '',
+  description: '',
+  immediateActions: '',
+  reportedAt: new Date().toISOString(),
+  expectedArrival: '',
+  notifyCaptain: true,
+  notifyEmergencyTeam: true,
+  recipients: defaultRecipients(),
+  notes: '',
+});
+
+const toLocalInputValue = (value) => {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const iso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString();
+  return iso.slice(0, 16);
+};
+
+const formatDateTime = (value) => {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+};
+
+const formatLabel = (value) => {
+  if (!value) return '—';
+  return value.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+const severityBadgeClass = (value) => {
+  switch (value) {
+    case 'critical':
+      return 'status-danger';
+    case 'high':
+      return 'status-warning';
+    case 'moderate':
+      return 'status-active';
+    case 'low':
+    default:
+      return 'status-active';
+  }
+};
+
+const priorityBadgeClass = (value) => {
+  switch (value) {
+    case 'high':
+      return 'status-danger';
+    case 'medium':
+      return 'status-warning';
+    default:
+      return 'status-active';
+  }
+};
+
+const statusBadgeClass = (value) => {
+  switch (value) {
+    case 'reported':
+      return 'status-warning';
+    case 'acknowledged':
+      return 'status-warning';
+    case 'in_progress':
+      return 'status-warning';
+    case 'resolved':
+    case 'closed':
+      return 'status-active';
+    default:
+      return 'status-active';
+  }
+};
+
+const severityIconClass = (value) => {
+  switch (value) {
+    case 'critical':
+      return 'fas fa-heartbeat';
+    case 'high':
+      return 'fas fa-exclamation-triangle';
+    case 'moderate':
+      return 'fas fa-notes-medical';
+    case 'low':
+    default:
+      return 'fas fa-info-circle';
+  }
+};
+
+const statusAlertClass = (value) => {
+  switch (value) {
+    case 'reported':
+      return 'status-new';
+    case 'acknowledged':
+      return 'status-acknowledged';
+    case 'resolved':
+    case 'closed':
+      return 'status-resolved';
+    default:
+      return 'status-new';
+  }
+};
 
 export default function HealthEmergency() {
-  const user = getUser();
   const navigate = useNavigate();
+  const user = getUser();
 
-  // Tabs
-  const [activeTab, setActiveTab] = useState('active');
+  const [emergencies, setEmergencies] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [recent, setRecent] = useState([]);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [processing, setProcessing] = useState('');
+  const [rowProcessing, setRowProcessing] = useState('');
+  const [crewMembers, setCrewMembers] = useState([]);
+  const [crewLoading, setCrewLoading] = useState(false);
+  const [crewError, setCrewError] = useState('');
 
-  // Modals
-  const [modal, setModal] = useState({ medevac: false, emergencyAlert: false, contactSpecialist: false });
-  const openModal = (k) => setModal((m) => ({ ...m, [k]: true }));
-  const closeModal = (k) => setModal((m) => ({ ...m, [k]: false }));
-
-  // Form state for Emergency Alert
-  const [alertForm, setAlertForm] = useState({
-    emergencyType: '', patientName: '', crewId: '', emergencyLocation: '', emergencyDescription: '', immediateActions: '',
-    recipients: { captain: true, 'first-officer': true, 'emergency-team': true, 'all-hands': false },
+  const [filters, setFilters] = useState({
+    status: 'all',
+    severity: 'all',
+    priority: 'all',
+    q: '',
   });
 
-  const onFormChange = (e) => {
-    const { id, value } = e.target;
-    setAlertForm((f) => ({ ...f, [id]: value }));
-  };
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState(defaultForm());
+  const [editingEmergency, setEditingEmergency] = useState(null);
+  const [selectedCrewMemberId, setSelectedCrewMemberId] = useState('');
 
-  const onRecipientToggle = (key) => {
-    setAlertForm((f) => ({ ...f, recipients: { ...f.recipients, [key]: !f.recipients[key] } }));
-  };
+  const actionsDisabled = Boolean(processing);
 
-  const sendEmergencyAlert = (e) => {
-    e.preventDefault();
-    if (!alertForm.emergencyType || !alertForm.patientName || !alertForm.emergencyLocation || !alertForm.emergencyDescription) {
-      return alert('Please fill in all required fields.');
+  const loadCrewMembers = async () => {
+    try {
+      setCrewLoading(true);
+      setCrewError('');
+      const data = await listCrewMembers();
+      setCrewMembers(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to load crew members', err);
+      setCrewError('Failed to load crew members');
+    } finally {
+      setCrewLoading(false);
     }
-    alert(`Emergency alert for ${alertForm.patientName} (${alertForm.emergencyType}) has been sent!`);
-    setAlertForm({
-      emergencyType: '', patientName: '', crewId: '', emergencyLocation: '', emergencyDescription: '', immediateActions: '',
-      recipients: { captain: true, 'first-officer': true, 'emergency-team': true, 'all-hands': false },
+  };
+
+  const loadEmergencies = async (opts = {}) => {
+    try {
+      setLoading(true);
+      setError('');
+      const params = {
+        page: opts.page || page,
+        limit: 25,
+      };
+      if (filters.status && filters.status !== 'all') params.status = filters.status;
+      if (filters.severity && filters.severity !== 'all') params.severity = filters.severity;
+      if (filters.priority && filters.priority !== 'all') params.priority = filters.priority;
+      if (filters.q) params.q = filters.q;
+
+      const data = await listHealthEmergencies(params);
+      setEmergencies(Array.isArray(data?.items) ? data.items : []);
+      setSummary(data?.summary || null);
+      setRecent(Array.isArray(data?.recent) ? data.recent : []);
+      setTotal(data?.total || 0);
+      setPages(data?.pages || 0);
+      setPage(data?.page || 1);
+    } catch (err) {
+      console.error('Failed to load emergencies', err);
+      setError('Failed to load emergencies');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadEmergencies({ page: 1 });
+    loadCrewMembers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!editingEmergency || !crewMembers.length) return;
+    const match = crewMembers.find((member) => member.crewId === editingEmergency.crewId);
+    if (match) {
+      setSelectedCrewMemberId(match._id);
+    }
+  }, [editingEmergency, crewMembers]);
+
+  const summaryCards = useMemo(() => {
+    if (!summary) return [];
+    const statusBreakdown = summary?.statusBreakdown || {};
+    return [
+      {
+        key: 'active',
+        icon: 'fas fa-ambulance',
+        tone: 'danger',
+        title: 'Active Emergencies',
+        value: summary.activeCount || 0,
+        note: `${statusBreakdown.reported || 0} reported • ${statusBreakdown.in_progress || 0} in progress`,
+      },
+      {
+        key: 'severity',
+        icon: 'fas fa-exclamation-triangle',
+        tone: 'warning',
+        title: 'Critical / High',
+        value: (summary.severityBreakdown?.critical || 0) + (summary.severityBreakdown?.high || 0),
+        note: `${summary.severityBreakdown?.moderate || 0} moderate, ${summary.severityBreakdown?.low || 0} low`,
+      },
+      {
+        key: 'resolved',
+        icon: 'fas fa-check-circle',
+        tone: 'inventory',
+        title: 'Resolved / Closed',
+        value: summary.resolvedCount || 0,
+        note: `${summary.total || 0} total logged`,
+      },
+    ];
+  }, [summary]);
+
+  const openCreateModal = () => {
+    setForm(defaultForm());
+    setEditingEmergency(null);
+    setSelectedCrewMemberId('');
+    setModalOpen(true);
+  };
+
+  const openEditModal = (record) => {
+    if (!record) return;
+    setEditingEmergency(record);
+    const recipientsRecord = defaultRecipients();
+    if (Array.isArray(record.recipients)) {
+      record.recipients.forEach((r) => {
+        if (r?.role) recipientsRecord[r.role] = r.notified !== false;
+      });
+    }
+    setForm({
+      patientName: record.patientName || '',
+      crewId: record.crewId || '',
+      emergencyType: record.emergencyType || 'Medical',
+      severity: record.severity || 'high',
+      priority: record.priority || 'high',
+      status: record.status || 'reported',
+      location: record.location || '',
+      description: record.description || '',
+      immediateActions: record.immediateActions || '',
+      reportedAt: record.reportedAt || record.createdAt || new Date().toISOString(),
+      expectedArrival: record.expectedArrival || '',
+      notifyCaptain: Boolean(record.notifyCaptain),
+      notifyEmergencyTeam: record.notifyEmergencyTeam !== false,
+      recipients: recipientsRecord,
+      notes: record.notes || '',
     });
-    closeModal('emergencyAlert');
+    setSelectedCrewMemberId('');
+    setModalOpen(true);
   };
 
-  const triggerEmergency = () => {
-    if (confirm('Are you sure you want to trigger a full emergency alert? This will notify the entire emergency response team.')) {
-      alert('Emergency alert triggered! Emergency response team has been notified.');
+  const closeModal = () => {
+    setModalOpen(false);
+    setForm(defaultForm());
+    setEditingEmergency(null);
+    setProcessing('');
+    setSelectedCrewMemberId('');
+  };
+
+  const handleFormChange = (key, value) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleRecipientToggle = (key) => {
+    setForm((prev) => ({
+      ...prev,
+      recipients: { ...prev.recipients, [key]: !prev.recipients[key] },
+    }));
+  };
+
+  const handleCrewSelection = (memberId) => {
+    setSelectedCrewMemberId(memberId);
+    const member = crewMembers.find((item) => item._id === memberId);
+    if (member) {
+      setForm((prev) => ({
+        ...prev,
+        patientName: member.fullName || prev.patientName,
+        crewId: member.crewId || prev.crewId,
+      }));
     }
   };
 
-  const protocols = useMemo(() => ([
-    { id: 'cardiac', icon: 'fas fa-heart', title: 'Cardiac Emergency', desc: 'Protocol for heart attacks, cardiac arrest' },
-    { id: 'respiratory', icon: 'fas fa-lungs', title: 'Respiratory Distress', desc: 'Protocol for breathing difficulties, asthma' },
-    { id: 'trauma', icon: 'fas fa-user-injured', title: 'Severe Injury', desc: 'Protocol for fractures, severe bleeding' },
-    { id: 'allergic', icon: 'fas fa-allergies', title: 'Anaphylaxis', desc: 'Protocol for severe allergic reactions' },
-  ]), []);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const mode = editingEmergency ? 'update' : 'create';
+      setProcessing(mode);
+      const recipients = Object.entries(form.recipients)
+        .filter(([, checked]) => checked)
+        .map(([role]) => ({ role, notified: true }));
+      const payload = {
+        patientName: form.patientName,
+        crewId: form.crewId || undefined,
+        emergencyType: form.emergencyType,
+        severity: form.severity,
+        priority: form.priority,
+        status: form.status,
+        location: form.location,
+        description: form.description,
+        immediateActions: form.immediateActions,
+        reportedAt: form.reportedAt || undefined,
+        expectedArrival: form.expectedArrival || undefined,
+        recipients,
+        notifyCaptain: form.notifyCaptain,
+        notifyEmergencyTeam: form.notifyEmergencyTeam,
+        notes: form.notes,
+      };
 
-  const activeEmergencies = [
-    { id: 1, type: 'Cardiac Emergency', icon: 'fas fa-heart', className: 'danger', patient: 'James Wilson (CD12347)', details: ['Chest pain, shortness of breath', 'Location: Engine Room'], time: 'Reported: 5 minutes ago', critical: true },
-    { id: 2, type: 'Severe Injury', icon: 'fas fa-user-injured', className: 'emergency', patient: 'Michael Brown (CD12349)', details: ['Deep laceration to arm, heavy bleeding', 'Location: Deck Area'], time: 'Reported: 15 minutes ago' },
-    { id: 3, type: 'Respiratory Distress', icon: 'fas fa-lungs', className: 'warning', patient: 'Robert Kim (CD12350)', details: ['Severe asthma attack, low oxygen saturation', 'Location: Crew Quarters'], time: 'Reported: 25 minutes ago' },
-  ];
+      if (editingEmergency?._id) {
+        await updateHealthEmergency(editingEmergency._id, payload);
+      } else {
+        await createHealthEmergency(payload);
+      }
+
+      closeModal();
+      await loadEmergencies({ page: editingEmergency ? page : 1 });
+    } catch (err) {
+      console.error('Failed to save emergency', err);
+      setError('Failed to save emergency');
+    } finally {
+      setProcessing('');
+    }
+  };
+
+  const runRowAction = async (id, action, fn) => {
+    try {
+      setRowProcessing(`${id}-${action}`);
+      setError('');
+      await fn();
+      await loadEmergencies({ page });
+    } catch (err) {
+      console.error(`Failed to ${action} emergency`, err);
+      setError(`Failed to ${action} emergency`);
+    } finally {
+      setRowProcessing('');
+    }
+  };
+
+  const handleAcknowledge = (id) => runRowAction(id, 'acknowledge', () => acknowledgeHealthEmergency(id));
+
+  const handleResolve = (id) => {
+    const summaryInput = window.prompt('Resolution summary (optional):', '');
+    return runRowAction(id, 'resolve', () => resolveHealthEmergency(id, { resolutionSummary: summaryInput || '' }));
+  };
+
+  const handleDelete = (id) => {
+    if (!window.confirm('Delete this emergency record?')) return;
+    runRowAction(id, 'delete', () => deleteHealthEmergency(id));
+  };
+
+  const handleFilterChange = (key, value) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const applyFilters = async () => {
+    setPage(1);
+    await loadEmergencies({ page: 1 });
+  };
+
+  const resetFilters = async () => {
+    setFilters({ status: 'all', severity: 'all', priority: 'all', q: '' });
+    setPage(1);
+    await loadEmergencies({ page: 1 });
+  };
+
+  const handlePageChange = async (nextPage) => {
+    if (nextPage < 1 || (pages && nextPage > pages)) return;
+    setPage(nextPage);
+    await loadEmergencies({ page: nextPage });
+  };
+
+  const isRowBusy = (id, action) => rowProcessing === `${id}-${action}`;
+
+  const onLogout = () => {
+    clearSession();
+    navigate('/login');
+  };
 
   return (
     <div className="health-dashboard">
       <div className="dashboard-container">
-        <HealthSidebar onLogout={() => { clearSession(); navigate('/login'); }} />
+        <HealthSidebar onLogout={onLogout} />
 
         <main className="main-content">
-          {/* Header */}
           <div className="header">
-            <h2>Emergency Response</h2>
+            <h2>Health Emergency Management</h2>
             <div className="user-info">
               <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || 'Health Officer')}&background=2a9d8f&color=fff`} alt="User" />
               <div>
-                <div>{user?.fullName || 'Dr. Sarah Johnson'}</div>
-                <small>Health Officer | MV Ocean Explorer</small>
+                <div>{user?.fullName || 'Health Officer'}</div>
+                <small>Health Officer {user?.vessel ? `| ${user.vessel}` : '| MV Ocean Explorer'}</small>
               </div>
-              <div className="status-badge status-active">Active</div>
+              <div className="status-badge status-active">Online</div>
             </div>
           </div>
 
-          {/* Emergency Alert Banner */}
-          <div className="emergency-banner">
-            <i className="fas fa-exclamation-triangle"></i>
-            <div className="emergency-content">
-              <div className="emergency-title">ACTIVE EMERGENCY: Crew Member Requires Immediate Attention</div>
-              <div>James Wilson (CD12347) is experiencing chest pain and shortness of breath</div>
-            </div>
-            <button className="btn btn-outline" onClick={() => alert('Viewing emergency details')}>View Details</button>
-          </div>
-
-          {/* Quick Actions */}
-          <div className="page-content">
-            <div className="page-header">
-              <div className="page-title">Emergency Quick Actions</div>
-            </div>
-
-            <div className="quick-actions">
-              <button className="btn btn-emergency" onClick={triggerEmergency}><i className="fas fa-broadcast-tower"></i> Alert Emergency Team</button>
-              <button className="btn btn-warning" onClick={() => openModal('medevac')}><i className="fas fa-ambulance"></i> Request Medevac</button>
-              <button className="btn btn-outline" onClick={() => openModal('emergencyAlert')}><i className="fas fa-bell"></i> Send Emergency Alert</button>
-              <button className="btn btn-outline" onClick={() => openModal('contactSpecialist')}><i className="fas fa-user-md"></i> Contact Specialist</button>
-            </div>
-
-            <div className="protocols-container">
-              {protocols.map((p) => (
-                <div key={p.id} className="protocol-item" onClick={() => alert(`Viewing protocol: ${p.id}`)}>
-                  <div className="protocol-icon"><i className={p.icon}></i></div>
-                  <div className="protocol-title">{p.title}</div>
-                  <div className="protocol-desc">{p.desc}</div>
+          {summaryCards.length > 0 && (
+            <div className="cards-container" style={{ marginBottom: 20 }}>
+              {summaryCards.map((card) => (
+                <div className="card" key={card.key}>
+                  <div className="card-header">
+                    <div className="card-title">{card.title}</div>
+                    <div className={`card-icon ${card.tone}`}><i className={card.icon}></i></div>
+                  </div>
+                  <div className="card-content">
+                    <div className="card-item" style={{ fontSize: 28, fontWeight: 700 }}>{card.value}</div>
+                    <div className="card-details">{card.note}</div>
+                  </div>
                 </div>
               ))}
             </div>
-          </div>
+          )}
 
-          {/* Management */}
           <div className="page-content">
             <div className="page-header">
-              <div className="page-title">Emergency Management</div>
+              <div className="page-title">Emergency Log</div>
+              <div className="page-actions">
+                <button className="btn btn-outline" onClick={resetFilters}><i className="fas fa-undo"></i> Reset</button>
+                <button className="btn btn-alert" onClick={openCreateModal}><i className="fas fa-plus"></i> New Emergency</button>
+              </div>
             </div>
 
-            <div className="tabs">
-              <div className={`tab ${activeTab === 'active' ? 'active' : ''}`} onClick={() => setActiveTab('active')} data-tab="active">Active Emergencies</div>
-              <div className={`tab ${activeTab === 'protocols' ? 'active' : ''}`} onClick={() => setActiveTab('protocols')} data-tab="protocols">Emergency Protocols</div>
-              <div className={`tab ${activeTab === 'contacts' ? 'active' : ''}`} onClick={() => setActiveTab('contacts')} data-tab="contacts">Emergency Contacts</div>
-              <div className={`tab ${activeTab === 'resources' ? 'active' : ''}`} onClick={() => setActiveTab('resources')} data-tab="resources">Emergency Resources</div>
+            <div className="filter-toolbar">
+              <div className="filter-group">
+                <label>Status</label>
+                <select value={filters.status} onChange={(e) => handleFilterChange('status', e.target.value)}>
+                  {STATUS_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="filter-group">
+                <label>Severity</label>
+                <select value={filters.severity} onChange={(e) => handleFilterChange('severity', e.target.value)}>
+                  {SEVERITY_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="filter-group">
+                <label>Priority</label>
+                <select value={filters.priority} onChange={(e) => handleFilterChange('priority', e.target.value)}>
+                  {PRIORITY_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="filter-group" style={{ flex: 1 }}>
+                <label>Search</label>
+                <input
+                  type="text"
+                  placeholder="Search by patient, crew ID, location, type..."
+                  value={filters.q}
+                  onChange={(e) => handleFilterChange('q', e.target.value)}
+                />
+              </div>
+              <div className="filter-actions">
+                <button className="btn btn-outline" onClick={applyFilters} disabled={loading}><i className="fas fa-filter"></i> Apply</button>
+              </div>
             </div>
 
-            {/* Active Emergencies Tab */}
-            {activeTab === 'active' && (
-              <div className="tab-content active" id="active-tab">
-                <div className="cards-container">
-                  {activeEmergencies.map((em) => (
-                    <div key={em.id} className={`card ${em.className === 'danger' ? 'alert' : ''}`}>
-                      <div className="card-header">
-                        <div className="card-title">{em.type}</div>
-                        <div className={`card-icon ${em.className}`}>
-                          <i className={em.icon}></i>
+            {error && (
+              <div className="alert-panel" style={{ background: '#fdecea', borderColor: '#f5c6cb', color: '#b71c1c', marginBottom: 16 }}>
+                {error}
+              </div>
+            )}
+
+            <div className="alert-list">
+              {loading && (
+                <div className="alert-empty">Loading emergencies...</div>
+              )}
+              {!loading && !emergencies.length && (
+                <div className="alert-empty">No health emergencies found.</div>
+              )}
+              {!loading && emergencies.map((emergency) => {
+                const canAcknowledge = emergency.status === 'reported';
+                const canResolve = emergency.status !== 'resolved' && emergency.status !== 'closed';
+                const severityClass = emergency.severity || 'moderate';
+                return (
+                  <div key={emergency._id} className={`alert-item ${severityClass}`}>
+                    <div className={`alert-icon ${severityClass}`}>
+                      <i className={severityIconClass(emergency.severity)}></i>
+                    </div>
+                    <div className="alert-content">
+                      <div className="alert-title">{emergency.patientName || 'Unknown Patient'}</div>
+                      <div className="alert-meta">
+                        <div className="alert-meta-item"><i className="fas fa-user"></i>{formatLabel(emergency.emergencyType)}</div>
+                        {emergency.crewId && (
+                          <div className="alert-meta-item"><i className="fas fa-id-badge"></i>{emergency.crewId}</div>
+                        )}
+                        <div className="alert-meta-item"><i className="fas fa-map-marker-alt"></i>{emergency.location || '—'}</div>
+                        <div className="alert-meta-item"><i className="fas fa-clock"></i>{formatDateTime(emergency.reportedAt || emergency.createdAt)}</div>
+                      </div>
+                      {emergency.description && (
+                        <div className="alert-description">{emergency.description}</div>
+                      )}
+                      {emergency.expectedArrival && (
+                        <div className="alert-description">ETA: {formatDateTime(emergency.expectedArrival)}</div>
+                      )}
+                      <div className="alert-footer">
+                        <div className="alert-footer-left">
+                          <span className={`alert-status ${statusAlertClass(emergency.status)}`}>
+                            {formatLabel(emergency.status)}
+                          </span>
+                          <span className={`alert-badge ${severityClass}`}>
+                            {formatLabel(emergency.severity)}
+                          </span>
+                          <span className={`alert-badge ${emergency.priority || 'medium'}`}>
+                            Priority: {formatLabel(emergency.priority)}
+                          </span>
+                        </div>
+                        <div className="alert-actions">
+                          <button
+                            className="btn btn-outline btn-sm"
+                            onClick={() => openEditModal(emergency)}
+                            disabled={actionsDisabled || Boolean(rowProcessing)}
+                          >
+                            <i className="fas fa-edit"></i>
+                            Edit
+                          </button>
+                          <button
+                            className="btn btn-outline btn-sm"
+                            disabled={actionsDisabled || !canAcknowledge || isRowBusy(emergency._id, 'acknowledge')}
+                            onClick={() => handleAcknowledge(emergency._id)}
+                          >
+                            <i className="fas fa-check"></i>
+                            {isRowBusy(emergency._id, 'acknowledge') ? 'Acknowledging...' : 'Acknowledge'}
+                          </button>
+                          <button
+                            className="btn btn-outline btn-sm"
+                            disabled={actionsDisabled || !canResolve || isRowBusy(emergency._id, 'resolve')}
+                            onClick={() => handleResolve(emergency._id)}
+                          >
+                            <i className="fas fa-flag"></i>
+                            {isRowBusy(emergency._id, 'resolve') ? 'Resolving...' : 'Resolve'}
+                          </button>
+                          <button
+                            className="btn btn-outline btn-sm"
+                            disabled={actionsDisabled || isRowBusy(emergency._id, 'delete')}
+                            onClick={() => handleDelete(emergency._id)}
+                          >
+                            <i className="fas fa-trash"></i>
+                            {isRowBusy(emergency._id, 'delete') ? 'Deleting...' : 'Delete'}
+                          </button>
                         </div>
                       </div>
-                      <div className="card-content">
-                        <div className="card-patient">{em.patient}</div>
-                        {em.details.map((d, i) => (<div key={i} className="card-details">{d}</div>))}
-                        <div className={`card-time ${em.critical ? 'time-critical' : ''}`}>{em.time}</div>
-                      </div>
-                      <div className="card-actions">
-                        <button className="btn btn-outline btn-sm" onClick={() => alert(`Viewing details for emergency ID: ${em.id}`)}>View Details</button>
-                        <button className="btn btn-outline btn-sm" onClick={() => alert(`Updating status for emergency ID: ${em.id}`)}>Update Status</button>
-                      </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Protocols Tab */}
-            {activeTab === 'protocols' && (
-              <div className="tab-content active" id="protocols-tab">
-                <div className="page-header"><div className="page-title">Emergency Response Protocols</div></div>
-                <div className="cards-container">
-                  {[
-                    { id: 'cardiac', title: 'Cardiac Emergency Protocol', code: 'EM-001', updated: '2023-08-15', steps: 15 },
-                    { id: 'respiratory', title: 'Respiratory Distress Protocol', code: 'EM-002', updated: '2023-07-22', steps: 12 },
-                    { id: 'trauma', title: 'Severe Injury Protocol', code: 'EM-003', updated: '2023-09-05', steps: 18 },
-                  ].map((pr) => (
-                    <div key={pr.id} className="card protocol">
-                      <div className="card-header">
-                        <div className="card-title">{pr.title}</div>
-                        <div className="card-icon warning"><i className="fas fa-file-medical"></i></div>
-                      </div>
-                      <div className="card-content">
-                        <div className="card-details">Protocol #{pr.code}</div>
-                        <div className="card-details">Last updated: {pr.updated}</div>
-                        <div className="card-details">Steps: {pr.steps}</div>
-                      </div>
-                      <div className="card-actions">
-                        <button className="btn btn-outline btn-sm" onClick={() => alert(`Viewing protocol: ${pr.id}`)}>View Protocol</button>
-                        <button className="btn btn-outline btn-sm" onClick={() => window.print()}>Print</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Contacts Tab */}
-            {activeTab === 'contacts' && (
-              <div className="tab-content active" id="contacts-tab">
-                <div className="page-header"><div className="page-title">Emergency Contacts</div></div>
-                <div className="contacts-container">
-                  {[
-                    { initials: 'C', name: 'Captain Rodriguez', role: 'Vessel Captain', info: ['Bridge: Ext. 101', 'Mobile: +1-555-0101'] },
-                    { initials: 'FO', name: 'First Officer Chen', role: 'Second in Command', info: ['Bridge: Ext. 102', 'Mobile: +1-555-0102'] },
-                    { initials: 'CM', name: 'Chief Engineer Mbeki', role: 'Engine Department', info: ['Engine Room: Ext. 201', 'Mobile: +1-555-0201'] },
-                    { initials: 'IM', name: 'Inventory Manager', role: 'Medical Supplies', info: ['Office: Ext. 305', 'Mobile: +1-555-0305'] },
-                  ].map((c, idx) => (
-                    <div key={idx} className="contact-card">
-                      <div className="contact-avatar">{c.initials}</div>
-                      <div className="contact-name">{c.name}</div>
-                      <div className="contact-role">{c.role}</div>
-                      {c.info.map((i, n) => (<div key={n} className="contact-info">{i}</div>))}
-                      <button className="btn btn-outline btn-sm" style={{ marginTop: 10 }}>Contact</button>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="page-content" style={{ marginTop: 30 }}>
-                  <div className="page-header"><div className="page-title">External Emergency Contacts</div></div>
-                  <div className="table-responsive">
-                    <table>
-                      <thead>
-                        <tr><th>Service</th><th>Contact Number</th><th>Availability</th><th>Actions</th></tr>
-                      </thead>
-                      <tbody>
-                        {[
-                          ['Medical Emergency Hotline', '+1-800-MED-HELP', '24/7'],
-                          ['Coast Guard Emergency', '+1-800-COASTGD', '24/7'],
-                          ['Medical Evacuation', '+1-800-MED-EVAC', '24/7'],
-                          ['Toxicology Control Center', '+1-800-POISON1', '24/7'],
-                        ].map((row, i) => (
-                          <tr key={i}>
-                            <td>{row[0]}</td>
-                            <td>{row[1]}</td>
-                            <td>{row[2]}</td>
-                            <td className="action-buttons">
-                              <button className="btn btn-outline btn-sm">Call</button>
-                              <button className="btn btn-outline btn-sm">Save</button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
                   </div>
-                </div>
-              </div>
-            )}
+                );
+              })}
+            </div>
 
-            {/* Resources Tab */}
-            {activeTab === 'resources' && (
-              <div className="tab-content active" id="resources-tab">
-                <div className="page-header"><div className="page-title">Emergency Resources</div></div>
-                <div className="cards-container">
-                  {[
-                    { icon: 'fas fa-clipboard-list', title: 'Emergency Equipment Checklist', desc: 'Comprehensive checklist for emergency medical equipment', sub: 'Last verified: 2023-10-15' },
-                    { icon: 'fas fa-pills', title: 'Emergency Drug Dosages', desc: 'Quick reference for emergency medication dosages', sub: 'Updated: 2023-09-20' },
-                    { icon: 'fas fa-helicopter', title: 'Medevac Procedures', desc: 'Step-by-step medical evacuation procedures', sub: 'Last revised: 2023-08-10' },
-                  ].map((r, i) => (
-                    <div key={i} className="card resource">
-                      <div className="card-header">
-                        <div className="card-title">{r.title}</div>
-                        <div className="card-icon info"><i className={r.icon}></i></div>
-                      </div>
-                      <div className="card-content">
-                        <div className="card-details">{r.desc}</div>
-                        <div className="card-details">{r.sub}</div>
-                      </div>
-                      <div className="card-actions">
-                        <button className="btn btn-outline btn-sm">View</button>
-                        <button className="btn btn-outline btn-sm" onClick={() => window.print()}>Print</button>
-                      </div>
-                    </div>
-                  ))}
+            {pages > 1 && (
+              <div className="pagination-bar">
+                <div className="pagination-info">
+                  Page {page} of {pages} · {total} emergencies
+                </div>
+                <div className="pagination-controls">
+                  <button className="btn" onClick={() => handlePageChange(page - 1)} disabled={page <= 1}>Previous</button>
+                  <span className="page-badge">{page}</span>
+                  <button className="btn" onClick={() => handlePageChange(page + 1)} disabled={pages && page >= pages}>Next</button>
                 </div>
               </div>
             )}
           </div>
+
+          {recent.length > 0 && (
+            <div className="page-content">
+              <div className="page-header">
+                <div className="page-title">Recent Emergency Activity</div>
+              </div>
+              <div className="history-container">
+                {recent.map((item) => (
+                  <div className="history-item" key={item._id}>
+                    <div className="history-info">
+                      <div className="history-item-name">{item.patientName || 'Unknown Patient'}</div>
+                      <div className="history-item-details">
+                        {formatLabel(item.emergencyType)} • {formatLabel(item.status)}
+                      </div>
+                    </div>
+                    <div className="history-status status-active">{formatDateTime(item.reportedAt || item.createdAt)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </main>
       </div>
 
-      {/* Modals */}
-      {modal.emergencyAlert && (
-        <div className="modal" style={{ display: 'flex' }} onClick={(e) => e.target.classList.contains('modal') && closeModal('emergencyAlert')}>
-          <div className="modal-content">
+      {modalOpen && (
+        <div className="modal" style={{ display: 'flex' }} onClick={(e) => e.target.classList.contains('modal') && closeModal()}>
+          <div className="modal-content" style={{ maxWidth: 720 }}>
             <div className="modal-header">
-              <h3 className="modal-title">Send Emergency Alert</h3>
-              <button className="close-modal" onClick={() => closeModal('emergencyAlert')}>&times;</button>
+              <h3 className="modal-title">{editingEmergency ? 'Update Health Emergency' : 'Log New Health Emergency'}</h3>
+              <button className="close-modal" onClick={closeModal}>&times;</button>
             </div>
 
-            <form onSubmit={sendEmergencyAlert}>
+            <form onSubmit={handleSubmit}>
               <div className="form-group">
-                <label htmlFor="emergencyType">Emergency Type *</label>
-                <select id="emergencyType" className="form-control" value={alertForm.emergencyType} onChange={onFormChange} required>
-                  <option value="">Select emergency type</option>
-                  <option value="cardiac">Cardiac Emergency</option>
-                  <option value="respiratory">Respiratory Distress</option>
-                  <option value="trauma">Severe Injury/Trauma</option>
-                  <option value="allergic">Anaphylaxis/Allergic Reaction</option>
-                  <option value="neurological">Neurological Emergency</option>
-                  <option value="other">Other Medical Emergency</option>
+                <label>Existing Crew Member</label>
+                <select
+                  className="form-control"
+                  value={selectedCrewMemberId}
+                  onChange={(e) => handleCrewSelection(e.target.value)}
+                  disabled={crewLoading || !crewMembers.length}
+                >
+                  <option value="">Select crew member</option>
+                  {crewMembers.map((member) => (
+                    <option key={member._id} value={member._id}>
+                      {member.fullName || member.crewId || 'Unnamed Crew'}
+                      {member.crewId ? ` (${member.crewId})` : ''}
+                    </option>
+                  ))}
                 </select>
+                {crewLoading && <small>Loading crew directory...</small>}
+                {!crewLoading && crewError && <small style={{ color: '#b4232c' }}>{crewError}</small>}
               </div>
 
               <div className="form-grid">
                 <div className="form-group">
-                  <label htmlFor="patientName">Patient Name *</label>
-                  <input type="text" id="patientName" className="form-control" placeholder="Patient name" value={alertForm.patientName} onChange={onFormChange} required />
+                  <label>Emergency Type</label>
+                  <select
+                    className="form-control"
+                    value={form.emergencyType}
+                    onChange={(e) => handleFormChange('emergencyType', e.target.value)}
+                  >
+                    {EMERGENCY_TYPE_OPTIONS.map((type) => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="form-group">
-                  <label htmlFor="crewId">Crew ID</label>
-                  <input type="text" id="crewId" className="form-control" placeholder="Crew identification" value={alertForm.crewId} onChange={onFormChange} />
+                  <label>Severity</label>
+                  <select
+                    className="form-control"
+                    value={form.severity}
+                    onChange={(e) => handleFormChange('severity', e.target.value)}
+                  >
+                    {SEVERITY_OPTIONS.filter((opt) => opt.value !== 'all').map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Priority</label>
+                  <select
+                    className="form-control"
+                    value={form.priority}
+                    onChange={(e) => handleFormChange('priority', e.target.value)}
+                  >
+                    {PRIORITY_OPTIONS.filter((opt) => opt.value !== 'all').map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Status</label>
+                  <select
+                    className="form-control"
+                    value={form.status}
+                    onChange={(e) => handleFormChange('status', e.target.value)}
+                  >
+                    {STATUS_OPTIONS.filter((opt) => opt.value !== 'all').map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-grid">
+                <div className="form-group">
+                  <label htmlFor="location">Location *</label>
+                  <input
+                    id="location"
+                    className="form-control"
+                    value={form.location}
+                    onChange={(e) => handleFormChange('location', e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="reportedAt">Reported At</label>
+                  <input
+                    id="reportedAt"
+                    type="datetime-local"
+                    className="form-control"
+                    value={toLocalInputValue(form.reportedAt)}
+                    onChange={(e) => handleFormChange('reportedAt', e.target.value ? new Date(e.target.value).toISOString() : '')}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="expectedArrival">Expected Arrival</label>
+                  <input
+                    id="expectedArrival"
+                    type="datetime-local"
+                    className="form-control"
+                    value={toLocalInputValue(form.expectedArrival)}
+                    onChange={(e) => handleFormChange('expectedArrival', e.target.value ? new Date(e.target.value).toISOString() : '')}
+                  />
                 </div>
               </div>
 
               <div className="form-group">
-                <label htmlFor="emergencyLocation">Emergency Location *</label>
-                <input type="text" id="emergencyLocation" className="form-control" placeholder="Where is the emergency?" value={alertForm.emergencyLocation} onChange={onFormChange} required />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="emergencyDescription">Emergency Description *</label>
-                <textarea id="emergencyDescription" className="form-control" rows={4} placeholder="Describe the emergency situation, symptoms, and current condition..." value={alertForm.emergencyDescription} onChange={onFormChange} required />
+                <label htmlFor="description">Emergency Description</label>
+                <textarea
+                  id="description"
+                  className="form-control"
+                  rows={4}
+                  value={form.description}
+                  onChange={(e) => handleFormChange('description', e.target.value)}
+                ></textarea>
               </div>
 
               <div className="form-group">
                 <label htmlFor="immediateActions">Immediate Actions Taken</label>
-                <textarea id="immediateActions" className="form-control" rows={3} placeholder="What immediate actions have been taken?" value={alertForm.immediateActions} onChange={onFormChange} />
+                <textarea
+                  id="immediateActions"
+                  className="form-control"
+                  rows={3}
+                  value={form.immediateActions}
+                  onChange={(e) => handleFormChange('immediateActions', e.target.value)}
+                ></textarea>
+              </div>
+
+              <div className="form-grid">
+                <div className="form-group">
+                  <label>Notify Captain</label>
+                  <div>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={form.notifyCaptain}
+                        onChange={(e) => handleFormChange('notifyCaptain', e.target.checked)}
+                      />{' '}
+                      Enabled
+                    </label>
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>Notify Emergency Team</label>
+                  <div>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={form.notifyEmergencyTeam}
+                        onChange={(e) => handleFormChange('notifyEmergencyTeam', e.target.checked)}
+                      />{' '}
+                      Enabled
+                    </label>
+                  </div>
+                </div>
               </div>
 
               <div className="form-group">
-                <label>Alert Recipients *</label>
-                <div>
-                  {Object.entries(alertForm.recipients).map(([k, v]) => (
-                    <label key={k} style={{ marginRight: 10 }}>
-                      <input type="checkbox" checked={v} onChange={() => onRecipientToggle(k)} /> {k.replace('-', ' ')}
+                <label>Alert Recipients</label>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                  {RECIPIENT_OPTIONS.map((option) => (
+                    <label key={option.key}>
+                      <input
+                        type="checkbox"
+                        checked={form.recipients[option.key]}
+                        onChange={() => handleRecipientToggle(option.key)}
+                      />{' '}
+                      {option.label}
                     </label>
                   ))}
                 </div>
               </div>
 
+              <div className="form-group">
+                <label htmlFor="notes">Notes</label>
+                <textarea
+                  id="notes"
+                  className="form-control"
+                  rows={3}
+                  value={form.notes}
+                  onChange={(e) => handleFormChange('notes', e.target.value)}
+                ></textarea>
+              </div>
+
               <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-                <button type="button" className="btn btn-outline" onClick={() => closeModal('emergencyAlert')} style={{ flex: 1 }}>Cancel</button>
-                <button type="submit" className="btn btn-emergency" style={{ flex: 1 }}>Send Emergency Alert</button>
+                <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={closeModal} disabled={actionsDisabled || Boolean(rowProcessing)}>Cancel</button>
+                <button type="submit" className="btn btn-alert" style={{ flex: 1 }} disabled={Boolean(processing)}>
+                  {processing === 'create' ? 'Creating...' : processing === 'update' ? 'Saving...' : editingEmergency ? 'Save Changes' : 'Create Emergency'}
+                </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {modal.medevac && (
-        <div className="modal" style={{ display: 'flex' }} onClick={(e) => e.target.classList.contains('modal') && closeModal('medevac')}>
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3 className="modal-title">Request Medevac</h3>
-              <button className="close-modal" onClick={() => closeModal('medevac')}>&times;</button>
-            </div>
-            <p>Please confirm medevac request. This will notify the Coast Guard and relevant authorities.</p>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn btn-outline" onClick={() => closeModal('medevac')} style={{ flex: 1 }}>Cancel</button>
-              <button className="btn btn-warning" onClick={() => { alert('Medevac requested. Stand by for instructions.'); closeModal('medevac'); }} style={{ flex: 1 }}>Confirm</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {modal.contactSpecialist && (
-        <div className="modal" style={{ display: 'flex' }} onClick={(e) => e.target.classList.contains('modal') && closeModal('contactSpecialist')}>
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3 className="modal-title">Contact Specialist</h3>
-              <button className="close-modal" onClick={() => closeModal('contactSpecialist')}>&times;</button>
-            </div>
-            <p>Connecting you to an on-call specialist...</p>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn btn-outline" onClick={() => closeModal('contactSpecialist')} style={{ flex: 1 }}>Close</button>
-              <button className="btn btn-primary" onClick={() => alert('Specialist contacted.')} style={{ flex: 1 }}>Proceed</button>
-            </div>
           </div>
         </div>
       )}

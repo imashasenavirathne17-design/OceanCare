@@ -1,101 +1,283 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearSession, getUser } from '../../lib/token';
-import './crewDashboard.css';
 import CrewSidebar from './CrewSidebar';
+import './crewDashboard.css';
+import {
+  listMyMedicalRecords,
+  getMyMedicalRecord,
+  createMyMedicalRecord,
+  updateMyMedicalRecord,
+  deleteMyMedicalRecord,
+} from '../../lib/crewMedicalRecordsApi';
+
+const TYPE_OPTIONS = [
+  { value: 'medical-history', label: 'Medical History' },
+  { value: 'examination', label: 'Examination' },
+  { value: 'treatment', label: 'Treatment' },
+  { value: 'vaccination', label: 'Vaccination' },
+  { value: 'chronic', label: 'Chronic Condition' },
+  { value: 'health-check', label: 'Health Check' },
+  { value: 'appointment', label: 'Medical Appointment' },
+  { value: 'emergency', label: 'Emergency Report' },
+];
+
+const TYPE_LABELS = TYPE_OPTIONS.reduce((acc, item) => {
+  acc[item.value] = item.label;
+  return acc;
+}, {});
+
+const MOCK_RECORDS = [
+  {
+    _id: 'mock-1',
+    recordType: 'health-check',
+    condition: 'Daily Health Check',
+    date: '2025-10-15',
+    notes: 'Vitals within normal range. No symptoms reported.',
+    files: [],
+  },
+  {
+    _id: 'mock-2',
+    recordType: 'vaccination',
+    condition: 'Influenza Booster',
+    date: '2025-09-04',
+    notes: 'No adverse reactions. Next dose due in one year.',
+    files: [],
+  },
+];
+
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api';
+const UPLOADS_BASE = API_BASE.replace(/\/api$/, '') + '/uploads/medical-records/';
+
+const today = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString().slice(0, 10);
+};
+
+const fileUrl = (file) => {
+  if (!file) return null;
+  const name = file.filename || (file.path ? file.path.split(/[\\/]/).pop() : '');
+  return name ? `${UPLOADS_BASE}${name}` : null;
+};
 
 export default function CrewHealthRecords() {
   const navigate = useNavigate();
   const user = getUser();
   const onLogout = () => { clearSession(); navigate('/login'); };
-  // Demo records inspired by provided HTML
-  const [records] = useState([
-    {
-      id: 'REC-1', date: '2023-10-15', type: 'Health Check',
-      details: 'Temperature: 36.8°C, Heart Rate: 72 BPM, BP: 118/76, Oxygen: 98%',
-      status: 'Normal', statusColor: 'success',
-      fullDetails: `
-        <p><strong>Date:</strong> October 15, 2023</p>
-        <p><strong>Type:</strong> Routine Health Check</p>
-        <p><strong>Temperature:</strong> 36.8°C</p>
-        <p><strong>Heart Rate:</strong> 72 BPM</p>
-        <p><strong>Blood Pressure:</strong> 118/76 mmHg</p>
-        <p><strong>Oxygen Saturation:</strong> 98%</p>
-        <p><strong>Respiratory Rate:</strong> 16 breaths/min</p>
-        <p><strong>Symptoms:</strong> None reported</p>
-        <p><strong>Health Officer Notes:</strong> All vitals within normal range.</p>
-      `
-    },
-    {
-      id: 'REC-2', date: '2023-10-14', type: 'Immunization',
-      details: 'Influenza Vaccine - Batch: FLU2023A',
-      status: 'Completed', statusColor: 'success',
-      fullDetails: `
-        <p><strong>Date:</strong> October 14, 2023</p>
-        <p><strong>Type:</strong> Immunization</p>
-        <p><strong>Vaccine:</strong> Influenza</p>
-        <p><strong>Batch Number:</strong> FLU2023A</p>
-        <p><strong>Administrated By:</strong> Dr. Sarah Johnson</p>
-        <p><strong>Next Due:</strong> October 2024</p>
-        <p><strong>Notes:</strong> No adverse reactions reported.</p>
-      `
-    },
-    {
-      id: 'REC-3', date: '2023-10-10', type: 'Health Check',
-      details: 'Temperature: 37.1°C, Heart Rate: 75 BPM, BP: 122/78, Oxygen: 97%',
-      status: 'Slight Fever', statusColor: 'warning',
-      fullDetails: `
-        <p><strong>Date:</strong> October 10, 2023</p>
-        <p><strong>Type:</strong> Health Check</p>
-        <p><strong>Temperature:</strong> 37.1°C (Slight fever)</p>
-        <p><strong>Heart Rate:</strong> 75 BPM</p>
-        <p><strong>Blood Pressure:</strong> 122/78 mmHg</p>
-        <p><strong>Oxygen Saturation:</strong> 97%</p>
-        <p><strong>Respiratory Rate:</strong> 18 breaths/min</p>
-        <p><strong>Symptoms:</strong> Mild headache</p>
-        <p><strong>Health Officer Notes:</strong> Recommended rest and hydration. Temperature returned to normal after 24 hours.</p>
-      `
-    },
-    {
-      id: 'REC-4', date: '2023-10-05', type: 'Medical Appointment',
-      details: 'Routine check-up with Health Officer',
-      status: 'Completed', statusColor: 'success',
-      fullDetails: `
-        <p><strong>Date:</strong> October 5, 2023</p>
-        <p><strong>Type:</strong> Medical Appointment</p>
-        <p><strong>Purpose:</strong> Routine check-up</p>
-        <p><strong>Health Officer:</strong> Dr. Michael Chen</p>
-        <p><strong>Findings:</strong> Overall health good. Recommended maintaining current exercise routine.</p>
-        <p><strong>Next Appointment:</strong> January 5, 2024</p>
-      `
-    },
-  ]);
-  const [filters, setFilters] = useState({ recordType: 'all', dateFrom: '', dateTo: '' });
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalTitle, setModalTitle] = useState('');
-  const [modalHtml, setModalHtml] = useState('');
-  const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All Status');
   const useMocks = String(import.meta.env.VITE_USE_MOCKS).toLowerCase() === 'true';
 
-  const onFilterChange = (e) => setFilters((f) => ({ ...f, [e.target.name]: e.target.value }));
-  const applyFilters = () => { /* no-op, computed by useMemo */ };
-  const viewRecord = (rec) => { setModalTitle(`${rec.type} - ${rec.date}`); setModalHtml(rec.fullDetails); setModalOpen(true); };
-  const downloadRecord = (rec) => { alert(`Downloading record: ${rec.type} from ${rec.date}`); };
-  const generateHealthCertificate = () => { alert('Generating health certificate...'); };
-  const printRecords = () => { window.print(); };
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
+  const [filters, setFilters] = useState({ recordType: 'all', dateFrom: '', dateTo: '' });
+  const [revision, setRevision] = useState(0);
 
-  const filtered = useMemo(() => {
-    return records.filter((r) => {
-      const q = query.trim().toLowerCase();
-      const qOk = !q || r.type.toLowerCase().includes(q) || r.details.toLowerCase().includes(q) || String(r.status).toLowerCase().includes(q);
-      const typeOk = filters.recordType === 'all' || r.type.toLowerCase().includes(filters.recordType.replace('-', ' ').toLowerCase());
-      const statusOk = statusFilter === 'All Status' || String(r.status).toLowerCase() === statusFilter.toLowerCase();
-      const fromOk = !filters.dateFrom || r.date >= filters.dateFrom;
-      const toOk = !filters.dateTo || r.date <= filters.dateTo;
-      return qOk && typeOk && statusOk && fromOk && toOk;
+  const [viewOpen, setViewOpen] = useState(false);
+  const [viewRecord, setViewRecord] = useState(null);
+  const [viewLoading, setViewLoading] = useState(false);
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [form, setForm] = useState({ id: null, recordType: '', condition: '', date: today(), notes: '' });
+  const [formFiles, setFormFiles] = useState([]);
+  const [formError, setFormError] = useState('');
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+
+  useEffect(() => {
+    let ignore = false;
+    setLoading(true);
+    setError('');
+    const run = async () => {
+      try {
+        if (useMocks) {
+          if (!ignore) setRecords(MOCK_RECORDS);
+          return;
+        }
+        const params = {};
+        const trimmed = query.trim();
+        if (trimmed) params.q = trimmed;
+        if (filters.recordType !== 'all' && filters.recordType) params.type = filters.recordType;
+        if (filters.dateFrom) params.from = filters.dateFrom;
+        if (filters.dateTo) params.to = filters.dateTo;
+        const data = await listMyMedicalRecords(params);
+        if (!ignore) setRecords(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('listMyMedicalRecords error', err);
+        if (!ignore) {
+          setError('Failed to load medical records');
+          if (useMocks) setRecords(MOCK_RECORDS);
+        }
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    };
+    run();
+    return () => { ignore = true; };
+  }, [filters.recordType, filters.dateFrom, filters.dateTo, query, revision, useMocks]);
+
+  const refresh = () => setRevision((v) => v + 1);
+
+  const handleFilterChange = (e) => {
+    const { name, value } = e.target;
+    setFilters((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const openView = async (record) => {
+    const id = record?._id || record?.id;
+    if (!id) return;
+    setViewOpen(true);
+    setViewLoading(true);
+    try {
+      if (useMocks) {
+        const found = MOCK_RECORDS.find((item) => item._id === id);
+        setViewRecord(found || record);
+      } else {
+        const data = await getMyMedicalRecord(id);
+        setViewRecord(data);
+      }
+    } catch (err) {
+      console.error('getMyMedicalRecord error', err);
+      setViewRecord(record);
+    } finally {
+      setViewLoading(false);
+    }
+  };
+
+  const openCreate = () => {
+    setForm({ id: null, recordType: '', condition: '', date: today(), notes: '' });
+    setFormFiles([]);
+    setFormError('');
+    setFormOpen(true);
+  };
+
+  const openEdit = (record) => {
+    if (!record) return;
+    setForm({
+      id: record._id || record.id,
+      recordType: record.recordType || '',
+      condition: record.condition || '',
+      date: record.date ? String(record.date).slice(0, 10) : today(),
+      notes: record.notes || '',
     });
-  }, [records, filters, query, statusFilter]);
+    setFormFiles([]);
+    setFormError('');
+    setFormOpen(true);
+  };
+
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleFileChange = (e) => {
+    setFormFiles(Array.from(e.target.files || []));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.recordType || !form.condition) {
+      setFormError('Record type and condition are required');
+      return;
+    }
+    setFormError('');
+    setFormSubmitting(true);
+    try {
+      const payload = {
+        recordType: form.recordType,
+        condition: form.condition,
+        date: form.date || today(),
+        notes: form.notes || '',
+      };
+      if (useMocks) {
+        if (form.id) {
+          setRecords((prev) => prev.map((item) => (item._id === form.id ? { ...item, ...payload } : item)));
+        } else {
+          setRecords((prev) => [{ _id: `mock-${Date.now()}`, files: [], ...payload }, ...prev]);
+        }
+      } else if (form.id) {
+        await updateMyMedicalRecord(form.id, payload, formFiles);
+      } else {
+        await createMyMedicalRecord(payload, formFiles);
+      }
+      setFormOpen(false);
+      setForm({ id: null, recordType: '', condition: '', date: today(), notes: '' });
+      setFormFiles([]);
+      refresh();
+    } catch (err) {
+      console.error('save medical record error', err);
+      setFormError('Failed to save medical record');
+    } finally {
+      setFormSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (record) => {
+    const id = record?._id || record?.id;
+    if (!id) return;
+    if (!window.confirm('Delete this medical record?')) return;
+    setDeletingId(id);
+    try {
+      if (useMocks) {
+        setRecords((prev) => prev.filter((item) => (item._id || item.id) !== id));
+      } else {
+        await deleteMyMedicalRecord(id);
+      }
+      refresh();
+    } catch (err) {
+      console.error('delete medical record error', err);
+      alert('Failed to delete medical record');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const tableRows = useMemo(() => {
+    if (!Array.isArray(records)) return [];
+    return records.map((record) => ({
+      id: record._id || record.id,
+      recordType: record.recordType,
+      condition: record.condition,
+      date: record.date,
+      notes: record.notes,
+      files: record.files || [],
+    }));
+  }, [records]);
+
+  const filteredRows = useMemo(() => {
+    const lowered = query.trim().toLowerCase();
+    return tableRows.filter((row) => {
+      const typeLabel = TYPE_LABELS[row.recordType] || row.recordType || '';
+      const matchesQuery = !lowered
+        || typeLabel.toLowerCase().includes(lowered)
+        || String(row.condition || '').toLowerCase().includes(lowered)
+        || String(row.notes || '').toLowerCase().includes(lowered);
+      return matchesQuery;
+    });
+  }, [tableRows, query]);
+
+  const renderFileList = (files) => {
+    if (!files || files.length === 0) return null;
+    return (
+      <ul style={{ marginTop: 12 }}>
+        {files.map((file, index) => {
+          const url = fileUrl(file);
+          return (
+            <li key={`${file.filename || file.path || index}-${index}`}>
+              {url ? (
+                <a href={url} target="_blank" rel="noreferrer">
+                  {file.originalname || file.filename || 'Attachment'}
+                </a>
+              ) : (
+                <span>{file.originalname || file.filename || 'Attachment'}</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    );
+  };
 
   return (
     <div className="crew-dashboard">
@@ -114,107 +296,187 @@ export default function CrewHealthRecords() {
             </div>
           </div>
 
-          <section className="health-records">
-            <h3 className="form-title">Your Health Records</h3>
+          <section className="dashboard-section">
+            <div className="section-header" style={{ flexWrap: 'wrap' }}>
+              <div>
+                <div className="section-title">Your Health Records</div>
+                <div className="section-subtitle">Access personal medical entries, examinations, and vaccinations</div>
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button className="btn btn-outline" onClick={refresh}><i className="fas fa-sync"></i> Refresh</button>
+                <button className="btn btn-primary" onClick={openCreate}><i className="fas fa-plus"></i> New Record</button>
+              </div>
+            </div>
+
+            {error && <div className="empty" style={{ color: 'var(--danger)' }}>{error}</div>}
 
             {useMocks && (
-              <div style={{
-                background: '#fff7e6', border: '1px solid #ffd591', color: '#ad6800',
-                padding: '10px 12px', borderRadius: 8, marginBottom: 12
-              }}>
+              <div style={{ background: '#fff7e6', border: '1px solid #ffd591', color: '#ad6800', padding: '10px 12px', borderRadius: 8, marginBottom: 12 }}>
                 Mock data enabled (VITE_USE_MOCKS=true). Showing sample records while backend is offline.
               </div>
             )}
 
-            {/* Action bar */}
-            <div className="page-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginBottom: 12 }}>
-              <button className="btn btn-outline" onClick={printRecords}><i className="fas fa-print"></i> Print</button>
-              <button className="btn btn-success" onClick={() => alert('Exporting as CSV...')}><i className="fas fa-download"></i> Export</button>
-            </div>
-
             <div className="records-filter" style={{ display: 'flex', gap: 15, marginBottom: 20, flexWrap: 'wrap' }}>
-              <div className="filter-group" style={{ flex: 2, minWidth: 220 }}>
+              <div className="filter-group" style={{ flex: 2, minWidth: 240 }}>
                 <label>Search</label>
-                <input type="text" className="form-control" placeholder="Search by type, details, or status..." value={query} onChange={(e)=>setQuery(e.target.value)} />
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Search by type, condition, or notes..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
               </div>
               <div className="filter-group" style={{ flex: 1, minWidth: 200 }}>
                 <label>Record Type</label>
-                <select name="recordType" className="form-control" value={filters.recordType} onChange={onFilterChange}>
+                <select name="recordType" className="form-control" value={filters.recordType} onChange={handleFilterChange}>
                   <option value="all">All Records</option>
-                  <option value="health-check">Health Checks</option>
-                  <option value="immunization">Immunizations</option>
-                  <option value="appointment">Medical Appointments</option>
-                  <option value="emergency">Emergency Reports</option>
-                </select>
-              </div>
-              <div className="filter-group" style={{ flex: 1, minWidth: 200 }}>
-                <label>Status</label>
-                <select className="form-control" value={statusFilter} onChange={(e)=>setStatusFilter(e.target.value)}>
-                  <option>All Status</option>
-                  <option>Normal</option>
-                  <option>Completed</option>
-                  <option>Slight Fever</option>
-                </select>
-              </div>
-              <div className="filter-group" style={{ flex: 1, minWidth: 200 }}>
-                <label>From Date</label>
-                <input name="dateFrom" type="date" className="form-control" value={filters.dateFrom} onChange={onFilterChange} />
-              </div>
-              <div className="filter-group" style={{ flex: 1, minWidth: 200 }}>
-                <label>To Date</label>
-                <input name="dateTo" type="date" className="form-control" value={filters.dateTo} onChange={onFilterChange} />
-              </div>
-              <div className="filter-group" style={{ alignSelf: 'flex-end' }}>
-                <button className="btn btn-primary" onClick={applyFilters}>Apply Filters</button>
-              </div>
-            </div>
-
-            <div className="table-responsive">
-              <table id="recordsTable">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Details</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((r) => (
-                    <tr key={r.id}>
-                      <td>{r.date}</td>
-                      <td>{r.type}</td>
-                      <td>{r.details}</td>
-                      <td><span style={{ color: r.statusColor === 'success' ? 'var(--success)' : 'var(--warning)' }}>{r.status}</span></td>
-                      <td className="action-buttons" style={{ display: 'flex', gap: 10 }}>
-                        <button className="btn btn-primary btn-sm" onClick={() => viewRecord(r)}>View Details</button>
-                        <button className="btn btn-success btn-sm" onClick={() => downloadRecord(r)}>Download</button>
-                      </td>
-                    </tr>
+                  {TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
-                </tbody>
-              </table>
+                </select>
+              </div>
+              <div className="filter-group" style={{ flex: 1, minWidth: 180 }}>
+                <label>From Date</label>
+                <input name="dateFrom" type="date" className="form-control" value={filters.dateFrom} onChange={handleFilterChange} />
+              </div>
+              <div className="filter-group" style={{ flex: 1, minWidth: 180 }}>
+                <label>To Date</label>
+                <input name="dateTo" type="date" className="form-control" value={filters.dateTo} onChange={handleFilterChange} />
+              </div>
             </div>
 
-            <div style={{ marginTop: 20, textAlign: 'center' }}>
-              <button className="btn btn-success" onClick={generateHealthCertificate}><i className="fas fa-download"></i> Download Health Certificate</button>
-              <button className="btn btn-primary" style={{ marginLeft: 10 }} onClick={printRecords}><i className="fas fa-print"></i> Print Records</button>
-            </div>
+            {loading ? (
+              <div className="empty"><div className="desc">Loading records...</div></div>
+            ) : filteredRows.length === 0 ? (
+              <div className="empty">
+                <div className="title">No records found</div>
+                <div className="desc">Add a record or adjust your filters.</div>
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Type</th>
+                      <th>Condition</th>
+                      <th>Notes</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredRows.map((row) => (
+                      <tr key={row.id}>
+                        <td>{row.date || '—'}</td>
+                        <td>{TYPE_LABELS[row.recordType] || row.recordType || '—'}</td>
+                        <td>{row.condition || '—'}</td>
+                        <td>{row.notes ? row.notes.slice(0, 80) + (row.notes.length > 80 ? '…' : '') : '—'}</td>
+                        <td className="action-buttons">
+                          <button className="btn btn-outline btn-sm" onClick={() => openView(row)}>View</button>
+                          <button className="btn btn-outline btn-sm" onClick={() => openEdit(row)}>Edit</button>
+                          <button className="btn btn-outline btn-sm" onClick={() => handleDelete(row)} disabled={deletingId === row.id}>
+                            {deletingId === row.id ? 'Deleting…' : 'Delete'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
         </main>
       </div>
-      {modalOpen && (
-        <div className="modal" onClick={(e) => e.target.classList.contains('modal') && setModalOpen(false)}>
-          <div className="modal-content" style={{ maxWidth: 600 }}>
+
+      {viewOpen && (
+        <div className="modal" onClick={(e) => e.target.classList.contains('modal') && setViewOpen(false)}>
+          <div className="modal-content" style={{ maxWidth: 560 }}>
             <div className="modal-header">
-              <h3 className="modal-title">{modalTitle || 'Record Details'}</h3>
-              <button className="close-modal" onClick={() => setModalOpen(false)}>&times;</button>
+              <h3 className="modal-title">Medical Record Details</h3>
+              <button className="close-modal" onClick={() => setViewOpen(false)}>&times;</button>
             </div>
-            <div dangerouslySetInnerHTML={{ __html: modalHtml }} />
-            <div style={{ marginTop: 20, textAlign: 'right' }}>
-              <button className="btn btn-primary" onClick={() => setModalOpen(false)}>Close</button>
+            {viewLoading || !viewRecord ? (
+              <div className="empty"><div className="desc">Loading record...</div></div>
+            ) : (
+              <div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: '#666' }}>Date</div>
+                    <div style={{ fontWeight: 600 }}>{viewRecord.date || '—'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: '#666' }}>Record Type</div>
+                    <div style={{ fontWeight: 600 }}>{TYPE_LABELS[viewRecord.recordType] || viewRecord.recordType || '—'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: '#666' }}>Condition</div>
+                    <div>{viewRecord.condition || '—'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: '#666' }}>Notes</div>
+                    <div>{viewRecord.notes || '—'}</div>
+                  </div>
+                </div>
+                {renderFileList(viewRecord.files)}
+                <div style={{ marginTop: 20, textAlign: 'right' }}>
+                  <button className="btn btn-primary" onClick={() => setViewOpen(false)}>Close</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {formOpen && (
+        <div className="modal" onClick={(e) => e.target.classList.contains('modal') && setFormOpen(false)}>
+          <div className="modal-content" style={{ maxWidth: 520 }}>
+            <div className="modal-header">
+              <h3 className="modal-title">{form.id ? 'Update Medical Record' : 'New Medical Record'}</h3>
+              <button className="close-modal" onClick={() => setFormOpen(false)}>&times;</button>
             </div>
+            <form onSubmit={handleSubmit}>
+              <div className="form-grid">
+                <div className="form-group">
+                  <label>Record Type *</label>
+                  <select name="recordType" className="form-control" value={form.recordType} onChange={handleFormChange} required>
+                    <option value="">Select record type</option>
+                    {TYPE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Condition / Title *</label>
+                  <input name="condition" className="form-control" placeholder="e.g., Blood Pressure Check" value={form.condition} onChange={handleFormChange} required />
+                </div>
+                <div className="form-group">
+                  <label>Date *</label>
+                  <input name="date" type="date" className="form-control" value={form.date} onChange={handleFormChange} required />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Notes</label>
+                <textarea name="notes" className="form-control" rows={3} placeholder="Add notes about this record" value={form.notes} onChange={handleFormChange}></textarea>
+              </div>
+              <div className="form-group">
+                <label>Attachments</label>
+                <input type="file" multiple onChange={handleFileChange} />
+                {formFiles.length > 0 && <div className="hint-message">{formFiles.length} file(s) selected</div>}
+                {form.id && !useMocks && renderFileList((records.find((item) => (item._id || item.id) === form.id)?.files) || [])}
+              </div>
+              {formError && (
+                <div className="error-message" style={{ marginBottom: 12 }}>
+                  <i className="fas fa-exclamation-circle"></i> {formError}
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button type="button" className="btn" onClick={() => setFormOpen(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={formSubmitting}>
+                  {formSubmitting ? 'Saving…' : form.id ? 'Update Record' : 'Create Record'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

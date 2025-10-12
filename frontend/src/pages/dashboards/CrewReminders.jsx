@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearSession, getUser } from '../../lib/token';
 import CrewSidebar from './CrewSidebar';
+import './crewDashboard.css';
 
 export default function CrewReminders() {
   const navigate = useNavigate();
@@ -144,9 +145,12 @@ export default function CrewReminders() {
           </div>
 
           {/* Reminders container with tabs */}
-          <section className="reminders-container">
-            <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <h3 className="form-title">Your Reminders</h3>
+          <section className="dashboard-section reminders-container">
+            <div className="section-header" style={{ flexWrap: 'wrap' }}>
+              <div>
+                <div className="section-title">Your Reminders</div>
+                <div className="section-subtitle">Keep track of medications and follow-up actions</div>
+              </div>
               <button className="btn btn-primary" onClick={() => { resetForm(); setFormOpen(true); }}>
                 <i className="fas fa-plus" style={{ marginRight: 6 }}></i> New Reminder
               </button>
@@ -172,9 +176,9 @@ export default function CrewReminders() {
               </div>
             </div>
 
-            <div className="reminder-tabs" style={{ display: 'flex', marginBottom: 20, borderBottom: '1px solid #ddd' }}>
+            <div className="reminder-tabs">
               {tabList.map(t => (
-                <div key={t.key} className={`reminder-tab ${activeTab === t.key ? 'active' : ''}`} onClick={() => setActiveTab(t.key)} style={{ padding: '12px 20px', cursor: 'pointer', borderBottom: activeTab === t.key ? '3px solid var(--primary)' : '3px solid transparent' }}>{t.label}</div>
+                <div key={t.key} className={`reminder-tab ${activeTab === t.key ? 'active' : ''}`} onClick={() => setActiveTab(t.key)}>{t.label}</div>
               ))}
               <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
                 <button className={`btn btn-outline btn-sm ${viewMode==='list'?'active':''}`} onClick={()=>setViewMode('list')}><i className="fas fa-list"></i> List</button>

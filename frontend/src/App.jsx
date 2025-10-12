@@ -33,6 +33,10 @@ import EmergencyAlerts from './pages/dashboards/EmergencyAlerts';
 import EmergencyCrewProfiles from './pages/dashboards/EmergencyCrewProfiles';
 import EmergencyCrewLocator from './pages/dashboards/EmergencyCrewLocator';
 import EmergencyMessaging from './pages/dashboards/EmergencyMessaging';
+import CrewMessaging from './pages/dashboards/CrewMessaging';
+import HealthMessaging from './pages/dashboards/HealthMessaging';
+import InventoryMessaging from './pages/dashboards/InventoryMessaging';
+import AdminMessaging from './pages/dashboards/AdminMessaging';
 import EmergencyIncidentLog from './pages/dashboards/EmergencyIncidentLog';
 import EmergencyReports from './pages/dashboards/EmergencyReports';
 import InventoryDashboard from './pages/dashboards/InventoryDashboard';
@@ -125,6 +129,22 @@ function App() {
           <Route path="/dashboard/emergency/messaging" element={<EmergencyMessaging />} />
           <Route path="/dashboard/emergency/incident-log" element={<EmergencyIncidentLog />} />
           <Route path="/dashboard/emergency/reports" element={<EmergencyReports />} />
+        </Route>
+
+        <Route element={<RequireAuth roles={["crew", "emergency", "health"]} />}>
+          <Route path="/dashboard/crew/messaging" element={<CrewMessaging />} />
+        </Route>
+
+        <Route element={<RequireAuth roles={["health", "emergency", "admin"]} />}>
+          <Route path="/dashboard/health/messaging" element={<HealthMessaging />} />
+        </Route>
+
+        <Route element={<RequireAuth roles={["inventory", "emergency", "admin"]} />}>
+          <Route path="/dashboard/inventory/messaging" element={<InventoryMessaging />} />
+        </Route>
+
+        <Route element={<RequireAuth roles={["admin"]} />}>
+          <Route path="/dashboard/admin/messaging" element={<AdminMessaging />} />
         </Route>
 
         <Route element={<RequireAuth roles={["inventory"]} />}>

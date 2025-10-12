@@ -116,9 +116,12 @@ const ReminderSchema = new mongoose.Schema(
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true
+      default: null
     },
-    createdByName: String,
+    createdByName: {
+      type: String,
+      default: 'Health Officer'
+    },
     updatedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'

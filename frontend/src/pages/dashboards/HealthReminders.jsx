@@ -1,8 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, NavLink } from 'react-router-dom';
 import { clearSession, getUser } from '../../lib/token';
 import './healthOfficerDashboard.css';
 import HealthSidebar from './HealthSidebar';
+import {
+  listReminders,
+  createReminder,
+  updateReminder,
+  deleteReminder as deleteReminderApi,
+  markReminderCompleted,
+  snoozeReminder as snoozeReminderApi,
+  rescheduleReminder,
+  getReminderStatusDisplay,
+  formatReminderTime
+} from '../../lib/reminderApi';
+import { listCrewMembers } from '../../lib/healthApi';
 
 export default function HealthReminders() {
   const navigate = useNavigate();
@@ -15,7 +27,18 @@ export default function HealthReminders() {
   const [editingReminder, setEditingReminder] = useState(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletingReminder, setDeletingReminder] = useState(null);
-  const [viewMode, setViewMode] = useState('table'); // 'table' or 'card'
+
+  const [medicationReminders, setMedicationReminders] = useState([]);
+  const [followupReminders, setFollowupReminders] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [filters, setFilters] = useState({ search: '', status: 'all', dateRange: 'all' });
+  const [selectedReminder, setSelectedReminder] = useState(null);
+  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 1 });
+  const [crewOptions, setCrewOptions] = useState([]);
+  const [crewLoading, setCrewLoading] = useState(false);
+  const [crewError, setCrewError] = useState('');
+  const [newReminderData, setNewReminderData] = useState({ crewId: '', crewName: '' });
 
   const renderViewToggle = () => (
     <div
@@ -45,63 +68,234 @@ export default function HealthReminders() {
 
   const onLogout = () => { clearSession(); navigate('/login'); };
 
+  const normalizeReminder = (reminder) => {
+    const normalizeType = (value) => {
+      const raw = (value || '').toString().toLowerCase().trim().replace(/[\s_-]+/g, ' ');
+      if (raw.includes('medication') || raw.includes('medicine') || raw === 'med') return 'medication';
+      if (raw.includes('follow')) return 'followup';
+      return raw || 'medication';
+    };
+
+    const normalizedType = normalizeType(reminder.type);
+    const statusDetails = getReminderStatusDisplay(reminder);
+    return {
+      ...reminder,
+      id: reminder._id,
+      type: normalizedType,
+      statusLabel: statusDetails.label,
+      statusClass: statusDetails.class,
+      displayTime: formatReminderTime(reminder)
+    };
+  };
+
+  const fetchReminders = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const { reminders = [], pagination: pageInfo } = await listReminders({
+        type: 'all',
+        q: filters.search,
+        status: filters.status,
+        dateRange: filters.dateRange,
+        page: pagination.page,
+        limit: pagination.limit
+      });
+
+      const normalized = reminders.map(normalizeReminder);
+      setMedicationReminders(normalized.filter((reminder) => reminder.type === 'medication'));
+      setFollowupReminders(normalized.filter((reminder) => reminder.type === 'followup'));
+      if (pageInfo) {
+        setPagination((prev) => ({ ...prev, ...pageInfo }));
+      }
+    } catch (err) {
+      console.error('Failed to load reminders:', err);
+      setError(err.message || 'Unable to load reminders');
+    } finally {
+      setLoading(false);
+    }
+  }, [activeTab, filters.search, filters.status, filters.dateRange, pagination.page, pagination.limit]);
+
   useEffect(() => {
-    // Set default follow-up date to today in modal when opened
+    fetchReminders();
+  }, [fetchReminders]);
+
+  useEffect(() => {
     if (newReminderOpen) {
       const input = document.getElementById('followupDate');
       if (input) input.valueAsDate = new Date();
+      if (!crewOptions.length) {
+        loadCrewMembers();
+      }
+      setNewReminderData({ crewId: '', crewName: '' });
     }
   }, [newReminderOpen]);
 
-  // Reminder actions
-  const markAsTaken = (id) => alert(`Medication marked as taken for reminder ID: ${id}`);
-  const snoozeReminderAction = (id) => alert(`Reminder ID: ${id} snoozed`);
-  const logUsage = (id) => alert(`Logging usage for reminder ID: ${id}`);
-  
-  const editReminder = (id) => {
-    // Find the reminder data (in real app, this would come from API)
-    const reminderData = {
-      id,
-      type: 'medication',
-      crewId: 'CD12345',
-      crewName: 'John Doe',
-      medicationName: 'Lisinopril',
-      dosage: '10mg',
-      frequency: 'daily',
-      time: '08:00'
-    };
-    setEditingReminder(reminderData);
-    setReminderType(reminderData.type);
-    setEditReminderOpen(true);
+  const loadCrewMembers = useCallback(async (search = '') => {
+    setCrewLoading(true);
+    setCrewError('');
+    try {
+      const crew = await listCrewMembers(search);
+      const normalized = crew.map((member) => ({
+        id: member._id || member.crewId,
+        crewId: member.crewId || member.id,
+        fullName: member.fullName || member.name || 'Unnamed'
+      }));
+      setCrewOptions(normalized);
+    } catch (err) {
+      console.error('Failed to load crew members:', err);
+      setCrewError(err.message || 'Unable to load crew list');
+    } finally {
+      setCrewLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCrewMembers();
+  }, [loadCrewMembers]);
+
+  const handleMarkCompleted = async (reminder) => {
+    try {
+      await markReminderCompleted(reminder.id);
+      await fetchReminders();
+    } catch (err) {
+      console.error('Failed to mark reminder completed:', err);
+      alert(err.message || 'Failed to mark reminder as completed');
+    }
   };
-  
-  const deleteReminder = (id) => {
-    setDeletingReminder(id);
+
+  const handleSnooze = async (reminder, minutes = 60) => {
+    try {
+      await snoozeReminderApi(reminder.id, minutes);
+      await fetchReminders();
+    } catch (err) {
+      console.error('Failed to snooze reminder:', err);
+      alert(err.message || 'Failed to snooze reminder');
+    }
+  };
+
+  const handleReschedule = async (reminder) => {
+    const newDate = prompt('Enter new scheduled date (YYYY-MM-DD):', reminder.scheduledDate?.slice(0, 10));
+    if (!newDate) return;
+    const newTime = prompt('Enter new scheduled time (HH:MM):', reminder.scheduledTime || '08:00');
+    try {
+      await rescheduleReminder(reminder.id, newDate, newTime);
+      await fetchReminders();
+    } catch (err) {
+      console.error('Failed to reschedule reminder:', err);
+      alert(err.message || 'Failed to reschedule reminder');
+    }
+  };
+
+  const handleDelete = (reminder) => {
+    setDeletingReminder(reminder);
     setDeleteConfirmOpen(true);
   };
-  
-  const confirmDelete = () => {
-    alert(`Reminder ID: ${deletingReminder} deleted successfully!`);
-    setDeleteConfirmOpen(false);
-    setDeletingReminder(null);
-  };
-  
-  const scheduleFollowup = (id) => alert(`Rescheduling follow-up ID: ${id}`);
-  const completeFollowup = (id) => alert(`Marking follow-up ID: ${id} as complete`);
 
-  const submitNewReminder = (e) => {
-    e.preventDefault();
-    alert('Reminder created successfully!');
-    setNewReminderOpen(false);
-    setReminderType('');
+  const confirmDelete = async () => {
+    if (!deletingReminder) return;
+    try {
+      await deleteReminderApi(deletingReminder.id);
+      setDeleteConfirmOpen(false);
+      setDeletingReminder(null);
+      await fetchReminders();
+    } catch (err) {
+      console.error('Failed to delete reminder:', err);
+      alert(err.message || 'Failed to delete reminder');
+    }
   };
-  
-  const submitEditReminder = (e) => {
+
+  const handleEdit = (reminder) => {
+    setEditingReminder(reminder);
+    setReminderType(reminder.type);
+    setEditReminderOpen(true);
+    if (!crewOptions.length) {
+      loadCrewMembers();
+    }
+  };
+
+  const submitNewReminder = async (e) => {
     e.preventDefault();
-    alert('Reminder updated successfully!');
-    setEditReminderOpen(false);
-    setEditingReminder(null);
-    setReminderType('');
+    try {
+      if (!newReminderData.crewId) {
+        alert('Please select a patient');
+        return;
+      }
+
+      const form = new FormData(e.target);
+      const payload = buildReminderPayload(form, newReminderData);
+      await createReminder(payload);
+      setNewReminderOpen(false);
+      setReminderType('');
+      setNewReminderData({ crewId: '', crewName: '' });
+      e.target.reset();
+      await fetchReminders();
+    } catch (err) {
+      console.error('Failed to create reminder:', err);
+      alert(err.message || 'Failed to create reminder');
+    }
+  };
+
+  const submitEditReminder = async (e) => {
+    e.preventDefault();
+    if (!editingReminder) return;
+    try {
+      const form = new FormData(e.target);
+      const payload = buildReminderPayload(form, editingReminder, true);
+      await updateReminder(editingReminder.id, payload);
+      setEditReminderOpen(false);
+      setEditingReminder(null);
+      setReminderType('');
+      await fetchReminders();
+    } catch (err) {
+      console.error('Failed to update reminder:', err);
+      alert(err.message || 'Failed to update reminder');
+    }
+  };
+
+  const buildReminderPayload = (form, baseData, isEdit = false) => {
+    const rawType = (form.get(isEdit ? 'editReminderType' : 'reminderType') || baseData.type || '').trim().toLowerCase();
+    const type = rawType === 'followup' ? 'followup' : 'medication';
+    const crewId = form.get(isEdit ? 'editReminderPatient' : 'reminderPatient') || baseData.crewId;
+    const crew = crewOptions.find((c) => c.crewId === crewId);
+
+    const medicationDate = form.get(isEdit ? 'editMedicationDate' : 'medicationDate');
+    const medicationTime = form.get(isEdit ? 'editMedicationTime' : 'medicationTime');
+    const followupDate = form.get(isEdit ? 'editFollowupDate' : 'followupDate');
+
+    const payload = {
+      type,
+      crewId,
+      crewName: crew?.fullName || baseData.crewName || '',
+      scheduledDate: type === 'medication'
+        ? (medicationDate || baseData.scheduledDate)
+        : (followupDate || baseData.scheduledDate),
+      scheduledTime: type === 'medication'
+        ? (medicationTime || baseData.scheduledTime)
+        : baseData.scheduledTime,
+      notes: form.get(isEdit ? 'editReminderNotes' : 'reminderNotes') || ''
+    };
+
+    if (type === 'medication') {
+      const medName = form.get(isEdit ? 'editMedicationName' : 'medicationName');
+      const dosage = form.get(isEdit ? 'editMedicationDosage' : 'medicationDosage');
+      const frequency = form.get(isEdit ? 'editMedicationFrequency' : 'medicationFrequency');
+      payload.title = medName;
+      payload.medication = {
+        name: medName,
+        dosage,
+        frequency,
+        times: [medicationTime || baseData.scheduledTime].filter(Boolean)
+      };
+    } else {
+      payload.followup = {
+        followupType: form.get(isEdit ? 'editFollowupType' : 'followupType'),
+        nextDueDate: followupDate,
+        notes: form.get(isEdit ? 'editFollowupNotes' : 'followupNotes')
+      };
+      payload.title = payload.followup.followupType;
+    }
+
+    return payload;
   };
 
   return (
@@ -160,83 +354,37 @@ export default function HealthReminders() {
               <div className="tab-content active" id="medication-tab">
                 <div className="search-filter" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'nowrap' }}>
                   <div className="search-box" style={{ flex: 1, minWidth: 260, maxWidth: 420, display: 'flex', alignItems: 'center' }}>
-                    <input type="text" placeholder="Search medications or patients..." />
+                    <input
+                      type="text"
+                      placeholder="Search medications or patients..."
+                      value={filters.search}
+                      onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+                    />
                   </div>
-                  <select className="filter-select" style={{ width: 180, flex: '0 0 auto' }}>
-                    <option>All Status</option>
-                    <option>Pending</option>
-                    <option>Completed</option>
-                    <option>Missed</option>
+                  <select
+                    className="filter-select"
+                    style={{ width: 180, flex: '0 0 auto' }}
+                    value={filters.status}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                  >
+                    <option value="all">All Status</option>
+                    <option value="scheduled">Scheduled</option>
+                    <option value="pending">Pending</option>
+                    <option value="completed">Completed</option>
+                    <option value="missed">Missed</option>
                   </select>
-                  <select className="filter-select" style={{ width: 180, flex: '0 0 auto' }}>
-                    <option>Today</option>
-                    <option>This Week</option>
-                    <option>This Month</option>
-                    <option>All</option>
+                  <select
+                    className="filter-select"
+                    style={{ width: 180, flex: '0 0 auto' }}
+                    value={filters.dateRange}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, dateRange: e.target.value }))}
+                  >
+                    <option value="today">Today</option>
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                    <option value="all">All Dates</option>
                   </select>
-                  <div style={{ flex: '0 0 auto' }}>{renderViewToggle()}</div>
                 </div>
-
-                {/* Card View */}
-                {viewMode === 'card' && (
-                <div className="cards-container">
-                  <div className="card urgent">
-                    <div className="card-header">
-                      <div className="card-title">Missed Medication</div>
-                      <div className="card-icon danger"><i className="fas fa-pills"></i></div>
-                    </div>
-                    <div className="card-content">
-                      <div className="card-patient">John Doe (CD12345)</div>
-                      <div className="card-details">Lisinopril 10mg - Daily</div>
-                      <div className="card-details">Last taken: 2023-10-24</div>
-                      <div className="card-due overdue">MISSED: Today, 08:00</div>
-                    </div>
-                    <div className="card-actions">
-                      <button className="btn btn-outline btn-sm" onClick={() => markAsTaken(1)}>Mark as Taken</button>
-                      <button className="btn btn-outline btn-sm" onClick={() => snoozeReminderAction(1)}>Snooze</button>
-                      <button className="btn btn-outline btn-sm" onClick={() => editReminder(1)}>Edit</button>
-                      <button className="btn btn-outline btn-sm" onClick={() => deleteReminder(1)}>Delete</button>
-                    </div>
-                  </div>
-
-                  <div className="card warning">
-                    <div className="card-header">
-                      <div className="card-title">Due Soon</div>
-                      <div className="card-icon warning"><i className="fas fa-clock"></i></div>
-                    </div>
-                    <div className="card-content">
-                      <div className="card-patient">Maria Rodriguez (CD12346)</div>
-                      <div className="card-details">Metformin 500mg - Twice Daily</div>
-                      <div className="card-details">Last taken: Today, 08:00</div>
-                      <div className="card-due today">DUE: Today, 20:00</div>
-                    </div>
-                    <div className="card-actions">
-                      <button className="btn btn-outline btn-sm" onClick={() => markAsTaken(2)}>Mark as Taken</button>
-                      <button className="btn btn-outline btn-sm" onClick={() => snoozeReminder(2)}>Snooze 1hr</button>
-                    </div>
-                  </div>
-
-                  <div className="card">
-                    <div className="card-header">
-                      <div className="card-title">Regular Medication</div>
-                      <div className="card-icon primary"><i className="fas fa-prescription-bottle"></i></div>
-                    </div>
-                    <div className="card-content">
-                      <div className="card-patient">James Wilson (CD12347)</div>
-                      <div className="card-details">Ventolin Inhaler - As Needed</div>
-                      <div className="card-details">Last used: 2023-10-23</div>
-                      <div className="card-due">No fixed schedule</div>
-                    </div>
-                    <div className="card-actions">
-                      <button className="btn btn-outline btn-sm" onClick={() => logUsage(3)}>Log Usage</button>
-                      <button className="btn btn-outline btn-sm" onClick={() => editReminder(3)}>Edit</button>
-                    </div>
-                  </div>
-                </div>
-                )}
-
-                {/* Table View */}
-                {viewMode === 'table' && (
                 <div className="table-responsive">
                   <table>
                     <thead>
@@ -251,85 +399,41 @@ export default function HealthReminders() {
                       </tr>
                     </thead>
                     <tbody>
-                      <tr>
-                        <td>
-                          <div className="crew-cell">
-                            <div className="name">John Doe</div>
-                            <div className="id">CD12345</div>
-                          </div>
-                        </td>
-                        <td className="nowrap">Lisinopril</td>
-                        <td className="nowrap">10mg</td>
-                        <td className="nowrap">Daily</td>
-                        <td className="nowrap">Today, 08:00</td>
-                        <td><span className="status-badge status-danger">Missed</span></td>
-                        <td className="action-buttons">
-                          <button className="btn btn-outline btn-sm" onClick={() => markAsTaken(1)}>Mark Done</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => snoozeReminderAction(1)}>Snooze</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => editReminder(1)}>Edit</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => deleteReminder(1)}>Delete</button>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>
-                          <div className="crew-cell">
-                            <div className="name">Maria Rodriguez</div>
-                            <div className="id">CD12346</div>
-                          </div>
-                        </td>
-                        <td className="nowrap">Metformin</td>
-                        <td className="nowrap">500mg</td>
-                        <td className="nowrap">Twice Daily</td>
-                        <td className="nowrap">Today, 20:00</td>
-                        <td><span className="status-badge status-active">Pending</span></td>
-                        <td className="action-buttons">
-                          <button className="btn btn-outline btn-sm" onClick={() => markAsTaken(2)}>Mark Done</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => snoozeReminderAction(2)}>Snooze</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => editReminder(2)}>Edit</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => deleteReminder(2)}>Delete</button>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>
-                          <div className="crew-cell">
-                            <div className="name">James Wilson</div>
-                            <div className="id">CD12347</div>
-                          </div>
-                        </td>
-                        <td className="nowrap">Ventolin Inhaler</td>
-                        <td className="nowrap">2 puffs</td>
-                        <td className="nowrap">As Needed</td>
-                        <td className="nowrap">-</td>
-                        <td><span className="status-badge status-active">Active</span></td>
-                        <td className="action-buttons">
-                          <button className="btn btn-outline btn-sm" onClick={() => logUsage(3)}>Log Usage</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => editReminder(3)}>Edit</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => deleteReminder(3)}>Delete</button>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>
-                          <div className="crew-cell">
-                            <div className="name">Lisa Chen</div>
-                            <div className="id">CD12348</div>
-                          </div>
-                        </td>
-                        <td className="nowrap">Levothyroxine</td>
-                        <td className="nowrap">50mcg</td>
-                        <td className="nowrap">Daily</td>
-                        <td className="nowrap">Tomorrow, 07:00</td>
-                        <td><span className="status-badge status-active">Scheduled</span></td>
-                        <td className="action-buttons">
-                          <button className="btn btn-outline btn-sm" onClick={() => markAsTaken(4)}>Mark Done</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => snoozeReminderAction(4)}>Snooze</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => editReminder(4)}>Edit</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => deleteReminder(4)}>Delete</button>
-                        </td>
-                      </tr>
+                      {loading && (
+                        <tr>
+                          <td colSpan={7} style={{ textAlign: 'center', padding: '24px' }}>Loading reminders…</td>
+                        </tr>
+                      )}
+                      {!loading && medicationReminders.length === 0 && (
+                        <tr>
+                          <td colSpan={7} style={{ textAlign: 'center', padding: '24px' }}>No reminders match the current filters.</td>
+                        </tr>
+                      )}
+                      {medicationReminders.map((reminder) => (
+                        <tr key={reminder.id}>
+                          <td>
+                            <div className="crew-cell">
+                              <div className="name">{reminder.crewName}</div>
+                              <div className="id">{reminder.crewId}</div>
+                            </div>
+                          </td>
+                          <td className="nowrap">{reminder.medication?.name || '—'}</td>
+                          <td className="nowrap">{reminder.medication?.dosage || '—'}</td>
+                          <td className="nowrap">{reminder.medication?.frequency || '—'}</td>
+                          <td className="nowrap">{reminder.displayTime}</td>
+                          <td><span className={`status-badge ${reminder.statusClass}`}>{reminder.statusLabel}</span></td>
+                          <td className="action-buttons">
+                            <button className="btn btn-outline btn-sm" onClick={() => handleMarkCompleted(reminder)}>Mark Done</button>
+                            <button className="btn btn-outline btn-sm" onClick={() => handleSnooze(reminder)}>Snooze</button>
+                            <button className="btn btn-outline btn-sm" onClick={() => handleReschedule(reminder)}>Reschedule</button>
+                            <button className="btn btn-outline btn-sm" onClick={() => handleEdit(reminder)}>Edit</button>
+                            <button className="btn btn-outline btn-sm" onClick={() => handleDelete(reminder)}>Delete</button>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
-                )}
               </div>
             )}
 
@@ -338,20 +442,35 @@ export default function HealthReminders() {
               <div className="tab-content active" id="followup-tab">
                 <div className="search-filter" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'nowrap' }}>
                   <div className="search-box" style={{ flex: 1, minWidth: 260, maxWidth: 420, display: 'flex', alignItems: 'center' }}>
-                    <input type="text" placeholder="Search follow-ups..." />
+                    <input
+                      type="text"
+                      placeholder="Search follow-ups..."
+                      value={filters.search}
+                      onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+                    />
                   </div>
-                  <select className="filter-select" style={{ width: 180, flex: '0 0 auto' }}>
-                    <option>All Types</option>
-                    <option>Chronic Review</option>
-                    <option>Post-Treatment</option>
-                    <option>Vaccination</option>
-                    <option>Mental Health</option>
+                  <select
+                    className="filter-select"
+                    style={{ width: 180, flex: '0 0 auto' }}
+                    value={filters.status}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                  >
+                    <option value="all">All Status</option>
+                    <option value="scheduled">Scheduled</option>
+                    <option value="pending">Pending</option>
+                    <option value="completed">Completed</option>
+                    <option value="missed">Missed</option>
                   </select>
-                  <select className="filter-select" style={{ width: 180, flex: '0 0 auto' }}>
-                    <option>All Status</option>
-                    <option>Upcoming</option>
-                    <option>Overdue</option>
-                    <option>Completed</option>
+                  <select
+                    className="filter-select"
+                    style={{ width: 180, flex: '0 0 auto' }}
+                    value={filters.dateRange}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, dateRange: e.target.value }))}
+                  >
+                    <option value="today">Today</option>
+                    <option value="week">This Week</option>
+                    <option value="month">This Month</option>
+                    <option value="all">All Dates</option>
                   </select>
                   <div style={{ flex: '0 0 auto' }}>{renderViewToggle()}</div>
                 </div>
@@ -359,149 +478,96 @@ export default function HealthReminders() {
                 {/* Card View */}
                 {viewMode === 'card' && (
                 <div className="cards-container">
-                  <div className="card urgent">
-                    <div className="card-header">
-                      <div className="card-title">Overdue Follow-up</div>
-                      <div className="card-icon danger"><i className="fas fa-exclamation-circle"></i></div>
+                  {loading && (
+                    <div className="card">
+                      <div className="card-content">
+                        <div className="card-title">Loading follow-ups…</div>
+                      </div>
                     </div>
-                    <div className="card-content">
-                      <div className="card-patient">John Doe (CD12345)</div>
-                      <div className="card-details">Hypertension Review</div>
-                      <div className="card-details">Scheduled: 2023-10-20</div>
-                      <div className="card-due overdue">OVERDUE: 5 days</div>
+                  )}
+                  {!loading && followupReminders.length === 0 && (
+                    <div className="card">
+                      <div className="card-content">
+                        <div className="card-title">No follow-up reminders</div>
+                        <div className="card-details">Adjust filters or create a new reminder.</div>
+                      </div>
+                      <div className="card-actions">
+                        <button className="btn btn-primary btn-sm" onClick={() => setNewReminderOpen(true)}>
+                          <i className="fas fa-plus"></i> New Reminder
+                        </button>
+                      </div>
                     </div>
-                    <div className="card-actions">
-                      <button className="btn btn-outline btn-sm" onClick={() => scheduleFollowup(5)}>Reschedule</button>
-                      <button className="btn btn-outline btn-sm" onClick={() => completeFollowup(5)}>Mark Complete</button>
+                  )}
+                  {followupReminders.map((reminder) => (
+                    <div className={`card ${reminder.statusClass?.includes('danger') ? 'urgent' : ''}`} key={reminder.id}>
+                      <div className="card-header">
+                        <div className="card-title">{reminder.followup?.followupType || reminder.title || 'Follow-up Reminder'}</div>
+                        <div className="card-icon primary"><i className="fas fa-calendar-day"></i></div>
+                      </div>
+                      <div className="card-content">
+                        <div className="card-patient">{reminder.crewName} ({reminder.crewId})</div>
+                        <div className="card-details">Scheduled: {reminder.displayTime}</div>
+                        {reminder.followup?.notes && <div className="card-details">Notes: {reminder.followup.notes}</div>}
+                        <div className={`card-due ${reminder.statusClass}`}>{reminder.statusLabel}</div>
+                      </div>
+                      <div className="card-actions">
+                        <button className="btn btn-outline btn-sm" onClick={() => handleReschedule(reminder)}>Reschedule</button>
+                        <button className="btn btn-outline btn-sm" onClick={() => handleMarkCompleted(reminder)}>Mark Complete</button>
+                        <button className="btn btn-outline btn-sm" onClick={() => handleEdit(reminder)}>Edit</button>
+                        <button className="btn btn-outline btn-sm" onClick={() => handleDelete(reminder)}>Delete</button>
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="card warning">
-                    <div className="card-header">
-                      <div className="card-title">Due Today</div>
-                      <div className="card-icon warning"><i className="fas fa-calendar-day"></i></div>
-                    </div>
-                    <div className="card-content">
-                      <div className="card-patient">Maria Rodriguez (CD12346)</div>
-                      <div className="card-details">Diabetes Monitoring</div>
-                      <div className="card-details">Last check: 2023-10-18</div>
-                      <div className="card-due today">DUE: Today</div>
-                    </div>
-                    <div className="card-actions">
-                      <button className="btn btn-outline btn-sm" onClick={() => scheduleFollowup(6)}>Reschedule</button>
-                      <button className="btn btn-outline btn-sm" onClick={() => completeFollowup(6)}>Mark Complete</button>
-                    </div>
-                  </div>
-
-                  <div className="card">
-                    <div className="card-header">
-                      <div className="card-title">Upcoming Follow-up</div>
-                      <div className="card-icon primary"><i className="fas fa-calendar-check"></i></div>
-                    </div>
-                    <div className="card-content">
-                      <div className="card-patient">James Wilson (CD12347)</div>
-                      <div className="card-details">Asthma Control Check</div>
-                      <div className="card-details">Last check: 2023-10-15</div>
-                      <div className="card-due">DUE: 2023-10-30</div>
-                    </div>
-                    <div className="card-actions">
-                      <button className="btn btn-outline btn-sm" onClick={() => scheduleFollowup(7)}>Reschedule</button>
-                      <button className="btn btn-outline btn-sm" onClick={() => completeFollowup(7)}>Mark Complete</button>
-                    </div>
-                  </div>
+                  ))}
                 </div>
                 )}
 
-                {/* Table View */}
                 {viewMode === 'table' && (
-                <div className="table-responsive">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Patient</th>
-                        <th>Follow-up Type</th>
-                        <th>Scheduled Date</th>
-                        <th>Status</th>
-                        <th>Priority</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>
-                          <div className="crew-cell">
-                            <div className="name">John Doe</div>
-                            <div className="id">CD12345</div>
-                          </div>
-                        </td>
-                        <td className="nowrap">Hypertension Review</td>
-                        <td className="nowrap">2023-10-20</td>
-                        <td><span className="status-badge status-danger">Overdue</span></td>
-                        <td className="nowrap">High</td>
-                        <td className="action-buttons">
-                          <button className="btn btn-outline btn-sm" onClick={() => scheduleFollowup(5)}>Reschedule</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => completeFollowup(5)}>Complete</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => editReminder(5)}>Edit</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => deleteReminder(5)}>Delete</button>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>
-                          <div className="crew-cell">
-                            <div className="name">Maria Rodriguez</div>
-                            <div className="id">CD12346</div>
-                          </div>
-                        </td>
-                        <td className="nowrap">Diabetes Monitoring</td>
-                        <td className="nowrap">2023-10-25</td>
-                        <td><span className="status-badge status-warning">Due Today</span></td>
-                        <td className="nowrap">High</td>
-                        <td className="action-buttons">
-                          <button className="btn btn-outline btn-sm" onClick={() => scheduleFollowup(6)}>Reschedule</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => completeFollowup(6)}>Complete</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => editReminder(6)}>Edit</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => deleteReminder(6)}>Delete</button>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>
-                          <div className="crew-cell">
-                            <div className="name">James Wilson</div>
-                            <div className="id">CD12347</div>
-                          </div>
-                        </td>
-                        <td className="nowrap">Asthma Control Check</td>
-                        <td className="nowrap">2023-10-30</td>
-                        <td><span className="status-badge status-active">Scheduled</span></td>
-                        <td className="nowrap">Medium</td>
-                        <td className="action-buttons">
-                          <button className="btn btn-outline btn-sm" onClick={() => scheduleFollowup(7)}>Reschedule</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => completeFollowup(7)}>Complete</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => editReminder(7)}>Edit</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => deleteReminder(7)}>Delete</button>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>
-                          <div className="crew-cell">
-                            <div className="name">Lisa Chen</div>
-                            <div className="id">CD12348</div>
-                          </div>
-                        </td>
-                        <td className="nowrap">Thyroid Function Test</td>
-                        <td className="nowrap">2023-11-05</td>
-                        <td><span className="status-badge status-active">Scheduled</span></td>
-                        <td className="nowrap">Medium</td>
-                        <td className="action-buttons">
-                          <button className="btn btn-outline btn-sm" onClick={() => scheduleFollowup(8)}>Reschedule</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => completeFollowup(8)}>Complete</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => editReminder(8)}>Edit</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => deleteReminder(8)}>Delete</button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+                  <div className="table-responsive">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Patient</th>
+                          <th>Follow-up Type</th>
+                          <th>Scheduled Date</th>
+                          <th>Status</th>
+                          <th>Priority</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {loading && (
+                          <tr>
+                            <td colSpan={6} style={{ textAlign: 'center', padding: '24px' }}>Loading reminders…</td>
+                          </tr>
+                        )}
+                        {!loading && followupReminders.length === 0 && (
+                          <tr>
+                            <td colSpan={6} style={{ textAlign: 'center', padding: '24px' }}>No reminders match the current filters.</td>
+                          </tr>
+                        )}
+                        {followupReminders.map((reminder) => (
+                          <tr key={reminder.id}>
+                            <td>
+                              <div className="crew-cell">
+                                <div className="name">{reminder.crewName}</div>
+                                <div className="id">{reminder.crewId}</div>
+                              </div>
+                            </td>
+                            <td className="nowrap">{reminder.followup?.followupType || '—'}</td>
+                            <td className="nowrap">{reminder.displayTime}</td>
+                            <td><span className={`status-badge ${reminder.statusClass}`}>{reminder.statusLabel}</span></td>
+                            <td className="nowrap">{reminder.followup?.priority || '—'}</td>
+                            <td className="action-buttons">
+                              <button className="btn btn-outline btn-sm" onClick={() => handleReschedule(reminder)}>Reschedule</button>
+                              <button className="btn btn-outline btn-sm" onClick={() => handleMarkCompleted(reminder)}>Complete</button>
+                              <button className="btn btn-outline btn-sm" onClick={() => handleEdit(reminder)}>Edit</button>
+                              <button className="btn btn-outline btn-sm" onClick={() => handleDelete(reminder)}>Delete</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             )}
@@ -628,24 +694,36 @@ export default function HealthReminders() {
               <div className="form-grid">
                 <div className="form-group">
                   <label htmlFor="reminderType">Reminder Type *</label>
-                  <select id="reminderType" className="form-control" required value={reminderType} onChange={(e) => setReminderType(e.target.value)}>
+                  <select id="reminderType" name="reminderType" className="form-control" required value={reminderType} onChange={(e) => setReminderType(e.target.value)}>
                     <option value="">Select type</option>
                     <option value="medication">Medication</option>
                     <option value="followup">Follow-up</option>
-                    <option value="test">Medical Test</option>
-                    <option value="other">Other</option>
                   </select>
                 </div>
 
                 <div className="form-group">
                   <label htmlFor="reminderPatient">Patient *</label>
-                  <select id="reminderPatient" className="form-control" required defaultValue="">
-                    <option value="">Select patient</option>
-                    <option value="CD12345">John Doe (CD12345)</option>
-                    <option value="CD12346">Maria Rodriguez (CD12346)</option>
-                    <option value="CD12347">James Wilson (CD12347)</option>
-                    <option value="CD12348">Lisa Chen (CD12348)</option>
+                  <select
+                    id="reminderPatient"
+                    name="reminderPatient"
+                    className="form-control"
+                    required
+                    value={newReminderData.crewId}
+                    onChange={(e) => {
+                      const crewId = e.target.value;
+                      const crew = crewOptions.find((c) => c.crewId === crewId);
+                      setNewReminderData({ crewId, crewName: crew?.fullName || '' });
+                    }}
+                    disabled={crewLoading}
+                  >
+                    <option value="">{crewLoading ? 'Loading crew...' : 'Select patient'}</option>
+                    {crewOptions.map((crew) => (
+                      <option key={crew.id} value={crew.crewId}>
+                        {crew.fullName} ({crew.crewId})
+                      </option>
+                    ))}
                   </select>
+                  {crewError && <small style={{ color: '#dc2626' }}>{crewError}</small>}
                 </div>
               </div>
 
@@ -655,17 +733,21 @@ export default function HealthReminders() {
                   <div className="form-grid">
                     <div className="form-group">
                       <label htmlFor="medicationName">Medication Name *</label>
-                      <input type="text" id="medicationName" className="form-control" placeholder="e.g., Metformin" required />
+                      <input type="text" id="medicationName" name="medicationName" className="form-control" placeholder="e.g., Metformin" required />
                     </div>
                     <div className="form-group">
                       <label htmlFor="medicationDosage">Dosage *</label>
-                      <input type="text" id="medicationDosage" className="form-control" placeholder="e.g., 500mg" required />
+                      <input type="text" id="medicationDosage" name="medicationDosage" className="form-control" placeholder="e.g., 500mg" required />
                     </div>
                   </div>
                   <div className="form-grid">
                     <div className="form-group">
+                      <label htmlFor="medicationDate">Scheduled Date *</label>
+                      <input type="date" id="medicationDate" name="medicationDate" className="form-control" required />
+                    </div>
+                    <div className="form-group">
                       <label htmlFor="medicationFrequency">Frequency *</label>
-                      <select id="medicationFrequency" className="form-control" defaultValue="daily" required>
+                      <select id="medicationFrequency" name="medicationFrequency" className="form-control" defaultValue="daily" required>
                         <option value="daily">Daily</option>
                         <option value="twice-daily">Twice Daily</option>
                         <option value="weekly">Weekly</option>
@@ -675,7 +757,7 @@ export default function HealthReminders() {
                     </div>
                     <div className="form-group">
                       <label htmlFor="medicationTime">Time *</label>
-                      <input type="time" id="medicationTime" className="form-control" required />
+                      <input type="time" id="medicationTime" name="medicationTime" className="form-control" required />
                     </div>
                   </div>
                 </>
@@ -687,23 +769,23 @@ export default function HealthReminders() {
                   <div className="form-grid">
                     <div className="form-group">
                       <label htmlFor="followupType">Follow-up Type *</label>
-                      <input type="text" id="followupType" className="form-control" placeholder="e.g., Diabetes Review" required />
+                      <input type="text" id="followupType" name="followupType" className="form-control" placeholder="e.g., Diabetes Review" required />
                     </div>
                     <div className="form-group">
                       <label htmlFor="followupDate">Date *</label>
-                      <input type="date" id="followupDate" className="form-control" required />
+                      <input type="date" id="followupDate" name="followupDate" className="form-control" required />
                     </div>
                   </div>
                   <div className="form-group">
                     <label htmlFor="followupNotes">Notes</label>
-                    <textarea id="followupNotes" className="form-control" rows={3} placeholder="Additional details..."></textarea>
+                    <textarea id="followupNotes" name="followupNotes" className="form-control" rows={3} placeholder="Additional details..."></textarea>
                   </div>
                 </>
               )}
 
               <div className="form-group">
                 <label htmlFor="reminderNotes">Additional Notes</label>
-                <textarea id="reminderNotes" className="form-control" rows={3} placeholder="Any additional information..."></textarea>
+                <textarea id="reminderNotes" name="reminderNotes" className="form-control" rows={3} placeholder="Any additional information..."></textarea>
               </div>
 
               <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
@@ -727,24 +809,36 @@ export default function HealthReminders() {
               <div className="form-grid">
                 <div className="form-group">
                   <label htmlFor="editReminderType">Reminder Type *</label>
-                  <select id="editReminderType" className="form-control" required value={reminderType} onChange={(e) => setReminderType(e.target.value)}>
+                  <select id="editReminderType" name="editReminderType" className="form-control" required value={reminderType} onChange={(e) => setReminderType(e.target.value)}>
                     <option value="">Select type</option>
                     <option value="medication">Medication</option>
                     <option value="followup">Follow-up</option>
-                    <option value="test">Medical Test</option>
-                    <option value="other">Other</option>
                   </select>
                 </div>
 
                 <div className="form-group">
                   <label htmlFor="editReminderPatient">Patient *</label>
-                  <select id="editReminderPatient" className="form-control" required defaultValue={editingReminder?.crewId || ""}>
-                    <option value="">Select patient</option>
-                    <option value="CD12345">John Doe (CD12345)</option>
-                    <option value="CD12346">Maria Rodriguez (CD12346)</option>
-                    <option value="CD12347">James Wilson (CD12347)</option>
-                    <option value="CD12348">Lisa Chen (CD12348)</option>
+                  <select
+                    id="editReminderPatient"
+                    name="editReminderPatient"
+                    className="form-control"
+                    required
+                    value={editingReminder?.crewId || ''}
+                    onChange={(e) => {
+                      const crewId = e.target.value;
+                      const crew = crewOptions.find((c) => c.crewId === crewId);
+                      setEditingReminder((prev) => (prev ? { ...prev, crewId, crewName: crew?.fullName || prev.crewName } : prev));
+                    }}
+                    disabled={crewLoading}
+                  >
+                    <option value="">{crewLoading ? 'Loading crew...' : 'Select patient'}</option>
+                    {crewOptions.map((crew) => (
+                      <option key={crew.id} value={crew.crewId}>
+                        {crew.fullName} ({crew.crewId})
+                      </option>
+                    ))}
                   </select>
+                  {crewError && <small style={{ color: '#dc2626' }}>{crewError}</small>}
                 </div>
               </div>
 
@@ -754,17 +848,21 @@ export default function HealthReminders() {
                   <div className="form-grid">
                     <div className="form-group">
                       <label htmlFor="editMedicationName">Medication Name *</label>
-                      <input type="text" id="editMedicationName" className="form-control" placeholder="e.g., Metformin" defaultValue={editingReminder?.medicationName || ""} required />
+                      <input type="text" id="editMedicationName" name="editMedicationName" className="form-control" placeholder="e.g., Metformin" defaultValue={editingReminder?.medication?.name || editingReminder?.medicationName || ""} required />
                     </div>
                     <div className="form-group">
                       <label htmlFor="editMedicationDosage">Dosage *</label>
-                      <input type="text" id="editMedicationDosage" className="form-control" placeholder="e.g., 500mg" defaultValue={editingReminder?.dosage || ""} required />
+                      <input type="text" id="editMedicationDosage" name="editMedicationDosage" className="form-control" placeholder="e.g., 500mg" defaultValue={editingReminder?.medication?.dosage || editingReminder?.dosage || ""} required />
                     </div>
                   </div>
                   <div className="form-grid">
                     <div className="form-group">
+                      <label htmlFor="editMedicationDate">Scheduled Date *</label>
+                      <input type="date" id="editMedicationDate" name="editMedicationDate" className="form-control" defaultValue={editingReminder?.scheduledDate ? new Date(editingReminder.scheduledDate).toISOString().slice(0, 10) : ''} required />
+                    </div>
+                    <div className="form-group">
                       <label htmlFor="editMedicationFrequency">Frequency *</label>
-                      <select id="editMedicationFrequency" className="form-control" defaultValue={editingReminder?.frequency || "daily"} required>
+                      <select id="editMedicationFrequency" name="editMedicationFrequency" className="form-control" defaultValue={editingReminder?.medication?.frequency || editingReminder?.frequency || "daily"} required>
                         <option value="daily">Daily</option>
                         <option value="twice-daily">Twice Daily</option>
                         <option value="weekly">Weekly</option>
@@ -774,7 +872,7 @@ export default function HealthReminders() {
                     </div>
                     <div className="form-group">
                       <label htmlFor="editMedicationTime">Time *</label>
-                      <input type="time" id="editMedicationTime" className="form-control" defaultValue={editingReminder?.time || ""} required />
+                      <input type="time" id="editMedicationTime" name="editMedicationTime" className="form-control" defaultValue={editingReminder?.scheduledTime || editingReminder?.time || ""} required />
                     </div>
                   </div>
                 </>
@@ -786,23 +884,23 @@ export default function HealthReminders() {
                   <div className="form-grid">
                     <div className="form-group">
                       <label htmlFor="editFollowupType">Follow-up Type *</label>
-                      <input type="text" id="editFollowupType" className="form-control" placeholder="e.g., Diabetes Review" required />
+                      <input type="text" id="editFollowupType" name="editFollowupType" className="form-control" placeholder="e.g., Diabetes Review" defaultValue={editingReminder?.followup?.followupType || ''} required />
                     </div>
                     <div className="form-group">
                       <label htmlFor="editFollowupDate">Date *</label>
-                      <input type="date" id="editFollowupDate" className="form-control" required />
+                      <input type="date" id="editFollowupDate" name="editFollowupDate" className="form-control" defaultValue={editingReminder?.followup?.nextDueDate ? new Date(editingReminder.followup.nextDueDate).toISOString().slice(0, 10) : editingReminder?.scheduledDate ? new Date(editingReminder.scheduledDate).toISOString().slice(0, 10) : ''} required />
                     </div>
                   </div>
                   <div className="form-group">
                     <label htmlFor="editFollowupNotes">Notes</label>
-                    <textarea id="editFollowupNotes" className="form-control" rows={3} placeholder="Additional details..."></textarea>
+                    <textarea id="editFollowupNotes" name="editFollowupNotes" className="form-control" rows={3} placeholder="Additional details..." defaultValue={editingReminder?.followup?.notes || ''}></textarea>
                   </div>
                 </>
               )}
 
               <div className="form-group">
                 <label htmlFor="editReminderNotes">Additional Notes</label>
-                <textarea id="editReminderNotes" className="form-control" rows={3} placeholder="Any additional information..."></textarea>
+                <textarea id="editReminderNotes" name="editReminderNotes" className="form-control" rows={3} placeholder="Any additional information..." defaultValue={editingReminder?.notes || ''}></textarea>
               </div>
 
               <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>

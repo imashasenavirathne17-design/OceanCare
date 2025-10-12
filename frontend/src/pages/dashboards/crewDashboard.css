@@ -11,15 +11,90 @@
   --warning: #f4a261;
   --info: #3a86ff;
   --quarantine: #ff9f1c;
-  
+
   background-color: #f5f7fb;
   color: #333;
   min-height: 100vh;
 }
 
+.crew-dashboard * {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.crew-dashboard .fas,
+.crew-dashboard .far,
+.crew-dashboard .fa {
+  font-family: "Font Awesome 5 Free" !important;
+}
+.crew-dashboard .fab {
+  font-family: "Font Awesome 5 Brands" !important;
+}
+
 .dashboard-container {
   display: flex;
   min-height: 100vh;
+}
+
+.main-content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.welcome-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, var(--primary) 0%, #2a6ec9 100%);
+  color: #fff;
+  border-radius: 12px;
+  padding: 28px 32px;
+  margin-bottom: 28px;
+  box-shadow: 0 10px 25px rgba(58, 134, 255, 0.25);
+}
+
+.welcome-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.welcome-subtitle {
+  font-size: 15px;
+  max-width: 520px;
+  opacity: 0.9;
+}
+
+.welcome-icon {
+  font-size: 60px;
+  opacity: 0.85;
+}
+
+.dashboard-section {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.05);
+  padding: 24px;
+  margin-bottom: 28px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.section-title {
+  font-size: 20px;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.section-subtitle {
+  font-size: 14px;
+  color: #6b7280;
 }
 
 /* Sidebar */
@@ -47,6 +122,13 @@
 .logo h1 {
   font-size: 20px;
   font-weight: 700;
+  margin: 0;
+  line-height: 1.1;
+}
+
+.logo h1 span {
+  display: block;
+  letter-spacing: 0.5px;
 }
 
 .sidebar-menu {
@@ -299,6 +381,27 @@
 .btn-success { background: var(--success); color: white; }
 .btn-success:hover { background: #1e7d71; }
 
+.btn-warning { background: var(--warning); color: #fff; }
+.btn-warning:hover { background: #d48139; }
+
+.btn-outline {
+  background: transparent;
+  border: 1.5px solid var(--primary);
+  color: var(--primary);
+}
+
+.btn-outline:hover {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(58, 134, 255, 0.2);
+}
+
+.btn.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  border-radius: 6px;
+}
+
 /* Health Records */
 .health-records {
   background: white;
@@ -346,6 +449,10 @@
   align-items: center;
   padding: 15px;
   border-bottom: 1px solid #eee;
+  background: #fff;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.04);
 }
 
 .reminder-item:last-child { border-bottom: none; }
@@ -373,6 +480,30 @@
   margin-left: 10px;
   color: #777;
   font-size: 14px;
+}
+
+.reminder-tabs {
+  display: flex;
+  border-bottom: 1px solid #ddd;
+  margin-bottom: 20px;
+}
+
+.reminder-tab {
+  padding: 12px 20px;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  color: #6b7280;
+  transition: all 0.2s ease;
+}
+
+.reminder-tab.active {
+  border-bottom-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.reminder-tab:hover {
+  color: var(--primary);
 }
 
 /* Emergency Alert */

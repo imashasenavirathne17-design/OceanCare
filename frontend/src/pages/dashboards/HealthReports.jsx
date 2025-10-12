@@ -1,35 +1,446 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearSession, getUser } from '../../lib/token';
 import './healthOfficerDashboard.css';
+import './healthReport.css';
 import HealthSidebar from './HealthSidebar';
+import {
+  listHealthReports,
+  createHealthReport,
+  updateHealthReport,
+  deleteHealthReport,
+  getHealthReport,
+  getHealthReportStats,
+  downloadHealthReportPdf,
+  downloadHealthReportCsv
+} from '../../lib/healthReportApi';
+
+const tabCategoryMap = {
+  summary: 'summary',
+  analytics: 'analytics',
+  certificates: 'certificate',
+  scheduled: 'scheduled'
+};
+
+const sectionOptions = [
+  'Executive Summary',
+  'Crew Health Overview',
+  'Vaccination Status',
+  'Chronic Conditions',
+  'Mental Health',
+  'Medication Adherence',
+  'Incidents & Alerts',
+  'Inventory Overview',
+  'Recommendations'
+];
+
+const formatOptions = ['pdf', 'excel', 'dashboard'];
+
+const statusOptions = [
+  { value: 'completed', label: 'Completed' },
+  { value: 'processing', label: 'Processing' },
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'draft', label: 'Draft' }
+];
+
+const createUniqueId = () => `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+
+const createInitialFormData = (category = 'summary') => ({
+  category,
+  reportType: '',
+  title: '',
+  description: '',
+  startDate: '',
+  endDate: '',
+  generatedAt: '',
+  sections: ['Executive Summary', 'Crew Health Overview'],
+  formats: ['pdf'],
+  status: 'completed',
+  metrics: [],
+  files: [],
+  schedule: { enabled: false },
+  certificateInfo: null,
+  tags: []
+});
+
+const toInputDate = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  return date.toISOString().slice(0, 10);
+};
+
+const formatDate = (value) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return typeof value === 'string' ? value : '—';
+  }
+  return date.toLocaleDateString();
+};
+
+const getDateRangeBounds = (range) => {
+  if (!range || range === 'all') {
+    return { from: undefined, to: undefined };
+  }
+  const days = Number(range);
+  if (!Number.isFinite(days)) {
+    return { from: undefined, to: undefined };
+  }
+  const to = new Date();
+  const from = new Date();
+  from.setDate(from.getDate() - days);
+  return { from, to };
+};
+
+const formatReportStatus = (status) => {
+  if (!status) return '—';
+  return status.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
+const formatFileSize = (size) => {
+  if (!size) return '—';
+  if (size >= 1024 * 1024) {
+    return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+  }
+  if (size >= 1024) {
+    return `${(size / 1024).toFixed(2)} KB`;
+  }
+  return `${size} B`;
+};
+
+const mapReportToForm = (report) => ({
+  category: report.category || 'summary',
+  reportType: report.reportType || '',
+  title: report.title || '',
+  description: report.description || '',
+  startDate: toInputDate(report?.dateRange?.start),
+  endDate: toInputDate(report?.dateRange?.end),
+  generatedAt: toInputDate(report?.generatedAt),
+  sections: Array.isArray(report.sections) && report.sections.length ? report.sections : ['Executive Summary'],
+  formats: Array.isArray(report.formats) && report.formats.length ? report.formats : ['pdf'],
+  status: report.status || 'completed',
+  metrics: Array.isArray(report.metrics) ? report.metrics : [],
+  files: Array.isArray(report.files) ? report.files : [],
+  schedule: report.schedule || { enabled: false },
+  certificateInfo: report.certificateInfo || null,
+  tags: Array.isArray(report.tags) ? report.tags : []
+});
+
+const buildPayloadFromForm = (data) => {
+  const formats = Array.isArray(data.formats) && data.formats.length ? data.formats : ['pdf'];
+
+  return {
+    category: data.category,
+    reportType: data.reportType.trim(),
+    title: data.title.trim(),
+    description: data.description.trim(),
+    startDate: data.startDate,
+    endDate: data.endDate,
+    generatedAt: data.generatedAt,
+    status: data.status,
+    sections: Array.isArray(data.sections) && data.sections.length ? data.sections : ['Executive Summary'],
+    formats,
+    metrics: data.metrics || [],
+    files: data.files || [],
+    schedule: data.schedule || { enabled: false },
+    certificateInfo: data.certificateInfo || null,
+    tags: data.tags || []
+  };
+};
+
+const getReportId = (report) => report?._id || report?.id;
 
 export default function HealthReports() {
   const navigate = useNavigate();
   const user = getUser();
 
-  const [tab, setTab] = useState('summary');
-  const onLogout = () => { clearSession(); navigate('/login'); };
+  const [activeTab, setActiveTab] = useState('summary');
+  const [reports, setReports] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [filters, setFilters] = useState({ search: '', status: 'all', dateRange: '30' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState('create');
+  const [formData, setFormData] = useState(() => createInitialFormData());
+  const [formError, setFormError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const [selectedReportId, setSelectedReportId] = useState(null);
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [downloadingId, setDownloadingId] = useState(null);
 
-  // Set default dates for report generation when component mounts
-  useEffect(() => {
-    const start = document.getElementById('startDate');
-    const end = document.getElementById('endDate');
-    if (start && end) {
-      const today = new Date();
-      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-      const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      start.valueAsDate = firstDay;
-      end.valueAsDate = lastDay;
+  const onLogout = () => {
+    clearSession();
+    navigate('/login');
+  };
+
+  const loadStats = useCallback(async () => {
+    try {
+      const data = await getHealthReportStats();
+      setStats(data);
+    } catch (err) {
+      console.error('getHealthReportStats error', err);
     }
   }, []);
 
-  const generateReport = (e) => {
-    e.preventDefault();
-    alert('Report generation started! You will be notified when it is ready.');
-    const modal = document.getElementById('newReportModal');
-    if (modal) modal.style.display = 'none';
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      loadReports();
+    }, 250);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, filters.search, filters.status, filters.dateRange]);
+
+  const loadReports = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const params = {
+        category: tabCategoryMap[activeTab],
+        status: filters.status !== 'all' ? filters.status : undefined,
+        q: filters.search.trim() || undefined
+      };
+      const { from, to } = getDateRangeBounds(filters.dateRange);
+      if (from) params.from = from.toISOString();
+      if (to) params.to = to.toISOString();
+
+      const response = await listHealthReports(params);
+      const items = Array.isArray(response.items) ? response.items : response;
+      setReports(Array.isArray(items) ? items : []);
+
+      if (selectedReportId) {
+        const updated = items?.find((item) => getReportId(item) === selectedReportId);
+        if (updated) {
+          setSelectedReport((prev) => ({ ...(prev || {}), ...updated }));
+        }
+      }
+    } catch (err) {
+      console.error('listHealthReports error', err);
+      setError(err.message || 'Failed to load reports');
+      setReports([]);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const visibleReports = useMemo(() => {
+    return reports.map((report) => ({
+      ...report,
+      id: getReportId(report)
+    }));
+  }, [reports]);
+
+  const handleSelectReport = async (report) => {
+    if (!report) return;
+    const id = getReportId(report);
+    if (!id) return;
+    setSelectedReportId(id);
+    setSelectedReport(report);
+    setDetailModalOpen(true);
+    setDetailLoading(true);
+    try {
+      const detailed = await getHealthReport(id);
+      setSelectedReport((prev) => (getReportId(prev) === id ? detailed : prev));
+    } catch (err) {
+      console.error('getHealthReport error', err);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const openCreateModal = () => {
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    const category = tabCategoryMap[activeTab] || 'summary';
+    setModalMode('create');
+    setFormError('');
+    setFormData({
+      ...createInitialFormData(category),
+      startDate: toInputDate(firstDay),
+      endDate: toInputDate(lastDay),
+      generatedAt: toInputDate(today)
+    });
+    setModalOpen(true);
+  };
+
+  const openEditModal = (report) => {
+    if (!report) return;
+    const mapped = mapReportToForm(report);
+    setModalMode('edit');
+    setFormError('');
+    setFormData(mapped);
+    setModalOpen(true);
+    setSelectedReportId(getReportId(report));
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setFormError('');
+    setSaving(false);
+  };
+
+  const closeDetailModal = () => {
+    setDetailModalOpen(false);
+  };
+
+  const updateFormField = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const toggleSection = (section) => {
+    setFormData((prev) => {
+      const exists = prev.sections.includes(section);
+      return {
+        ...prev,
+        sections: exists ? prev.sections.filter((item) => item !== section) : [...prev.sections, section]
+      };
+    });
+  };
+
+  const toggleFormat = (format) => {
+    setFormData((prev) => {
+      const exists = prev.formats.includes(format);
+      if (exists) {
+        const next = prev.formats.filter((item) => item !== format);
+        return {
+          ...prev,
+          formats: next.length ? next : ['pdf']
+        };
+      }
+      return {
+        ...prev,
+        formats: [...prev.formats, format]
+      };
+    });
+  };
+
+  const handleDeleteReport = async (report) => {
+    if (!report) return;
+    const id = getReportId(report);
+    if (!id) return;
+    if (!window.confirm(`Delete report "${report.title}"? This action cannot be undone.`)) {
+      return;
+    }
+    setDeletingId(id);
+    try {
+      await deleteHealthReport(id);
+      setSelectedReportId((prev) => (prev === id ? null : prev));
+      setSelectedReport((prev) => (getReportId(prev) === id ? null : prev));
+      await loadReports();
+    } catch (err) {
+      console.error('deleteHealthReport error', err);
+      alert(err.message || 'Failed to delete report');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleFormSubmit = async (event) => {
+    event.preventDefault();
+    setFormError('');
+
+    if (!formData.reportType.trim()) {
+      setFormError('Report type is required.');
+      return;
+    }
+    if (!formData.title.trim()) {
+      setFormError('Report title is required.');
+      return;
+    }
+    if (!formData.startDate || !formData.endDate) {
+      setFormError('Please provide both start and end dates.');
+      return;
+    }
+
+    const payload = buildPayloadFromForm(formData);
+    setSaving(true);
+    try {
+      let savedReport;
+      if (modalMode === 'edit' && selectedReportId) {
+        savedReport = await updateHealthReport(selectedReportId, payload);
+      } else {
+        savedReport = await createHealthReport(payload);
+      }
+      if (savedReport) {
+        const savedId = getReportId(savedReport);
+        if (modalMode === 'edit' && savedId) {
+          setSelectedReportId(savedId);
+        }
+        if (modalMode === 'edit') {
+          setSelectedReport((prev) => (getReportId(prev) === savedId ? savedReport : prev));
+        }
+      }
+      closeModal();
+      await loadReports();
+      await loadStats();
+    } catch (err) {
+      console.error('save health report error', err);
+      setFormError(err.message || 'Failed to save report');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDownloadReport = async (report, format) => {
+    if (!report) return;
+    const id = getReportId(report);
+    if (!id) return;
+    const key = `${id}-${format}`;
+    setDownloadingId(key);
+    try {
+      if (format === 'pdf') {
+        await downloadHealthReportPdf(id);
+      } else {
+        await downloadHealthReportCsv(id);
+      }
+    } catch (err) {
+      console.error(`download health report ${format} error`, err);
+      alert(err.message || `Failed to download ${format.toUpperCase()} report`);
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const renderStatusBadge = (status) => (
+    <span className={`report-status ${status || 'draft'}`}>
+      <span className="dot"></span>
+      {formatReportStatus(status)}
+    </span>
+  );
+
+  const schedulePill = (report) => {
+    if (!report?.schedule?.enabled) {
+      return 'Manual';
+    }
+    const frequency = report.schedule.frequency || 'custom';
+    const next = report.schedule.nextRunAt ? formatDate(report.schedule.nextRunAt) : '—';
+    return `${frequency} • Next: ${next}`;
+  };
+
+  const emptyMessages = {
+    summary: 'No summary reports found. Generate a new summary to get started.',
+    analytics: 'No analytics reports available. Create one to analyze crew health metrics.',
+    certificates: 'No health certificates generated yet.',
+    scheduled: 'No scheduled reports configured. Use the schedule options to automate.'
+  };
+
+  const currentEmptyMessage = emptyMessages[activeTab] || 'No reports available.';
+
+  const categoryCounts = stats?.categoryCounts || {};
 
   return (
     <div className="health-dashboard">
@@ -41,10 +452,13 @@ export default function HealthReports() {
           <div className="header">
             <h2>Health Reports & Analytics</h2>
             <div className="user-info">
-              <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || 'Health Officer')}&background=2a9d8f&color=fff`} alt="User" />
+              <img
+                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || 'Health Officer')}&background=2a9d8f&color=fff`}
+                alt="User"
+              />
               <div>
-                <div>{user?.fullName || 'Dr. Sarah Johnson'}</div>
-                <small>Health Officer | MV Ocean Explorer</small>
+                <div>{user?.fullName || 'Health Officer'}</div>
+                <small>MV Ocean Explorer | Health Division</small>
               </div>
               <div className="status-badge status-active">Active</div>
             </div>
@@ -55,56 +469,35 @@ export default function HealthReports() {
             <div className="page-header">
               <div className="page-title">Reports Dashboard</div>
               <div className="page-actions">
-                <button className="btn btn-outline"><i className="fas fa-cog"></i> Report Settings</button>
-                <button className="btn btn-reports" onClick={() => { const m = document.getElementById('newReportModal'); if (m) m.style.display = 'flex'; }}>
-                  <i className="fas fa-plus"></i> Generate Report
+                <button className="btn btn-outline" type="button">
+                  <i className="fas fa-download"></i> Export CSV
+                </button>
+                <button className="btn btn-primary" type="button" onClick={openCreateModal}>
+                  <i className="fas fa-plus"></i> New Report
                 </button>
               </div>
             </div>
 
-            <div className="stats-container">
-              {[
-                ['24', 'Reports Generated'],
-                ['8', 'This Month'],
-                ['87%', 'Crew Health Compliance'],
-                ['5', 'Scheduled Reports'],
-              ].map(([v, l], idx) => (
-                <div className="stat-item" key={idx}>
-                  <div className="stat-value">{v}</div>
-                  <div className="stat-label">{l}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="charts-container">
-              <div className="chart-card">
-                <div className="chart-header">
-                  <div className="chart-title">Medical Consultations by Type</div>
-                  <select className="filter-select" style={{ width: 'auto' }}>
-                    <option>Last 30 Days</option>
-                    <option>Last 3 Months</option>
-                    <option>Last 6 Months</option>
-                  </select>
-                </div>
-                <div className="chart-placeholder">
-                  <i className="fas fa-chart-bar" style={{ fontSize: 48, marginRight: 15 }}></i>
-                  <div>Bar chart visualization would appear here</div>
-                </div>
+            <div className="report-stats">
+              <div className="report-card accent">
+                <div className="stat-label">Total Reports</div>
+                <div className="stat-value">{stats?.totalReports ?? '—'}</div>
+                <div className="stat-subtext">Across all categories</div>
               </div>
-
-              <div className="chart-card">
-                <div className="chart-header">
-                  <div className="chart-title">Vaccination Status</div>
-                  <select className="filter-select" style={{ width: 'auto' }}>
-                    <option>Current Status</option>
-                    <option>6 Month Trend</option>
-                    <option>Yearly Comparison</option>
-                  </select>
-                </div>
-                <div className="chart-placeholder">
-                  <i className="fas fa-chart-pie" style={{ fontSize: 48, marginRight: 15 }}></i>
-                  <div>Pie chart visualization would appear here</div>
-                </div>
+              <div className="report-card">
+                <div className="stat-label">This Month</div>
+                <div className="stat-value">{stats?.monthReports ?? '—'}</div>
+                <div className="stat-subtext">Generated since {formatDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}</div>
+              </div>
+              <div className="report-card">
+                <div className="stat-label">Scheduled</div>
+                <div className="stat-value">{stats?.scheduledReports ?? '—'}</div>
+                <div className="stat-subtext">Automated report workflows</div>
+              </div>
+              <div className="report-card">
+                <div className="stat-label">Compliance</div>
+                <div className="stat-value">{stats?.complianceRate !== undefined ? `${stats.complianceRate}%` : '—'}</div>
+                <div className="stat-subtext">Completion rate for issued reports</div>
               </div>
             </div>
           </div>
@@ -115,508 +508,513 @@ export default function HealthReports() {
             </div>
 
             <div className="tabs">
-              <div className={`tab ${tab === 'summary' ? 'active' : ''}`} onClick={() => setTab('summary')}>Summary Reports</div>
-              <div className={`tab ${tab === 'analytics' ? 'active' : ''}`} onClick={() => setTab('analytics')}>Health Analytics</div>
-              <div className={`tab ${tab === 'certificates' ? 'active' : ''}`} onClick={() => setTab('certificates')}>Health Certificates</div>
-              <div className={`tab ${tab === 'scheduled' ? 'active' : ''}`} onClick={() => setTab('scheduled')}>Scheduled Reports</div>
+              <div
+                className={`tab ${activeTab === 'summary' ? 'active' : ''}`}
+                onClick={() => setActiveTab('summary')}
+              >
+                Summary Reports ({categoryCounts.summary || 0})
+              </div>
+              <div
+                className={`tab ${activeTab === 'analytics' ? 'active' : ''}`}
+                onClick={() => setActiveTab('analytics')}
+              >
+                Health Analytics ({categoryCounts.analytics || 0})
+              </div>
+              <div
+                className={`tab ${activeTab === 'certificates' ? 'active' : ''}`}
+                onClick={() => setActiveTab('certificates')}
+              >
+                Health Certificates ({categoryCounts.certificate || 0})
+              </div>
+              <div
+                className={`tab ${activeTab === 'scheduled' ? 'active' : ''}`}
+                onClick={() => setActiveTab('scheduled')}
+              >
+                Scheduled Reports ({categoryCounts.scheduled || 0})
+              </div>
             </div>
 
-            {tab === 'summary' && (
-              <div className="tab-content active" id="summary-tab">
-                <div className="search-filter">
-                  <div className="search-box">
-                    <i className="fas fa-search"></i>
-                    <input type="text" placeholder="Search reports..." />
-                  </div>
-                  <div className="filter-group">
-                    <select className="filter-select">
-                      <option>All Report Types</option>
-                      <option>Monthly Health Summary</option>
-                      <option>Vaccination Status</option>
-                      <option>Chronic Illness Report</option>
-                      <option>Incident Report</option>
-                      <option>Inventory Report</option>
-                    </select>
-                    <select className="filter-select">
-                      <option>Last 30 Days</option>
-                      <option>Last 3 Months</option>
-                      <option>Last 6 Months</option>
-                      <option>Custom Range</option>
-                    </select>
-                  </div>
+            <div className="tab-content active">
+              <div className="report-filters">
+                <div className="search-box">
+                  <i className="fas fa-search"></i>
+                  <input
+                    type="text"
+                    placeholder="Search reports by title, type, or tag..."
+                    value={filters.search}
+                    onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+                  />
                 </div>
+                <select
+                  className="filter-select"
+                  value={filters.status}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                >
+                  <option value="all">All Status</option>
+                  {statusOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="filter-select"
+                  value={filters.dateRange}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, dateRange: e.target.value }))}
+                >
+                  <option value="30">Last 30 Days</option>
+                  <option value="90">Last 90 Days</option>
+                  <option value="180">Last 180 Days</option>
+                  <option value="365">Last Year</option>
+                  <option value="all">All Time</option>
+                </select>
+              </div>
 
-                <div className="cards-container">
-                  <div className="card recent">
-                    <div className="card-header">
-                      <div className="card-title">October 2023 Health Summary</div>
-                      <div className="card-icon primary"><i className="fas fa-file-medical"></i></div>
-                    </div>
-                    <div className="card-content">
-                      <div className="card-description">Comprehensive monthly health overview including consultations, vaccinations, and chronic condition management.</div>
-                      <div className="card-meta">Generated: 2023-11-01 | By: Dr. Johnson</div>
-                    </div>
-                    <div className="card-actions">
-                      <button className="btn btn-outline btn-sm">View</button>
-                      <button className="btn btn-outline btn-sm">PDF</button>
-                      <button className="btn btn-outline btn-sm">Excel</button>
-                    </div>
-                  </div>
-
-                  <div className="card">
-                    <div className="card-header">
-                      <div className="card-title">Q3 Vaccination Status</div>
-                      <div className="card-icon reports"><i className="fas fa-syringe"></i></div>
-                    </div>
-                    <div className="card-content">
-                      <div className="card-description">Vaccination compliance report with coverage rates, overdue vaccinations, and schedule adherence.</div>
-                      <div className="card-meta">Generated: 2023-10-05 | By: Dr. Johnson</div>
-                    </div>
-                    <div className="card-actions">
-                      <button className="btn btn-outline btn-sm">View</button>
-                      <button className="btn btn-outline btn-sm">PDF</button>
-                      <button className="btn btn-outline btn-sm">Excel</button>
-                    </div>
-                  </div>
-
-                  <div className="card">
-                    <div className="card-header">
-                      <div className="card-title">Chronic Conditions Review</div>
-                      <div className="card-icon reports"><i className="fas fa-heartbeat"></i></div>
-                    </div>
-                    <div className="card-content">
-                      <div className="card-description">Analysis of chronic illness management, treatment adherence, and health outcomes.</div>
-                      <div className="card-meta">Generated: 2023-10-15 | By: Dr. Johnson</div>
-                    </div>
-                    <div className="card-actions">
-                      <button className="btn btn-outline btn-sm">View</button>
-                      <button className="btn btn-outline btn-sm">PDF</button>
-                      <button className="btn btn-outline btn-sm">Excel</button>
-                    </div>
-                  </div>
+              {error && (
+                <div
+                  className="alert alert-danger"
+                  style={{ marginBottom: 16, padding: 12, borderRadius: 10 }}
+                >
+                  <i className="fas fa-exclamation-triangle" style={{ marginRight: 8 }}></i>
+                  {error}
                 </div>
+              )}
 
-                <div className="table-responsive">
+              {loading ? (
+                <div
+                  className="alert alert-info"
+                  style={{ marginBottom: 16, padding: 12, borderRadius: 10 }}
+                >
+                  <i className="fas fa-spinner fa-spin" style={{ marginRight: 8 }}></i>
+                  Loading reports...
+                </div>
+              ) : visibleReports.length === 0 ? (
+                <div className="empty-state">
+                  <h4>No Reports Found</h4>
+                  <p>{currentEmptyMessage}</p>
+                  <button className="btn btn-primary" type="button" onClick={openCreateModal}>
+                    Create Report
+                  </button>
+                </div>
+              ) : (
+                <div className="report-table">
                   <table>
                     <thead>
                       <tr>
-                        <th>Report Name</th>
+                        <th>Report</th>
                         <th>Type</th>
                         <th>Date Range</th>
-                        <th>Generated By</th>
-                        <th>File Size</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>October 2023 Health Summary</td>
-                        <td>Monthly Summary</td>
-                        <td>2023-10-01 to 2023-10-31</td>
-                        <td>Dr. Johnson</td>
-                        <td>2.4 MB</td>
-                        <td className="action-buttons">
-                          <button className="btn btn-outline btn-sm">View</button>
-                          <button className="btn btn-outline btn-sm">PDF</button>
-                          <button className="btn btn-outline btn-sm">Excel</button>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>Q3 Vaccination Status</td>
-                        <td>Vaccination Report</td>
-                        <td>2023-07-01 to 2023-09-30</td>
-                        <td>Dr. Johnson</td>
-                        <td>1.8 MB</td>
-                        <td className="action-buttons">
-                          <button className="btn btn-outline btn-sm">View</button>
-                          <button className="btn btn-outline btn-sm">PDF</button>
-                          <button className="btn btn-outline btn-sm">Excel</button>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>Chronic Conditions Review</td>
-                        <td>Chronic Illness Report</td>
-                        <td>2023-01-01 to 2023-10-25</td>
-                        <td>Dr. Johnson</td>
-                        <td>3.2 MB</td>
-                        <td className="action-buttons">
-                          <button className="btn btn-outline btn-sm">View</button>
-                          <button className="btn btn-outline btn-sm">PDF</button>
-                          <button className="btn btn-outline btn-sm">Excel</button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {tab === 'analytics' && (
-              <div className="tab-content active" id="analytics-tab">
-                <div className="search-filter">
-                  <div className="search-box">
-                    <i className="fas fa-search"></i>
-                    <input type="text" placeholder="Search analytics..." />
-                  </div>
-                  <div className="filter-group">
-                    <select className="filter-select">
-                      <option>All Metrics</option>
-                      <option>Consultation Rates</option>
-                      <option>Vaccination Coverage</option>
-                      <option>Chronic Disease Control</option>
-                      <option>Medication Adherence</option>
-                    </select>
-                    <select className="filter-select">
-                      <option>Last 30 Days</option>
-                      <option>Last 3 Months</option>
-                      <option>Last 6 Months</option>
-                      <option>Year to Date</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="charts-container">
-                  <div className="chart-card">
-                    <div className="chart-header">
-                      <div className="chart-title">Consultation Trends</div>
-                      <select className="filter-select" style={{ width: 'auto' }}>
-                        <option>Monthly</option>
-                        <option>Weekly</option>
-                        <option>Quarterly</option>
-                      </select>
-                    </div>
-                    <div className="chart-placeholder">
-                      <i className="fas fa-chart-line" style={{ fontSize: 48, marginRight: 15 }}></i>
-                      <div>Line chart showing consultation trends would appear here</div>
-                    </div>
-                  </div>
-
-                  <div className="chart-card">
-                    <div className="chart-header">
-                      <div className="chart-title">Top Medical Conditions</div>
-                      <select className="filter-select" style={{ width: 'auto' }}>
-                        <option>Current Month</option>
-                        <option>Last 3 Months</option>
-                        <option>Year to Date</option>
-                      </select>
-                    </div>
-                    <div className="chart-placeholder">
-                      <i className="fas fa-chart-bar" style={{ fontSize: 48, marginRight: 15 }}></i>
-                      <div>Bar chart of top medical conditions would appear here</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="page-content">
-                  <div className="page-header">
-                    <div className="page-title">Key Performance Indicators</div>
-                  </div>
-
-                  <div className="table-responsive">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Metric</th>
-                          <th>Current Value</th>
-                          <th>Previous Period</th>
-                          <th>Trend</th>
-                          <th>Target</th>
-                          <th>Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td>Crew Vaccination Rate</td>
-                          <td>87%</td>
-                          <td>82%</td>
-                          <td><i className="fas fa-arrow-up" style={{ color: 'var(--success)' }}></i> +5%</td>
-                          <td>95%</td>
-                          <td><span className="status-badge status-warning">Below Target</span></td>
-                        </tr>
-                        <tr>
-                          <td>Chronic Condition Control</td>
-                          <td>92%</td>
-                          <td>89%</td>
-                          <td><i className="fas fa-arrow-up" style={{ color: 'var(--success)' }}></i> +3%</td>
-                          <td>90%</td>
-                          <td><span className="status-badge status-active">On Target</span></td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {tab === 'certificates' && (
-              <div className="tab-content active" id="certificates-tab">
-                <div className="page-header">
-                  <div className="page-title">Health Certificates</div>
-                  <div className="page-actions">
-                    <button className="btn btn-outline"><i className="fas fa-print"></i> Bulk Print</button>
-                    <button className="btn btn-reports" onClick={() => alert('Generate certificate')}><i className="fas fa-file-medical"></i> Generate Certificate</button>
-                  </div>
-                </div>
-
-                <div className="report-preview">
-                  <div className="report-header">
-                    <div className="report-title">CREW HEALTH CERTIFICATE</div>
-                    <div className="report-subtitle">MV Ocean Explorer | Issued: 2023-10-25</div>
-                  </div>
-
-                  <div className="report-section">
-                    <div className="section-title">Crew Member Information</div>
-                    <div className="report-data">
-                      <div>
-                        <div className="data-item"><span className="data-label">Name:</span><span>John Doe</span></div>
-                        <div className="data-item"><span className="data-label">Position:</span><span>Deck Officer</span></div>
-                        <div className="data-item"><span className="data-label">Crew ID:</span><span>CD12345</span></div>
-                      </div>
-                      <div>
-                        <div className="data-item"><span className="data-label">Date of Birth:</span><span>1985-03-15</span></div>
-                        <div className="data-item"><span className="data-label">Nationality:</span><span>Canadian</span></div>
-                        <div className="data-item"><span className="data-label">Passport No:</span><span>AB123456</span></div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="report-section">
-                    <div className="section-title">Health Status</div>
-                    <div className="report-data">
-                      <div>
-                        <div className="data-item"><span className="data-label">Last Medical Exam:</span><span>2023-10-15</span></div>
-                        <div className="data-item"><span className="data-label">Overall Health:</span><span>Fit for Duty</span></div>
-                      </div>
-                      <div>
-                        <div className="data-item"><span className="data-label">Vaccination Status:</span><span>Up to Date</span></div>
-                        <div className="data-item"><span className="data-label">Next Review:</span><span>2024-04-15</span></div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="report-footer">
-                    <div className="data-item"><span className="data-label">Health Officer:</span><span>Dr. Sarah Johnson</span></div>
-                    <div className="data-item"><span className="data-label">Signature:</span><span><img src="https://i.imgur.com/7I5q1aE.png" alt="Signature" style={{ height: 30, marginLeft: 10 }} /></span></div>
-                  </div>
-                </div>
-
-                <div className="table-responsive">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Crew Member</th>
-                        <th>Certificate Type</th>
-                        <th>Issue Date</th>
-                        <th>Expiry Date</th>
                         <th>Status</th>
+                        <th>Schedule</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr>
-                        <td>John Doe</td>
-                        <td>Fitness for Duty</td>
-                        <td>2023-10-15</td>
-                        <td>2024-04-15</td>
-                        <td><span className="status-badge status-active">Valid</span></td>
-                        <td className="action-buttons">
-                          <button className="btn btn-outline btn-sm">View</button>
-                          <button className="btn btn-outline btn-sm">Print</button>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>Maria Rodriguez</td>
-                        <td>Vaccination Certificate</td>
-                        <td>2023-09-20</td>
-                        <td>2024-09-20</td>
-                        <td><span className="status-badge status-active">Valid</span></td>
-                        <td className="action-buttons">
-                          <button className="btn btn-outline btn-sm">View</button>
-                          <button className="btn btn-outline btn-sm">Print</button>
-                        </td>
-                      </tr>
+                      {visibleReports.map((report) => {
+                        const id = report.id;
+                        const isDeleting = deletingId === id;
+                        const isSelected = selectedReportId === id;
+                        const dateRange = report.dateRange
+                          ? `${formatDate(report.dateRange.start)} – ${formatDate(report.dateRange.end)}`
+                          : '—';
+                        return (
+                          <tr key={id} className={isSelected ? 'selected' : ''}>
+                            <td>
+                              <div className="report-title">{report.title || 'Untitled Report'}</div>
+                              <div className="report-meta">
+                                <span>Generated {formatDate(report.generatedAt)}</span>
+                                <span>By {report.generatedBy || 'Health Officer'}</span>
+                                {Array.isArray(report.tags) && report.tags.length > 0 && (
+                                  <span>Tags: {report.tags.join(', ')}</span>
+                                )}
+                              </div>
+                            </td>
+                            <td>{report.reportType || 'General'}</td>
+                            <td>{dateRange}</td>
+                            <td>{renderStatusBadge(report.status)}</td>
+                            <td>
+                              {report.schedule?.enabled ? (
+                                <span className="schedule-pill">{schedulePill(report)}</span>
+                              ) : (
+                                'Manual'
+                              )}
+                            </td>
+                            <td>
+                              <div className="report-actions">
+                                <button
+                                  type="button"
+                                  className="btn btn-outline btn-sm"
+                                  disabled={downloadingId === `${id}-pdf`}
+                                  onClick={() => handleDownloadReport(report, 'pdf')}
+                                >
+                                  {downloadingId === `${id}-pdf` ? 'Downloading...' : 'PDF'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-outline btn-sm"
+                                  disabled={downloadingId === `${id}-csv`}
+                                  onClick={() => handleDownloadReport(report, 'csv')}
+                                >
+                                  {downloadingId === `${id}-csv` ? 'Downloading...' : 'CSV'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-outline btn-sm"
+                                  onClick={() => handleSelectReport(report)}
+                                >
+                                  View
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-outline btn-sm"
+                                  onClick={() => openEditModal(report)}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-outline btn-sm"
+                                  disabled={isDeleting}
+                                  onClick={() => handleDeleteReport(report)}
+                                >
+                                  {isDeleting ? 'Deleting...' : 'Delete'}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
-              </div>
-            )}
+              )}
 
-            {tab === 'scheduled' && (
-              <div className="tab-content active" id="scheduled-tab">
-                <div className="page-header">
-                  <div className="page-title">Scheduled Reports</div>
-                  <div className="page-actions">
-                    <button className="btn btn-outline"><i className="fas fa-pause"></i> Pause All</button>
-                    <button className="btn btn-reports" onClick={() => { const m = document.getElementById('scheduleReportModal'); if (m) m.style.display = 'flex'; }}><i className="fas fa-plus"></i> Schedule Report</button>
+              {detailModalOpen && selectedReport && (
+                <div
+                  className="modal open"
+                  onClick={(e) => e.target.classList.contains('modal') && closeDetailModal()}
+                >
+                  <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
+                    <div className="modal-header">
+                      <h3 className="modal-title">{selectedReport.title || 'Report Details'}</h3>
+                      <button className="close-modal" onClick={closeDetailModal} type="button">
+                        &times;
+                      </button>
+                    </div>
+                    <div className="report-detail-modal">
+                      {detailLoading ? (
+                        <div className="detail-loading">
+                          <i className="fas fa-spinner fa-spin" style={{ marginRight: 8 }}></i>
+                          Loading details...
+                        </div>
+                      ) : (
+                        <>
+                          <div className="report-detail-grid">
+                            <div className="report-detail-item">
+                              <span>Report Type</span>
+                              <span>{selectedReport.reportType || 'General'}</span>
+                            </div>
+                            <div className="report-detail-item">
+                              <span>Date Range</span>
+                              <span>
+                                {selectedReport.dateRange
+                                  ? `${formatDate(selectedReport.dateRange.start)} – ${formatDate(selectedReport.dateRange.end)}`
+                                  : '—'}
+                              </span>
+                            </div>
+                            <div className="report-detail-item">
+                              <span>Generated On</span>
+                              <span>{formatDate(selectedReport.generatedAt)}</span>
+                            </div>
+                            <div className="report-detail-item">
+                              <span>Generated By</span>
+                              <span>{selectedReport.generatedBy || 'Health Officer'}</span>
+                            </div>
+                            <div className="report-detail-item">
+                              <span>Status</span>
+                              <span>{renderStatusBadge(selectedReport.status)}</span>
+                            </div>
+                            <div className="report-detail-item">
+                              <span>File Size</span>
+                              <span>{formatFileSize(selectedReport.fileSize)}</span>
+                            </div>
+                            <div className="report-detail-item">
+                              <span>Schedule</span>
+                              <span>{schedulePill(selectedReport)}</span>
+                            </div>
+                            <div className="report-detail-item">
+                              <span>Recipients</span>
+                              <span>
+                                {Array.isArray(selectedReport?.schedule?.recipients) && selectedReport.schedule.recipients.length
+                                  ? selectedReport.schedule.recipients.join(', ')
+                                  : '—'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {selectedReport.description && (
+                            <div style={{ marginTop: 20 }}>
+                              <strong>Description:</strong>
+                              <p style={{ marginTop: 6 }}>{selectedReport.description}</p>
+                            </div>
+                          )}
+
+                          {Array.isArray(selectedReport.sections) && selectedReport.sections.length > 0 && (
+                            <div style={{ marginTop: 20 }}>
+                              <strong>Sections Included</strong>
+                              <div className="report-sections-list">
+                                {selectedReport.sections.map((section) => (
+                                  <span key={section}>{section}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {Array.isArray(selectedReport.tags) && selectedReport.tags.length > 0 && (
+                            <div style={{ marginTop: 20 }}>
+                              <strong>Tags</strong>
+                              <div className="report-tags-list">
+                                {selectedReport.tags.map((tag) => (
+                                  <span key={tag}>{tag}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {Array.isArray(selectedReport.metrics) && selectedReport.metrics.length > 0 && (
+                            <div className="report-metrics">
+                              <strong>Key Metrics</strong>
+                              <table>
+                                <thead>
+                                  <tr>
+                                    <th>Metric</th>
+                                    <th>Current</th>
+                                    <th>Previous</th>
+                                    <th>Target</th>
+                                    <th>Trend</th>
+                                    <th>Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {selectedReport.metrics.map((metric) => (
+                                    <tr key={metric._id || metric.name || createUniqueId()}>
+                                      <td>{metric.name}</td>
+                                      <td>
+                                        {metric.currentValue !== undefined && metric.currentValue !== null
+                                          ? `${metric.currentValue}${metric.unit || ''}`
+                                          : '—'}
+                                      </td>
+                                      <td>
+                                        {metric.previousValue !== undefined && metric.previousValue !== null
+                                          ? `${metric.previousValue}${metric.unit || ''}`
+                                          : '—'}
+                                      </td>
+                                      <td>
+                                        {metric.target !== undefined && metric.target !== null
+                                          ? `${metric.target}${metric.unit || ''}`
+                                          : '—'}
+                                      </td>
+                                      <td>{metric.trend !== undefined && metric.trend !== null ? `${metric.trend}` : '—'}</td>
+                                      <td>{formatReportStatus(metric.status)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+
+                          {selectedReport?.certificateInfo && (
+                            <div style={{ marginTop: 24 }}>
+                              <strong>Certificate Information</strong>
+                              <div className="report-detail-grid" style={{ marginTop: 12 }}>
+                                <div className="report-detail-item">
+                                  <span>Crew Member</span>
+                                  <span>{selectedReport.certificateInfo.crewMember || '—'}</span>
+                                </div>
+                                <div className="report-detail-item">
+                                  <span>Certificate Type</span>
+                                  <span>{selectedReport.certificateInfo.certificateType || '—'}</span>
+                                </div>
+                                <div className="report-detail-item">
+                                  <span>Issue Date</span>
+                                  <span>{formatDate(selectedReport.certificateInfo.issueDate)}</span>
+                                </div>
+                                <div className="report-detail-item">
+                                  <span>Expiry Date</span>
+                                  <span>{formatDate(selectedReport.certificateInfo.expiryDate)}</span>
+                                </div>
+                                <div className="report-detail-item">
+                                  <span>Status</span>
+                                  <span>{formatReportStatus(selectedReport.certificateInfo.status)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {Array.isArray(selectedReport.files) && selectedReport.files.length > 0 && (
+                            <div style={{ marginTop: 24 }}>
+                              <strong>Files</strong>
+                              <ul style={{ marginTop: 12, paddingLeft: 18 }}>
+                                {selectedReport.files.map((file) => (
+                                  <li key={file._id || file.label || createUniqueId()}>
+                                    <a href={file.url} target="_blank" rel="noreferrer">
+                                      {file.label}
+                                    </a>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
-
-                <div className="cards-container">
-                  <div className="card scheduled">
-                    <div className="card-header">
-                      <div className="card-title">Monthly Health Summary</div>
-                      <div className="card-icon warning"><i className="fas fa-clock"></i></div>
-                    </div>
-                    <div className="card-content">
-                      <div className="card-description">Automated monthly health summary report generation.</div>
-                      <div className="card-meta">Next run: 2023-11-01 | Frequency: Monthly</div>
-                    </div>
-                    <div className="card-actions">
-                      <button className="btn btn-outline btn-sm">Edit</button>
-                      <button className="btn btn-outline btn-sm">Disable</button>
-                    </div>
-                  </div>
-
-                  <div className="card scheduled">
-                    <div className="card-header">
-                      <div className="card-title">Vaccination Alert Report</div>
-                      <div className="card-icon warning"><i className="fas fa-bell"></i></div>
-                    </div>
-                    <div className="card-content">
-                      <div className="card-description">Weekly report of vaccination alerts and overdue vaccinations.</div>
-                      <div className="card-meta">Next run: 2023-10-30 | Frequency: Weekly</div>
-                    </div>
-                    <div className="card-actions">
-                      <button className="btn btn-outline btn-sm">Edit</button>
-                      <button className="btn btn-outline btn-sm">Disable</button>
-                    </div>
-                  </div>
-
-                  <div className="card scheduled">
-                    <div className="card-header">
-                      <div className="card-title">Inventory Status Report</div>
-                      <div className="card-icon warning"><i className="fas fa-pills"></i></div>
-                    </div>
-                    <div className="card-content">
-                      <div className="card-description">Bi-weekly medical inventory status and low stock alerts.</div>
-                      <div className="card-meta">Next run: 2023-11-05 | Frequency: Bi-weekly</div>
-                    </div>
-                    <div className="card-actions">
-                      <button className="btn btn-outline btn-sm">Edit</button>
-                      <button className="btn btn-outline btn-sm">Disable</button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="table-responsive">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Report Name</th>
-                        <th>Frequency</th>
-                        <th>Next Run</th>
-                        <th>Recipients</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>Monthly Health Summary</td>
-                        <td>Monthly</td>
-                        <td>2023-11-01</td>
-                        <td>Captain, HR Manager</td>
-                        <td><span className="status-badge status-active">Active</span></td>
-                        <td className="action-buttons">
-                          <button className="btn btn-outline btn-sm">Edit</button>
-                          <button className="btn btn-outline btn-sm">Disable</button>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>Vaccination Alert Report</td>
-                        <td>Weekly</td>
-                        <td>2023-10-30</td>
-                        <td>Health Officer</td>
-                        <td><span className="status-badge status-active">Active</span></td>
-                        <td className="action-buttons">
-                          <button className="btn btn-outline btn-sm">Edit</button>
-                          <button className="btn btn-outline btn-sm">Disable</button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </main>
       </div>
 
       {/* New Report Modal */}
-      <div className="modal" id="newReportModal" onClick={(e) => e.target.id === 'newReportModal' && (e.currentTarget.style.display = 'none')}>
-        <div className="modal-content">
-          <div className="modal-header">
-            <h3 className="modal-title">Generate New Report</h3>
-            <button className="close-modal" onClick={(e) => { const m = document.getElementById('newReportModal'); if (m) m.style.display = 'none'; }}>&times;</button>
+      {modalOpen && (
+        <div className="modal open" onClick={(e) => e.target.classList.contains('modal') && closeModal()}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">
+                {modalMode === 'edit' ? 'Update Health Report' : 'Create Health Report'}
+              </h3>
+              <button className="close-modal" onClick={closeModal} type="button">
+                &times;
+              </button>
+            </div>
+            <form className="report-form" onSubmit={handleFormSubmit}>
+              {formError && (
+                <div className="alert alert-danger" style={{ padding: 12, borderRadius: 10 }}>
+                  {formError}
+                </div>
+              )}
+
+              <div className="report-form-grid">
+                <div className="form-group">
+                  <label htmlFor="reportCategory">Category</label>
+                  <select
+                    id="reportCategory"
+                    className="form-control"
+                    value={formData.category}
+                    onChange={(e) => updateFormField('category', e.target.value)}
+                  >
+                    <option value="summary">Summary</option>
+                    <option value="analytics">Analytics</option>
+                    <option value="certificate">Certificate</option>
+                    <option value="scheduled">Scheduled</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="reportType">Report Type *</label>
+                  <input
+                    id="reportType"
+                    className="form-control"
+                    placeholder="e.g. Monthly Health Summary"
+                    value={formData.reportType}
+                    onChange={(e) => updateFormField('reportType', e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="reportTitle">Title *</label>
+                  <input
+                    id="reportTitle"
+                    className="form-control"
+                    placeholder="Enter report title"
+                    value={formData.title}
+                    onChange={(e) => updateFormField('title', e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="reportStatus">Status</label>
+                  <select
+                    id="reportStatus"
+                    className="form-control"
+                    value={formData.status}
+                    onChange={(e) => updateFormField('status', e.target.value)}
+                  >
+                    {statusOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="report-form-grid">
+                <div className="form-group">
+                  <label htmlFor="reportStart">Start Date *</label>
+                  <input
+                    type="date"
+                    id="reportStart"
+                    className="form-control"
+                    value={formData.startDate}
+                    onChange={(e) => updateFormField('startDate', e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="reportEnd">End Date *</label>
+                  <input
+                    type="date"
+                    id="reportEnd"
+                    className="form-control"
+                    value={formData.endDate}
+                    onChange={(e) => updateFormField('endDate', e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="generatedAt">Generated At</label>
+                  <input
+                    type="date"
+                    id="generatedAt"
+                    className="form-control"
+                    value={formData.generatedAt}
+                    onChange={(e) => updateFormField('generatedAt', e.target.value)}
+                  />
+                  <label htmlFor="reportTags">Tags</label>
+                  <input
+                    id="reportTags"
+                    className="form-control"
+                    placeholder="Comma separated tags"
+                    value={formData.tagsText}
+                    onChange={(e) => updateFormField('tagsText', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="reportDescription">Description</label>
+                <textarea
+                  id="reportDescription"
+                  className="form-control"
+                  placeholder="Provide context or key highlights for this report"
+                  value={formData.description}
+                  onChange={(e) => updateFormField('description', e.target.value)}
+                />
+              </div>
+
+              <div className="report-modal-actions">
+                <button type="button" className="btn btn-outline" onClick={closeModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving ? 'Saving...' : modalMode === 'edit' ? 'Update Report' : 'Create Report'}
+                </button>
+              </div>
+            </form>
           </div>
-          <form id="reportForm" onSubmit={generateReport}>
-            <div className="form-grid">
-              <div className="form-group">
-                <label htmlFor="reportType">Report Type *</label>
-                <select id="reportType" className="form-control" required defaultValue="">
-                  <option value="">Select report type</option>
-                  <option value="monthly">Monthly Health Summary</option>
-                  <option value="vaccination">Vaccination Status</option>
-                  <option value="chronic">Chronic Conditions</option>
-                  <option value="mental-health">Mental Health</option>
-                  <option value="inventory">Inventory Status</option>
-                  <option value="incident">Incident Report</option>
-                  <option value="custom">Custom Report</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="reportTitle">Report Title *</label>
-                <input type="text" id="reportTitle" className="form-control" placeholder="Enter report title" required />
-              </div>
-            </div>
-
-            <div className="form-grid">
-              <div className="form-group">
-                <label htmlFor="startDate">Start Date *</label>
-                <input type="date" id="startDate" className="form-control" required />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="endDate">End Date *</label>
-                <input type="date" id="endDate" className="form-control" required />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label>Report Sections</label>
-              <div>
-                <label><input type="checkbox" defaultChecked /> Executive Summary</label>{' '}
-                <label><input type="checkbox" defaultChecked /> Crew Health Overview</label>{' '}
-                <label><input type="checkbox" defaultChecked /> Vaccination Status</label>{' '}
-                <label><input type="checkbox" defaultChecked /> Chronic Conditions</label>{' '}
-                <label><input type="checkbox" /> Mental Health</label>{' '}
-                <label><input type="checkbox" /> Inventory Status</label>{' '}
-                <label><input type="checkbox" /> Recommendations</label>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label>Output Format *</label>
-              <div>
-                <label><input type="radio" name="format" value="pdf" defaultChecked /> PDF</label>{' '}
-                <label><input type="radio" name="format" value="excel" /> Excel</label>{' '}
-                <label><input type="radio" name="format" value="both" /> Both</label>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="reportNotes">Additional Notes</label>
-              <textarea id="reportNotes" className="form-control" rows={3} placeholder="Any specific requirements or notes..."></textarea>
-            </div>
-
-            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-              <button type="button" className="btn btn-outline" onClick={() => { const m = document.getElementById('newReportModal'); if (m) m.style.display = 'none'; }} style={{ flex: 1 }}>Cancel</button>
-              <button type="submit" className="btn btn-reports" style={{ flex: 1 }}>Generate Report</button>
-            </div>
-          </form>
         </div>
-      </div>
+      )}
     </div>
   );
 }

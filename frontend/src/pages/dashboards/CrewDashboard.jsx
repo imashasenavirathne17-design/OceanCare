@@ -46,18 +46,25 @@ export default function CrewDashboard() {
           </div>
 
           {/* Welcome Banner */}
-          <div style={{ background: 'linear-gradient(135deg, var(--primary) 0%, #2a6ec9 100%)', color: '#fff', borderRadius: 10, padding: 30, marginBottom: 30, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="welcome-banner">
             <div>
-              <h3 style={{ fontSize: 24, marginBottom: 10 }}>Welcome back{user?.fullName ? `, ${user.fullName.split(' ')[0]}!` : '!'} </h3>
-              <p style={{ opacity: 0.9, maxWidth: 500 }}>Your health is important to us. Remember to submit your daily health check and stay updated with your health metrics.</p>
+              <div className="welcome-title">Welcome back{user?.fullName ? `, ${user.fullName.split(' ')[0]}!` : '!'} </div>
+              <div className="welcome-subtitle">Your health is important to us. Remember to submit your daily health check and stay updated with your health metrics.</div>
             </div>
-            <div style={{ fontSize: 60, opacity: 0.8 }}>
+            <div className="welcome-icon">
               <i className="fas fa-heartbeat"></i>
             </div>
           </div>
 
           {/* Dashboard Cards */}
-          <section className="dashboard-cards">
+          <section className="dashboard-section">
+            <div className="section-header">
+              <div>
+                <div className="section-title">Health Tools</div>
+                <div className="section-subtitle">Stay on top of your daily health responsibilities</div>
+              </div>
+            </div>
+            <div className="dashboard-cards">
             <div className="card">
               <div className="card-header">
                 <div className="card-title">Daily Health Check</div>
@@ -113,12 +120,17 @@ export default function CrewDashboard() {
               </div>
               <button className="btn btn-primary" onClick={() => navigate('/dashboard/crew/reminders')}>View Reminders</button>
             </div>
+            </div>
           </section>
 
           {/* Health Status Overview */}
-          <section className="health-status">
-            <h3 style={{ color: 'var(--primary)', marginBottom: 10 }}>Health Status Overview</h3>
-            <p>Your recent health metrics and trends</p>
+          <section className="dashboard-section">
+            <div className="section-header">
+              <div>
+                <div className="section-title">Health Status Overview</div>
+                <div className="section-subtitle">Your recent health metrics and trends</div>
+              </div>
+            </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20, marginTop: 20 }}>
               <div style={{ textAlign: 'center', padding: 15, borderRadius: 8, background: '#f8f9fa' }}>
@@ -184,9 +196,13 @@ export default function CrewDashboard() {
           {/* Two-column grid: Recent Activity and Quick Actions */}
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
             {/* Recent Activity */}
-            <div className="recent-activity" style={{ background: '#fff', borderRadius: 10, boxShadow: '0 5px 15px rgba(0,0,0,0.05)', padding: 25, marginBottom: 30 }}>
-              <h3 style={{ color: 'var(--primary)', marginBottom: 10 }}>Recent Activity</h3>
-              <p>Your latest health-related activities</p>
+            <div className="dashboard-section" style={{ marginBottom: 0 }}>
+              <div className="section-header">
+                <div>
+                  <div className="section-title">Recent Activity</div>
+                  <div className="section-subtitle">Your latest health-related activities</div>
+                </div>
+              </div>
               <ul style={{ listStyle: 'none', marginTop: 15, paddingLeft: 0 }}>
                 {[
                   { icon: 'fas fa-heartbeat', bg: 'var(--primary)', title: 'Daily health check submitted', time: 'Today, 08:30 AM' },
@@ -209,9 +225,13 @@ export default function CrewDashboard() {
             </div>
 
             {/* Quick Actions */}
-            <div className="quick-actions" style={{ background: '#fff', borderRadius: 10, boxShadow: '0 5px 15px rgba(0,0,0,0.05)', padding: 25 }}>
-              <h3 style={{ color: 'var(--primary)', marginBottom: 10 }}>Quick Actions</h3>
-              <p>Fast access to common tasks</p>
+            <div className="dashboard-section" style={{ marginBottom: 0 }}>
+              <div className="section-header">
+                <div>
+                  <div className="section-title">Quick Actions</div>
+                  <div className="section-subtitle">Fast access to common tasks</div>
+                </div>
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 15, marginTop: 20 }}>
                 {[
                   { icon: 'fas fa-heartbeat', label: 'Health Check', to: '/dashboard/crew/health-check' },
@@ -244,9 +264,13 @@ export default function CrewDashboard() {
           </div>
 
           {/* Upcoming Appointments */}
-          <div className="recent-activity" style={{ background: '#fff', borderRadius: 10, boxShadow: '0 5px 15px rgba(0,0,0,0.05)', padding: 25, marginTop: 20 }}>
-            <h3 style={{ color: 'var(--primary)', marginBottom: 10 }}>Upcoming Appointments</h3>
-            <p>Your scheduled health-related appointments</p>
+          <div className="dashboard-section">
+            <div className="section-header">
+              <div>
+                <div className="section-title">Upcoming Appointments</div>
+                <div className="section-subtitle">Your scheduled health-related appointments</div>
+              </div>
+            </div>
             <ul style={{ listStyle: 'none', marginTop: 15, paddingLeft: 0 }}>
               {[
                 { icon: 'fas fa-calendar-check', bg: 'var(--success)', title: 'Routine Health Check-up', time: 'October 30, 2025 • 10:00 AM', color: 'var(--success)' },

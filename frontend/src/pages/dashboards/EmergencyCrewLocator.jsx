@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getUser } from '../../lib/token';
 import EmergencySidebar from './EmergencySidebar';
+import { listCrewLocations } from '../../lib/emergencyCrewLocatorApi';
 
 export default function EmergencyCrewLocator() {
   const user = getUser();
@@ -13,36 +14,130 @@ export default function EmergencyCrewLocator() {
   const userAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(userFullName)}&background=e63946&color=fff`;
 
   const [filters, setFilters] = useState({ status: 'All Statuses', dept: 'All Departments', q: '' });
-  const [activeCrewId, setActiveCrewId] = useState('john-davis');
-
-  const crewList = useMemo(() => ([
-    { id: 'john-davis', code: 'CREW-045', name: 'John Davis', dept: 'Engineering', role: 'Engine Technician', status: 'critical', avatarBg: 'e63946', location: 'Engine Room', time: '10:28 AM', pos: { top: '30%', left: '65%' } },
-    { id: 'maria-rodriguez', code: 'CREW-128', name: 'Maria Rodriguez', dept: 'Deck', role: 'Deck Officer', status: 'warning', avatarBg: '3a86ff', location: 'Medical Bay', time: '10:15 AM', pos: { top: '60%', left: '40%' } },
-    { id: 'robert-chen', code: 'CREW-312', name: 'Robert Chen', dept: 'Catering', role: 'Cook', status: 'stable', avatarBg: 'f4a261', location: 'Crew Quarters B', time: '09:45 AM', pos: { top: '45%', left: '25%' } },
-    { id: 'sarah-johnson', code: 'CREW-201', name: 'Sarah Johnson', dept: 'Medical', role: 'Medical Officer', status: 'stable', avatarBg: '2a9d8f', location: 'Medical Bay', time: '10:10 AM', pos: { top: '20%', left: '50%' } },
-    { id: 'james-wilson', code: 'CREW-101', name: 'James Wilson', dept: 'Deck', role: 'First Officer', status: 'offline', avatarBg: '6c757d', location: 'Bridge', time: '08:30 AM', pos: { top: '70%', left: '75%' } },
-  ]), []);
-
-  const filtered = crewList.filter((c) => {
-    if (filters.status !== 'All Statuses' && filters.status.toLowerCase().includes('critical') && c.status !== 'critical') return false;
-    if (filters.status !== 'All Statuses' && filters.status.toLowerCase().includes('warning') && c.status !== 'warning') return false;
-    if (filters.status !== 'All Statuses' && filters.status.toLowerCase().includes('stable') && c.status !== 'stable') return false;
-    if (filters.status !== 'All Statuses' && filters.status.toLowerCase().includes('offline') && c.status !== 'offline') return false;
-    if (filters.dept !== 'All Departments' && c.dept !== filters.dept) return false;
-    if (filters.q && !(c.name + ' ' + c.role + ' ' + c.code).toLowerCase().includes(filters.q.toLowerCase())) return false;
-    return true;
-  });
+  const [locations, setLocations] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [activeCrewId, setActiveCrewId] = useState('');
 
   const mapRef = useRef(null);
 
+  const statusOptionToValue = (value) => {
+    const map = {
+      'Critical Only': 'critical',
+      'Warning Only': 'warning',
+      'Stable Only': 'stable',
+      'Offline Only': 'offline',
+    };
+    return map[value] || 'all';
+  };
+
+  const clampPercent = (num) => {
+    if (typeof num !== 'number' || Number.isNaN(num)) return 50;
+    return Math.min(95, Math.max(5, num));
+  };
+
+  const getAvatarColor = (key) => {
+    const palette = ['e63946', '3a86ff', 'f4a261', '2a9d8f', 'ffb703', '8338ec', 'ff006e'];
+    if (!key) return palette[0];
+    let hash = 0;
+    for (let i = 0; i < key.length; i += 1) {
+      hash = key.charCodeAt(i) + ((hash << 5) - hash);
+      hash &= hash;
+    }
+    const index = Math.abs(hash) % palette.length;
+    return palette[index];
+  };
+
+  const formatTime = (dateString) => {
+    if (!dateString) return 'Unknown';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (err) {
+      return 'Unknown';
+    }
+  };
+
+  const fetchLocations = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await listCrewLocations();
+      const enriched = (data || []).map((loc) => ({
+        id: loc.crewId || loc.crewName,
+        code: loc.code || loc.crewId || loc.crewName,
+        name: loc.crewName,
+        dept: loc.department || 'General',
+        role: loc.role || 'Crew Member',
+        status: loc.status || 'offline',
+        avatarBg: getAvatarColor(loc.crewId || loc.crewName),
+        location: loc.location || 'Unknown',
+        deck: loc.deck || 'Main Deck',
+        time: formatTime(loc.lastSeenAt),
+        lastSeenAt: loc.lastSeenAt ? new Date(loc.lastSeenAt) : null,
+        pos: {
+          top: `${clampPercent(loc.position?.top)}%`,
+          left: `${clampPercent(loc.position?.left)}%`,
+        },
+        notes: loc.notes || '',
+      }));
+      setLocations(enriched);
+      if (enriched.length && !enriched.find((c) => c.id === activeCrewId)) {
+        setActiveCrewId(enriched[0].id);
+      }
+    } catch (err) {
+      console.error('listCrewLocations error', err);
+      setError('Failed to load crew locations');
+    } finally {
+      setLoading(false);
+    }
+  }, [activeCrewId]);
+
   useEffect(() => {
-    // simple real-time tick to update "Last update" demo
-    const t = setInterval(() => {
-      const d = new Date();
-      // noop, in real app update from server
-    }, 30000);
-    return () => clearInterval(t);
-  }, []);
+    fetchLocations();
+  }, [fetchLocations]);
+
+  useEffect(() => {
+    if (!activeCrewId && locations.length) {
+      setActiveCrewId(locations[0].id);
+    }
+  }, [locations, activeCrewId]);
+
+  const crewList = useMemo(() => locations, [locations]);
+
+  const filtered = useMemo(() => {
+    const statusFilter = statusOptionToValue(filters.status);
+    const deptFilter = filters.dept;
+    const query = filters.q.trim().toLowerCase();
+    return crewList.filter((c) => {
+      if (statusFilter !== 'all' && c.status !== statusFilter) return false;
+      if (deptFilter !== 'All Departments' && c.dept !== deptFilter) return false;
+      if (query && !(c.name + c.role + c.code).toLowerCase().includes(query)) return false;
+      return true;
+    });
+  }, [crewList, filters]);
+
+  const historyItems = useMemo(() => {
+    const items = [...crewList]
+      .filter((c) => c.lastSeenAt)
+      .sort((a, b) => b.lastSeenAt - a.lastSeenAt)
+      .slice(0, 6)
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        location: c.location,
+        time: formatTime(c.lastSeenAt),
+        status: c.status,
+      }));
+    return items;
+  }, [crewList]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchLocations();
+    }, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [fetchLocations]);
 
   return (
     <div className="dashboard-container emergency-dashboard">
@@ -182,7 +277,9 @@ export default function EmergencyCrewLocator() {
             <i className="fas fa-search" />
             <input type="text" placeholder="Search crew members..." value={filters.q} onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))} />
           </div>
-          <button className="btn btn-primary" onClick={() => alert('Refreshing crew locations...')}><i className="fas fa-sync-alt" /> Refresh Locations</button>
+          <button className="btn btn-primary" onClick={fetchLocations} disabled={loading}>
+            <i className="fas fa-sync-alt" /> {loading ? 'Refreshing…' : 'Refresh Locations'}
+          </button>
           <button className="btn" onClick={() => setFilters({ status: 'All Statuses', dept: 'All Departments', q: '' })}><i className="fas fa-eye" /> Show All</button>
         </div>
 
@@ -218,6 +315,7 @@ export default function EmergencyCrewLocator() {
                     <div className="crew-tooltip">
                       <div className="tooltip-name">{c.name}</div>
                       <div className="tooltip-details">{c.role} • {c.code}</div>
+                      <div className="tooltip-details">{c.location}</div>
                       <div className="tooltip-status" style={{ background: c.status==='critical'?'rgba(230,57,70,.2)':c.status==='warning'?'rgba(244,162,97,.2)':c.status==='stable'?'rgba(42,157,143,.2)':'rgba(108,117,125,.2)', color: c.status==='critical'?'#e63946':c.status==='warning'?'#f4a261':c.status==='stable'?'#2a9d8f':'#6c757d' }}>{c.status.toUpperCase()}</div>
                     </div>
                   </div>
@@ -231,17 +329,25 @@ export default function EmergencyCrewLocator() {
               <div className="crew-list-title">Crew Locations</div>
             </div>
             <div className="crew-list">
-              {filtered.map((c) => (
-                <div key={c.id} className={`crew-list-item ${activeCrewId === c.id ? 'active' : ''}`} onClick={() => setActiveCrewId(c.id)}>
-                  <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(c.name)}&size=40&background=${c.avatarBg}&color=fff`} alt={c.name} className="crew-avatar" />
-                  <div className="crew-details">
-                    <div className="crew-name">{c.name}</div>
-                    <div className="crew-location">{c.location}</div>
-                    <div className="crew-time">Last update: {c.time}</div>
+              {loading ? (
+                <div className="empty" style={{ padding: 20 }}><div className="desc">Loading crew locations...</div></div>
+              ) : error ? (
+                <div className="empty" style={{ padding: 20, color: 'var(--danger)' }}><div className="desc">{error}</div></div>
+              ) : filtered.length === 0 ? (
+                <div className="empty" style={{ padding: 20 }}><div className="desc">No crew match the current filters.</div></div>
+              ) : (
+                filtered.map((c) => (
+                  <div key={c.id} className={`crew-list-item ${activeCrewId === c.id ? 'active' : ''}`} onClick={() => setActiveCrewId(c.id)}>
+                    <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(c.name)}&size=40&background=${c.avatarBg}&color=fff`} alt={c.name} className="crew-avatar" />
+                    <div className="crew-details">
+                      <div className="crew-name">{c.name}</div>
+                      <div className="crew-location">{c.location}</div>
+                      <div className="crew-time">Last update: {c.time}</div>
+                    </div>
+                    <div className={`crew-status status-${c.status}`}>{c.status.toUpperCase()}</div>
                   </div>
-                  <div className={`crew-status status-${c.status}`}>{c.status.toUpperCase()}</div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -250,14 +356,22 @@ export default function EmergencyCrewLocator() {
         <div className="location-history">
           <div className="section-header">
             <div className="section-title">Recent Location Updates</div>
-            <button className="btn"><i className="fas fa-history" /> View Full History</button>
+            <button className="btn" onClick={fetchLocations}><i className="fas fa-history" /> Refresh</button>
           </div>
           <ul className="history-list">
-            <li className="history-item"><div className="history-time">10:28 AM</div><div className="history-content"><div className="history-name">John Davis</div><div className="history-location">Moved from Engine Control Room to Engine Room</div></div></li>
-            <li className="history-item"><div className="history-time">10:15 AM</div><div className="history-content"><div className="history-name">Maria Rodriguez</div><div className="history-location">Moved from Deck to Medical Bay</div></div></li>
-            <li className="history-item"><div className="history-time">10:10 AM</div><div className="history-content"><div className="history-name">Sarah Johnson</div><div className="history-location">Moved from Medical Office to Medical Bay</div></div></li>
-            <li className="history-item"><div className="history-time">09:45 AM</div><div className="history-content"><div className="history-name">Robert Chen</div><div className="history-location">Moved from Galley to Crew Quarters B</div></div></li>
-            <li className="history-item"><div className="history-time">08:30 AM</div><div className="history-content"><div className="history-name">James Wilson</div><div className="history-location">Last known location: Bridge (Device offline)</div></div></li>
+            {historyItems.length === 0 ? (
+              <li className="history-item"><div className="history-content"><div className="history-location">No recent updates recorded.</div></div></li>
+            ) : (
+              historyItems.map((item) => (
+                <li key={item.id} className="history-item">
+                  <div className="history-time">{item.time}</div>
+                  <div className="history-content">
+                    <div className="history-name">{item.name}</div>
+                    <div className="history-location">{item.location}</div>
+                  </div>
+                </li>
+              ))
+            )}
           </ul>
         </div>
       </div>

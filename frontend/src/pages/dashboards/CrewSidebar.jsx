@@ -11,7 +11,10 @@ export default function CrewSidebar({ onLogout }) {
     <aside className="sidebar">
       <div className="logo">
         <i className="fas fa-user" aria-hidden="true"></i>
-        <h1>OCEANCARE CREW</h1>
+        <h1>
+          <span>OCEANCARE</span>
+          <span>CREW</span>
+        </h1>
       </div>
       <ul className="sidebar-menu">
         <li>
