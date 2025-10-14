@@ -758,68 +758,7 @@ export default function CrewHealthRecords() {
             )}
 
             {/* Existing things panels by category */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14, marginBottom: 16 }}>
-              <div className="card" style={{ padding: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontWeight: 600 }}>Examinations</div>
-                  <button className="btn btn-sm" onClick={() => setFilters(prev => ({ ...prev, recordType: 'examination' }))}>View</button>
-                </div>
-                <ul style={{ listStyle: 'none', paddingLeft: 0, marginTop: 10 }}>
-                  {(exams || []).slice(0, 5).map((e, i) => (
-                    <li key={i} style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
-                      <div style={{ fontWeight: 600 }}>{e.type || e.condition || 'Examination'}</div>
-                      <div style={{ fontSize: 12, color: '#666' }}>{e.date || e.performedAt || e.scheduledAt || '—'} • {e.status || '—'}</div>
-                    </li>
-                  ))}
-                  {!auxLoading && exams && exams.length === 0 && <div className="hint-message">No examinations</div>}
-                </ul>
-              </div>
-              <div className="card" style={{ padding: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontWeight: 600 }}>Vaccinations</div>
-                  <button className="btn btn-sm" onClick={() => setFilters(prev => ({ ...prev, recordType: 'vaccination' }))}>View</button>
-                </div>
-                <ul style={{ listStyle: 'none', paddingLeft: 0, marginTop: 10 }}>
-                  {(vaccs || []).slice(0, 5).map((v, i) => (
-                    <li key={i} style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
-                      <div style={{ fontWeight: 600 }}>{v.vaccine || v.metadata?.vaccineName || 'Vaccination'}</div>
-                      <div style={{ fontSize: 12, color: '#666' }}>{v.date || v.scheduledAt || v.nextDueDate || '—'} • {v.status || '—'}</div>
-                    </li>
-                  ))}
-                  {!auxLoading && vaccs && vaccs.length === 0 && <div className="hint-message">No vaccinations</div>}
-                </ul>
-              </div>
-              <div className="card" style={{ padding: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontWeight: 600 }}>Chronic Tracking</div>
-                  <button className="btn btn-sm" onClick={() => setFilters(prev => ({ ...prev, recordType: 'chronic' }))}>View</button>
-                </div>
-                <ul style={{ listStyle: 'none', paddingLeft: 0, marginTop: 10 }}>
-                  {(chronicReadings || []).slice(0, 5).map((c, i) => (
-                    <li key={i} style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
-                      <div style={{ fontWeight: 600 }}>{c.type || c.metadata?.chronicType || 'Reading'}</div>
-                      <div style={{ fontSize: 12, color: '#666' }}>{c.at || c.date || '—'} • {c.value !== undefined ? c.value : c.notes || '—'}</div>
-                    </li>
-                  ))}
-                  {!auxLoading && chronicReadings && chronicReadings.length === 0 && <div className="hint-message">No chronic readings</div>}
-                </ul>
-              </div>
-              <div className="card" style={{ padding: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontWeight: 600 }}>Mental Health</div>
-                  <button className="btn btn-sm" onClick={() => setFilters(prev => ({ ...prev, recordType: 'mental-health' }))}>View</button>
-                </div>
-                <ul style={{ listStyle: 'none', paddingLeft: 0, marginTop: 10 }}>
-                  {(mentalObservations || []).slice(0, 5).map((m, i) => (
-                    <li key={i} style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
-                      <div style={{ fontWeight: 600 }}>{m.title || m.sessionType || 'Observation'}</div>
-                      <div style={{ fontSize: 12, color: '#666' }}>{m.date || m.createdAt || '—'} • {m.status || m.wellnessLevel || '—'}</div>
-                    </li>
-                  ))}
-                  {!auxLoading && mentalObservations && mentalObservations.length === 0 && <div className="hint-message">No mental health entries</div>}
-                </ul>
-              </div>
-            </div>
+
 
             <div className="records-filter" style={{ display: 'flex', gap: 15, marginBottom: 20, flexWrap: 'wrap' }}>
               <div className="filter-group" style={{ flex: 2, minWidth: 240 }}>
