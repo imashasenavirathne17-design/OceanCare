@@ -193,6 +193,39 @@ export default function InventoryStockManagement() {
     });
   }, [rows, filters]);
 
+  const handleExport = () => {
+    if (!filtered.length) {
+      alert('No stock data to export.');
+      return;
+    }
+    const escape = (value) => {
+      const str = String(value ?? '');
+      if (/[",\n]/.test(str)) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+    const header = ['Item Name', 'Category', 'Current Stock', 'Min Stock', 'Status', 'Last Updated'];
+    const rowsCsv = filtered.map((r) => [
+      r.name,
+      r.category,
+      r.current,
+      r.min,
+      statusOf(r),
+      r.updated,
+    ]);
+    const csv = [header, ...rowsCsv].map(row => row.map(escape).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `inventory-stock-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   // Modal state
   const [modal, setModal] = useState({ open: false, id: null, item: '', current: 0, delta: 0, reason: '', notes: '' });
 
@@ -332,8 +365,7 @@ export default function InventoryStockManagement() {
           <div className="stock-table-container">
             <div className="table-header">
               <div className="table-title">Current Stock Levels</div>
-                <button className="btn"><i className="fas fa-download"></i> Export</button>
-                <button className="btn btn-primary"><i className="fas fa-sync-alt"></i> Refresh</button>
+                <button className="btn btn-primary" onClick={handleExport}><i className="fas fa-download"></i> Export</button>
               </div>
             <table className="stock-table">
               <thead>

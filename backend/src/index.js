@@ -7,6 +7,7 @@ const { connectDB } = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const inventoryWasteRoutes = require('./routes/inventoryWasteRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const emergencyAlertRoutes = require('./routes/emergencyAlertRoutes');
 const emergencyProtocolRoutes = require('./routes/emergencyProtocolRoutes');
@@ -72,6 +73,7 @@ app.use('/api/health', healthRoutes);
 app.use('/api/audit/logs', auditLogRoutes);
 app.use('/api/compliance/frameworks', complianceFrameworkRoutes);
 app.use('/api/compliance/reports', regulatoryReportRoutes);
+app.use('/api/inventory/waste', inventoryWasteRoutes);
 
 const PORT = process.env.PORT || 5000;
 connectDB(process.env.MONGO_URI)

@@ -1,4 +1,5 @@
 const InventoryItem = require('../models/InventoryItem');
+const { logAuditEvent } = require('../utils/auditLogger');
 
 // Helper to compute status
 function computeStatus(item) {
@@ -14,8 +15,26 @@ exports.createItem = async (req, res) => {
   try {
     const data = { ...req.body, createdBy: req.user && req.user.id };
     const item = await InventoryItem.create(data);
+    await logAuditEvent({
+      resource: 'inventory',
+      action: 'create',
+      status: 'success',
+      userId: req.user?.id,
+      userName: req.user?.fullName,
+      details: `Created inventory item ${item.name || item._id}`,
+      metadata: { itemId: item._id, payload: data },
+    });
     return res.status(201).json(item);
   } catch (err) {
+    await logAuditEvent({
+      resource: 'inventory',
+      action: 'create',
+      status: 'failure',
+      userId: req.user?.id,
+      userName: req.user?.fullName,
+      details: `Failed to create inventory item: ${err.message}`,
+      metadata: { payload: req.body },
+    });
     return res.status(400).json({ message: 'Failed to create item', error: err.message });
   }
 };
@@ -74,20 +93,84 @@ exports.getItemById = async (req, res) => {
 
 exports.updateItem = async (req, res) => {
   try {
+    const existing = await InventoryItem.findById(req.params.id);
+    if (!existing) {
+      await logAuditEvent({
+        resource: 'inventory',
+        action: 'update',
+        status: 'failure',
+        userId: req.user?.id,
+        userName: req.user?.fullName,
+        details: `Attempted to update missing item ${req.params.id}`,
+        metadata: { payload: req.body },
+      });
+      return res.status(404).json({ message: 'Item not found' });
+    }
+
     const item = await InventoryItem.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
-    if (!item) return res.status(404).json({ message: 'Item not found' });
+
+    await logAuditEvent({
+      resource: 'inventory',
+      action: 'update',
+      status: 'success',
+      userId: req.user?.id,
+      userName: req.user?.fullName,
+      details: `Updated inventory item ${item.name || item._id}`,
+      metadata: { itemId: item._id, before: existing.toObject(), updates: req.body },
+    });
+
     return res.json(item);
   } catch (err) {
+    await logAuditEvent({
+      resource: 'inventory',
+      action: 'update',
+      status: 'failure',
+      userId: req.user?.id,
+      userName: req.user?.fullName,
+      details: `Failed to update item ${req.params.id}: ${err.message}`,
+      metadata: { payload: req.body },
+    });
     return res.status(400).json({ message: 'Failed to update item', error: err.message });
   }
 };
 
 exports.deleteItem = async (req, res) => {
   try {
-    const item = await InventoryItem.findByIdAndDelete(req.params.id);
-    if (!item) return res.status(404).json({ message: 'Item not found' });
+    const existing = await InventoryItem.findById(req.params.id);
+    if (!existing) {
+      await logAuditEvent({
+        resource: 'inventory',
+        action: 'delete',
+        status: 'failure',
+        userId: req.user?.id,
+        userName: req.user?.fullName,
+        details: `Attempted to delete missing item ${req.params.id}`,
+      });
+      return res.status(404).json({ message: 'Item not found' });
+    }
+
+    await InventoryItem.findByIdAndDelete(req.params.id);
+
+    await logAuditEvent({
+      resource: 'inventory',
+      action: 'delete',
+      status: 'success',
+      userId: req.user?.id,
+      userName: req.user?.fullName,
+      details: `Deleted inventory item ${existing.name || existing._id}`,
+      metadata: { itemId: existing._id, before: existing.toObject() },
+    });
+
     return res.json({ message: 'Item deleted' });
   } catch (err) {
+    await logAuditEvent({
+      resource: 'inventory',
+      action: 'delete',
+      status: 'failure',
+      userId: req.user?.id,
+      userName: req.user?.fullName,
+      details: `Failed to delete item ${req.params.id}: ${err.message}`,
+    });
     return res.status(400).json({ message: 'Failed to delete item', error: err.message });
   }
 };

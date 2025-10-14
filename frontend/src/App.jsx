@@ -42,10 +42,8 @@ import InventoryExpiryTracking from './pages/dashboards/InventoryExpiryTracking'
 import InventoryStorageZones from './pages/dashboards/InventoryStorageZones';
 import InventoryReports from './pages/dashboards/InventoryReports';
 import InventoryAuditTrail from './pages/dashboards/InventoryAuditTrail';
-import InventoryBarcodeScanning from './pages/dashboards/InventoryBarcodeScanning';
 import InventoryWasteDisposal from './pages/dashboards/InventoryWasteDisposal';
 import InventoryPredictiveRestocking from './pages/dashboards/InventoryPredictiveRestocking';
-import InventoryFleetTransfer from './pages/dashboards/InventoryFleetTransfer';
 import AdminDashboard from './pages/dashboards/AdminDashboard';
 import AdminUserManagement from './pages/dashboards/AdminUserManagement';
 import AdminPermissions from './pages/dashboards/AdminPermissions';
@@ -145,10 +143,8 @@ function App() {
           <Route path="/dashboard/inventory/zones" element={<InventoryStorageZones />} />
           <Route path="/dashboard/inventory/reports" element={<InventoryReports />} />
           <Route path="/dashboard/inventory/audit-trail" element={<InventoryAuditTrail />} />
-          <Route path="/dashboard/inventory/barcode" element={<InventoryBarcodeScanning />} />
           <Route path="/dashboard/inventory/waste" element={<InventoryWasteDisposal />} />
           <Route path="/dashboard/inventory/predict" element={<InventoryPredictiveRestocking />} />
-          <Route path="/dashboard/inventory/transfer" element={<InventoryFleetTransfer />} />
         </Route>
 
         <Route element={<RequireAuth roles={["admin"]} />}>
