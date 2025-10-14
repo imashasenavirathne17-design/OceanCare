@@ -7,7 +7,9 @@ import './InventorySidebar.css';
 */
 export default function InventorySidebar({ onLogout }) {
   const { pathname } = useLocation();
-  const initialActive = pathname.includes('/dashboard/inventory/items')
+  const initialActive = pathname.includes('/dashboard/inventory/alerts')
+    ? 'inventory-alerts'
+    : pathname.includes('/dashboard/inventory/items')
     ? 'inventory-items'
     : pathname.includes('/dashboard/inventory/stock')
     ? 'stock-management'
@@ -24,7 +26,8 @@ export default function InventorySidebar({ onLogout }) {
 
   // Keep active state in sync with the URL on navigation
   useEffect(() => {
-    if (pathname.includes('/dashboard/inventory/items')) setActive('inventory-items');
+    if (pathname.includes('/dashboard/inventory/alerts')) setActive('inventory-alerts');
+    else if (pathname.includes('/dashboard/inventory/items')) setActive('inventory-items');
     else if (pathname.includes('/dashboard/inventory/stock')) setActive('stock-management');
     else if (pathname.includes('/dashboard/inventory/expiry')) setActive('expiry-tracking');
     else if (pathname.includes('/dashboard/inventory/audit-trail')) setActive('audit-trail');
@@ -43,6 +46,11 @@ export default function InventorySidebar({ onLogout }) {
         <li>
           <Link to="/dashboard/inventory" className={active === 'dashboard' ? 'active' : ''} onClick={() => setActive('dashboard')}>
             <i className="fas fa-home"></i> Dashboard
+          </Link>
+        </li>
+        <li>
+          <Link to="/dashboard/inventory/alerts" className={active === 'inventory-alerts' ? 'active' : ''} onClick={() => setActive('inventory-alerts')}>
+            <i className="fas fa-bell"></i> Inventory Alerts
           </Link>
         </li>
         <li>
