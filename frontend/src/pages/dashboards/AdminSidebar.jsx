@@ -15,13 +15,11 @@ export default function AdminSidebar({ onLogout }) {
     if (pathname.includes('/dashboard/admin/permissions')) return 'permissions';
     if (pathname.includes('/dashboard/admin/compliance')) return 'compliance';
     if (pathname.includes('/dashboard/admin/announcements')) return 'announcements';
-    if (pathname.includes('/dashboard/admin/reports')) return 'reports';
     // Fallback to hashes for in-page sections
     if (hash && hash !== '#') {
       if (hash.includes('permissions')) return 'permissions';
       if (hash.includes('compliance')) return 'compliance';
       if (hash.includes('announcements')) return 'announcements';
-      if (hash.includes('reports')) return 'reports';
     }
     return 'dashboard';
   }, [pathname, hash]);
@@ -64,11 +62,7 @@ export default function AdminSidebar({ onLogout }) {
             <i className="fas fa-bullhorn"></i> Announcements
           </Link>
         </li>
-        <li>
-          <Link to="/dashboard/admin/reports" className={active === 'reports' ? 'active' : ''} onClick={() => setActive('reports')}>
-            <i className="fas fa-chart-bar"></i> Reports
-          </Link>
-        </li>
+        
         <li>
           <Link to="/dashboard/admin/messaging" className={active === 'messaging' ? 'active' : ''} onClick={() => setActive('messaging')}>
             <i className="fas fa-comments"></i> Messaging

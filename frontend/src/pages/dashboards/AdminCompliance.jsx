@@ -644,6 +644,102 @@ export default function AdminCompliance() {
       </div>
 
 
+      {/* Add/Update Regulatory Report Modal */}
+      <div className={`modal ${rrModalOpen ? 'open' : ''}`} onClick={(e) => { if (e.target.classList.contains('modal')) { setRrModalOpen(false); setRrEditingId(null); } }}>
+        <div className="modal-content">
+          <div className="modal-header">
+            <div className="modal-title">{rrEditingId ? 'Update Regulatory Report' : 'New Regulatory Report'}</div>
+            <button className="close-modal" onClick={() => { setRrModalOpen(false); setRrEditingId(null); }}>&times;</button>
+          </div>
+          <div className="modal-body">
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label">Title</label>
+                <input className="form-control" value={rrForm.title} onChange={(e) => setRrForm({ ...rrForm, title: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Agency</label>
+                <input className="form-control" value={rrForm.agency} onChange={(e) => setRrForm({ ...rrForm, agency: e.target.value })} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Description</label>
+              <textarea className="form-control" rows={3} value={rrForm.description} onChange={(e) => setRrForm({ ...rrForm, description: e.target.value })}></textarea>
+            </div>
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label">Frequency</label>
+                <select className="form-control" value={rrForm.frequency} onChange={(e) => setRrForm({ ...rrForm, frequency: e.target.value })}>
+                  <option value="daily">daily</option>
+                  <option value="weekly">weekly</option>
+                  <option value="monthly">monthly</option>
+                  <option value="quarterly">quarterly</option>
+                  <option value="yearly">yearly</option>
+                  <option value="adhoc">adhoc</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Format</label>
+                <select className="form-control" value={rrForm.format} onChange={(e) => setRrForm({ ...rrForm, format: e.target.value })}>
+                  <option value="pdf">pdf</option>
+                  <option value="csv">csv</option>
+                  <option value="xlsx">xlsx</option>
+                  <option value="json">json</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Status</label>
+                <select className="form-control" value={rrForm.status} onChange={(e) => setRrForm({ ...rrForm, status: e.target.value })}>
+                  <option value="draft">draft</option>
+                  <option value="scheduled">scheduled</option>
+                  <option value="completed">completed</option>
+                  <option value="failed">failed</option>
+                </select>
+              </div>
+            </div>
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label">Due Date</label>
+                <input type="date" className="form-control" value={rrForm.dueDate} onChange={(e) => setRrForm({ ...rrForm, dueDate: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Last Run At</label>
+                <input type="datetime-local" className="form-control" value={rrForm.lastRunAt} onChange={(e) => setRrForm({ ...rrForm, lastRunAt: e.target.value })} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Owner Name</label>
+              <input className="form-control" value={rrForm.ownerName} onChange={(e) => setRrForm({ ...rrForm, ownerName: e.target.value })} />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button className="btn" onClick={() => { setRrModalOpen(false); setRrEditingId(null); }}>Cancel</button>
+            <button className="btn btn-primary" onClick={async () => {
+              try {
+                // Required validation
+                const requiredRr = ['title','agency','frequency','format','status','dueDate','lastRunAt','ownerName'];
+                const hasEmptyRr = requiredRr.some(k => !String((rrForm?.[k] ?? '')).trim());
+                if (hasEmptyRr) { alert('Please fill all the rows'); return; }
+                const payload = { ...rrForm };
+                if (payload.dueDate) payload.dueDate = new Date(payload.dueDate).toISOString();
+                if (payload.lastRunAt) payload.lastRunAt = new Date(payload.lastRunAt).toISOString();
+                if (rrEditingId) {
+                  await updateRegulatoryReport(rrEditingId, payload);
+                } else {
+                  await createRegulatoryReport(payload);
+                }
+                setRrModalOpen(false);
+                setRrEditingId(null);
+                setRrForm({ title: '', description: '', agency: '', frequency: 'monthly', format: 'pdf', status: 'scheduled', dueDate: '', lastRunAt: '', ownerName: '' });
+                fetchReports();
+              } catch (e) {
+                alert(e.message || (rrEditingId ? 'Failed to update report' : 'Failed to create report'));
+              }
+            }}>{rrEditingId ? 'Update' : 'Save'}</button>
+          </div>
+        </div>
+      </div>
+
       {/* Add/Update Audit Log Modal */}
       <div className={`modal ${addOpen ? 'open' : ''}`} onClick={(e) => { if (e.target.classList.contains('modal')) setAddOpen(false); }}>
         <div className="modal-content">
@@ -715,6 +811,13 @@ export default function AdminCompliance() {
             <button className="btn" onClick={() => { setAddOpen(false); setEditingId(null); }}>Cancel</button>
             <button className="btn btn-primary" onClick={async () => {
               try {
+                // Basic required validations: all fields must be filled
+                const requiredFields = ['timestamp','userId','userName','action','resource','status','details'];
+                const hasEmpty = requiredFields.some(k => !String((form?.[k] ?? '')).trim());
+                if (hasEmpty) {
+                  alert('Please fill all the rows');
+                  return;
+                }
                 const payload = { ...form };
                 if (payload.timestamp) payload.timestamp = new Date(payload.timestamp).toISOString();
                 if (editingId) {
@@ -788,6 +891,21 @@ export default function AdminCompliance() {
             <button className="btn" onClick={() => { setFwModalOpen(false); setFwEditingId(null); }}>Cancel</button>
             <button className="btn btn-primary" onClick={async () => {
               try {
+                // Basic required validations for framework form
+                const requiredFw = ['name','code','description','status','lastAuditAt','requirementsTotal','requirementsMet','ownerName'];
+                const hasEmptyFw = requiredFw.some(k => {
+                  const v = fwForm?.[k];
+                  if (typeof v === 'number') return Number.isNaN(v);
+                  return !String(v ?? '').trim();
+                });
+                if (hasEmptyFw) {
+                  alert('Please fill all the rows');
+                  return;
+                }
+                if (Number(fwForm.requirementsMet) > Number(fwForm.requirementsTotal)) {
+                  alert('Requirements Met cannot exceed Requirements Total');
+                  return;
+                }
                 const payload = { ...fwForm };
                 if (payload.lastAuditAt) payload.lastAuditAt = new Date(payload.lastAuditAt).toISOString();
                 if (fwEditingId) {
