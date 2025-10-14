@@ -18,6 +18,7 @@ const TYPE_OPTIONS = [
   { value: 'vaccination', label: 'Vaccination' },
   { value: 'chronic', label: 'Chronic Condition' },
   { value: 'health-check', label: 'Health Check' },
+  { value: 'mental-health', label: 'Mental Wellness' },
   { value: 'appointment', label: 'Medical Appointment' },
   { value: 'emergency', label: 'Emergency Report' },
 ];
@@ -27,6 +28,123 @@ const TYPE_LABELS = TYPE_OPTIONS.reduce((acc, item) => {
   return acc;
 }, {});
 
+const STATUS_OPTIONS = [
+  { value: 'open', label: 'Open' },
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'monitoring', label: 'Monitoring' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'overdue', label: 'Overdue' },
+];
+
+const STATUS_LABELS = STATUS_OPTIONS.reduce((acc, item) => {
+  acc[item.value] = item.label;
+  return acc;
+}, {});
+
+const defaultMetrics = () => ({
+  temperature: '',
+  heartRate: '',
+  bpSystolic: '',
+  bpDiastolic: '',
+  oxygen: '',
+  respiratoryRate: '',
+  glucose: '',
+  weight: '',
+  peakFlow: '',
+  mentalScore: '',
+  wellnessLevel: '',
+});
+
+const defaultMetadata = () => ({
+  provider: '',
+  officer: '',
+  location: '',
+  chronicType: '',
+  vaccineName: '',
+  doseNumber: '',
+  followUp: '',
+  sessionType: '',
+});
+
+const sanitizeObject = (obj = {}) => {
+  const clean = {};
+  Object.entries(obj).forEach(([key, value]) => {
+    if (value === null || value === undefined) return;
+    if (typeof value === 'string') {
+      if (value.trim() === '') return;
+      clean[key] = value.trim();
+      return;
+    }
+    clean[key] = value;
+  });
+  return clean;
+};
+
+const METADATA_LABELS = {
+  provider: 'Provider',
+  officer: 'Officer',
+  location: 'Location',
+  chronicType: 'Chronic Condition',
+  vaccineName: 'Vaccine',
+  doseNumber: 'Dose #',
+  followUp: 'Follow-up Notes',
+  sessionType: 'Session Type',
+};
+
+const METRIC_LABELS = {
+  temperature: 'Temperature (°C)',
+  heartRate: 'Heart Rate (BPM)',
+  bpSystolic: 'Blood Pressure Systolic',
+  bpDiastolic: 'Blood Pressure Diastolic',
+  oxygen: 'Oxygen Saturation (%)',
+  respiratoryRate: 'Respiratory Rate',
+  glucose: 'Glucose (mg/dL)',
+  weight: 'Weight (kg)',
+  peakFlow: 'Peak Flow (L/min)',
+  mentalScore: 'Mental Health Score',
+  wellnessLevel: 'Wellness Level',
+};
+
+const STATUS_TO_CLASS = {
+  open: 'chip-info',
+  scheduled: 'chip-info',
+  monitoring: 'chip-warning',
+  completed: 'chip-success',
+  overdue: 'chip-warning',
+};
+
+const extractEntries = (source, labels) => {
+  const sanitized = sanitizeObject(source || {});
+  return Object.entries(labels)
+    .map(([key, label]) => (sanitized[key] !== undefined ? { key, label, value: sanitized[key] } : null))
+    .filter(Boolean);
+};
+
+const getMetadataEntries = (metadata) => extractEntries(metadata, METADATA_LABELS);
+const getMetricEntries = (metrics) => extractEntries(metrics, METRIC_LABELS);
+
+const formatStatus = (value) => {
+  if (!value) return '—';
+  if (STATUS_LABELS[value]) return STATUS_LABELS[value];
+  return value
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
+const isWithinNextDays = (dateStr, days) => {
+  if (!dateStr) return false;
+  const target = new Date(dateStr);
+  if (Number.isNaN(target.getTime())) return false;
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+  const diff = target.getTime() - now.getTime();
+  if (diff < 0) return false;
+  const limit = days * 24 * 60 * 60 * 1000;
+  return diff <= limit;
+};
+
 const MOCK_RECORDS = [
   {
     _id: 'mock-1',
@@ -35,6 +153,22 @@ const MOCK_RECORDS = [
     date: '2025-10-15',
     notes: 'Vitals within normal range. No symptoms reported.',
     files: [],
+    status: 'completed',
+    nextDueDate: '2025-10-16',
+    metadata: {
+      provider: 'Self',
+      officer: 'Dr. Johnson',
+      location: 'Cabin 4',
+      followUp: 'Submit tomorrow health check.',
+    },
+    metrics: {
+      temperature: '36.8',
+      heartRate: '72',
+      bpSystolic: '118',
+      bpDiastolic: '76',
+      oxygen: '98',
+      respiratoryRate: '16',
+    },
   },
   {
     _id: 'mock-2',
@@ -43,6 +177,17 @@ const MOCK_RECORDS = [
     date: '2025-09-04',
     notes: 'No adverse reactions. Next dose due in one year.',
     files: [],
+    status: 'scheduled',
+    nextDueDate: '2026-09-01',
+    metadata: {
+      provider: 'MV Ocean Clinic',
+      officer: 'Nurse Emily',
+      location: 'Medical Bay',
+      vaccineName: 'Influenza',
+      doseNumber: '2',
+      followUp: 'Schedule reminder for next season.',
+    },
+    metrics: {},
   },
 ];
 
@@ -71,7 +216,7 @@ export default function CrewHealthRecords() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
-  const [filters, setFilters] = useState({ recordType: 'all', dateFrom: '', dateTo: '' });
+  const [filters, setFilters] = useState({ recordType: 'all', dateFrom: '', dateTo: '', status: 'all' });
   const [revision, setRevision] = useState(0);
 
   const [viewOpen, setViewOpen] = useState(false);
@@ -79,7 +224,17 @@ export default function CrewHealthRecords() {
   const [viewLoading, setViewLoading] = useState(false);
 
   const [formOpen, setFormOpen] = useState(false);
-  const [form, setForm] = useState({ id: null, recordType: '', condition: '', date: today(), notes: '' });
+  const [form, setForm] = useState({
+    id: null,
+    recordType: '',
+    condition: '',
+    date: today(),
+    notes: '',
+    status: 'open',
+    nextDueDate: '',
+    metadata: defaultMetadata(),
+    metrics: defaultMetrics(),
+  });
   const [formFiles, setFormFiles] = useState([]);
   const [formError, setFormError] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
@@ -99,6 +254,7 @@ export default function CrewHealthRecords() {
         const trimmed = query.trim();
         if (trimmed) params.q = trimmed;
         if (filters.recordType !== 'all' && filters.recordType) params.type = filters.recordType;
+        if (filters.status !== 'all' && filters.status) params.status = filters.status;
         if (filters.dateFrom) params.from = filters.dateFrom;
         if (filters.dateTo) params.to = filters.dateTo;
         const data = await listMyMedicalRecords(params);
@@ -115,7 +271,7 @@ export default function CrewHealthRecords() {
     };
     run();
     return () => { ignore = true; };
-  }, [filters.recordType, filters.dateFrom, filters.dateTo, query, revision, useMocks]);
+  }, [filters.recordType, filters.status, filters.dateFrom, filters.dateTo, query, revision, useMocks]);
 
   const refresh = () => setRevision((v) => v + 1);
 
@@ -146,7 +302,18 @@ export default function CrewHealthRecords() {
   };
 
   const openCreate = () => {
-    setForm({ id: null, recordType: '', condition: '', date: today(), notes: '' });
+    setViewOpen(false);
+    setForm({
+      id: null,
+      recordType: '',
+      condition: '',
+      date: today(),
+      notes: '',
+      status: 'open',
+      nextDueDate: '',
+      metadata: defaultMetadata(),
+      metrics: defaultMetrics(),
+    });
     setFormFiles([]);
     setFormError('');
     setFormOpen(true);
@@ -154,12 +321,17 @@ export default function CrewHealthRecords() {
 
   const openEdit = (record) => {
     if (!record) return;
+    setViewOpen(false);
     setForm({
       id: record._id || record.id,
       recordType: record.recordType || '',
       condition: record.condition || '',
       date: record.date ? String(record.date).slice(0, 10) : today(),
       notes: record.notes || '',
+      status: record.status || 'open',
+      nextDueDate: record.nextDueDate || '',
+      metadata: { ...defaultMetadata(), ...(record.metadata || {}) },
+      metrics: { ...defaultMetrics(), ...(record.metrics || {}) },
     });
     setFormFiles([]);
     setFormError('');
@@ -169,6 +341,16 @@ export default function CrewHealthRecords() {
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleMetadataChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, metadata: { ...prev.metadata, [name]: value } }));
+  };
+
+  const handleMetricsChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, metrics: { ...prev.metrics, [name]: value } }));
   };
 
   const handleFileChange = (e) => {
@@ -189,6 +371,10 @@ export default function CrewHealthRecords() {
         condition: form.condition,
         date: form.date || today(),
         notes: form.notes || '',
+        status: form.status || 'open',
+        nextDueDate: form.nextDueDate || '',
+        metadata: sanitizeObject(form.metadata || {}),
+        metrics: sanitizeObject(form.metrics || {}),
       };
       if (useMocks) {
         if (form.id) {
@@ -202,7 +388,17 @@ export default function CrewHealthRecords() {
         await createMyMedicalRecord(payload, formFiles);
       }
       setFormOpen(false);
-      setForm({ id: null, recordType: '', condition: '', date: today(), notes: '' });
+      setForm({
+        id: null,
+        recordType: '',
+        condition: '',
+        date: today(),
+        notes: '',
+        status: 'open',
+        nextDueDate: '',
+        metadata: defaultMetadata(),
+        metrics: defaultMetrics(),
+      });
       setFormFiles([]);
       refresh();
     } catch (err) {
@@ -242,6 +438,11 @@ export default function CrewHealthRecords() {
       date: record.date,
       notes: record.notes,
       files: record.files || [],
+      status: record.status,
+      nextDueDate: record.nextDueDate,
+      metadata: record.metadata || {},
+      metrics: record.metrics || {},
+      raw: record,
     }));
   }, [records]);
 
@@ -256,6 +457,26 @@ export default function CrewHealthRecords() {
       return matchesQuery;
     });
   }, [tableRows, query]);
+
+  const overviewCards = useMemo(() => {
+    const rows = tableRows;
+    const total = rows.length;
+    const chronic = rows.filter((row) => row.recordType === 'chronic').length;
+    const vaccinations = rows.filter((row) => row.recordType === 'vaccination').length;
+    const examinations = rows.filter((row) => row.recordType === 'examination').length;
+    const mental = rows.filter((row) => row.recordType === 'mental-health').length;
+    const dueSoon = rows.filter((row) => isWithinNextDays(row.nextDueDate, 7)).length;
+    const overdue = rows.filter((row) => String(row.status).toLowerCase() === 'overdue').length;
+    return [
+      { title: 'Total Records', value: total },
+      { title: 'Chronic Tracking Entries', value: chronic },
+      { title: 'Vaccination Records', value: vaccinations },
+      { title: 'Examination Records', value: examinations },
+      { title: 'Mental Health Entries', value: mental },
+      { title: 'Due Within 7 Days', value: dueSoon },
+      { title: 'Marked Overdue', value: overdue },
+    ];
+  }, [tableRows]);
 
   const renderFileList = (files) => {
     if (!files || files.length === 0) return null;
@@ -316,6 +537,17 @@ export default function CrewHealthRecords() {
               </div>
             )}
 
+            {overviewCards.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 20 }}>
+                {overviewCards.map((card) => (
+                  <div key={card.title} className="card" style={{ padding: 18, borderRadius: 12, background: '#f9fbff', border: '1px solid #dbeafe' }}>
+                    <div style={{ fontSize: 12, color: '#6b7280' }}>{card.title}</div>
+                    <div style={{ fontWeight: 600 }}>{card.value}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="records-filter" style={{ display: 'flex', gap: 15, marginBottom: 20, flexWrap: 'wrap' }}>
               <div className="filter-group" style={{ flex: 2, minWidth: 240 }}>
                 <label>Search</label>
@@ -332,6 +564,15 @@ export default function CrewHealthRecords() {
                 <select name="recordType" className="form-control" value={filters.recordType} onChange={handleFilterChange}>
                   <option value="all">All Records</option>
                   {TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="filter-group" style={{ flex: 1, minWidth: 180 }}>
+                <label>Status</label>
+                <select name="status" className="form-control" value={filters.status} onChange={handleFilterChange}>
+                  <option value="all">All Status</option>
+                  {STATUS_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
@@ -362,6 +603,8 @@ export default function CrewHealthRecords() {
                       <th>Type</th>
                       <th>Condition</th>
                       <th>Notes</th>
+                      <th>Status</th>
+                      <th>Next Due</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -372,10 +615,16 @@ export default function CrewHealthRecords() {
                         <td>{TYPE_LABELS[row.recordType] || row.recordType || '—'}</td>
                         <td>{row.condition || '—'}</td>
                         <td>{row.notes ? row.notes.slice(0, 80) + (row.notes.length > 80 ? '…' : '') : '—'}</td>
+                        <td>
+                          <span className={`chip ${STATUS_TO_CLASS[String(row.status || '').toLowerCase()] || 'chip-info'}`}>
+                            {formatStatus(row.status)}
+                          </span>
+                        </td>
+                        <td>{row.nextDueDate || '—'}</td>
                         <td className="action-buttons">
-                          <button className="btn btn-outline btn-sm" onClick={() => openView(row)}>View</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => openEdit(row)}>Edit</button>
-                          <button className="btn btn-outline btn-sm" onClick={() => handleDelete(row)} disabled={deletingId === row.id}>
+                          <button className="btn btn-outline btn-sm" onClick={() => openView(row.raw)}>View</button>
+                          <button className="btn btn-outline btn-sm" onClick={() => openEdit(row.raw)}>Edit</button>
+                          <button className="btn btn-outline btn-sm" onClick={() => handleDelete(row.raw)} disabled={deletingId === row.id}>
                             {deletingId === row.id ? 'Deleting…' : 'Delete'}
                           </button>
                         </td>
@@ -418,6 +667,52 @@ export default function CrewHealthRecords() {
                     <div>{viewRecord.notes || '—'}</div>
                   </div>
                 </div>
+                <div style={{ marginTop: 16, display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: '#666' }}>Status</div>
+                    <span className={`chip ${STATUS_TO_CLASS[String(viewRecord.status || '').toLowerCase()] || 'chip-info'}`}>
+                      {formatStatus(viewRecord.status)}
+                    </span>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: '#666' }}>Next Due</div>
+                    <div>{viewRecord.nextDueDate || '—'}</div>
+                  </div>
+                </div>
+                {(() => {
+                  const entries = getMetadataEntries(viewRecord.metadata);
+                  if (entries.length === 0) return null;
+                  return (
+                    <div style={{ marginTop: 18 }}>
+                      <div style={{ fontWeight: 600, marginBottom: 8 }}>Additional Details</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                        {entries.map((item) => (
+                          <div key={item.key} className="card" style={{ padding: 12 }}>
+                            <div style={{ fontSize: 12, color: '#666' }}>{item.label}</div>
+                            <div style={{ fontWeight: 600 }}>{item.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+                {(() => {
+                  const entries = getMetricEntries(viewRecord.metrics);
+                  if (entries.length === 0) return null;
+                  return (
+                    <div style={{ marginTop: 18 }}>
+                      <div style={{ fontWeight: 600, marginBottom: 8 }}>Health Metrics</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+                        {entries.map((item) => (
+                          <div key={item.key} className="card" style={{ padding: 12 }}>
+                            <div style={{ fontSize: 12, color: '#666' }}>{item.label}</div>
+                            <div style={{ fontWeight: 600 }}>{item.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
                 {renderFileList(viewRecord.files)}
                 <div style={{ marginTop: 20, textAlign: 'right' }}>
                   <button className="btn btn-primary" onClick={() => setViewOpen(false)}>Close</button>
@@ -454,10 +749,44 @@ export default function CrewHealthRecords() {
                   <label>Date *</label>
                   <input name="date" type="date" className="form-control" value={form.date} onChange={handleFormChange} required />
                 </div>
+                <div className="form-group">
+                  <label>Status</label>
+                  <select name="status" className="form-control" value={form.status} onChange={handleFormChange}>
+                    {STATUS_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Next Due Date</label>
+                <input name="nextDueDate" type="date" className="form-control" value={form.nextDueDate} onChange={handleFormChange} />
               </div>
               <div className="form-group">
                 <label>Notes</label>
                 <textarea name="notes" className="form-control" rows={3} placeholder="Add notes about this record" value={form.notes} onChange={handleFormChange}></textarea>
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>Additional Details</div>
+                <div className="form-grid">
+                  {Object.entries(METADATA_LABELS).map(([key, label]) => (
+                    <div key={key} className="form-group">
+                      <label>{label}</label>
+                      <input name={key} className="form-control" value={form.metadata?.[key] || ''} onChange={handleMetadataChange} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>Health Metrics</div>
+                <div className="form-grid">
+                  {Object.entries(METRIC_LABELS).map(([key, label]) => (
+                    <div key={key} className="form-group">
+                      <label>{label}</label>
+                      <input name={key} className="form-control" value={form.metrics?.[key] || ''} onChange={handleMetricsChange} />
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className="form-group">
                 <label>Attachments</label>

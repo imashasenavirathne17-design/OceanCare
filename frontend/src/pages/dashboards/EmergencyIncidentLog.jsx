@@ -1,317 +1,825 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getUser } from '../../lib/token';
+import { clearSession, getUser } from '../../lib/token';
 import EmergencySidebar from './EmergencySidebar';
+import {
+  listIncidents,
+  createIncident,
+  updateIncident,
+  deleteIncident,
+  resolveIncident,
+  appendTimelineEntry,
+  appendActionLogEntry,
+} from '../../lib/emergencyIncidentApi';
+import { listCrewProfiles } from '../../lib/emergencyCrewApi';
+import './emergencyOfficerDashboard.css';
+
+const STATUS_FILTERS = [
+  { value: 'all', label: 'All Statuses' },
+  { value: 'NEW', label: 'New' },
+  { value: 'IN_PROGRESS', label: 'In Progress' },
+  { value: 'RESOLVED', label: 'Resolved' },
+  { value: 'ARCHIVED', label: 'Archived' },
+];
+
+const SEVERITY_FILTERS = [
+  { value: 'all', label: 'All Severities' },
+  { value: 'critical', label: 'Critical' },
+  { value: 'warning', label: 'Warning' },
+  { value: 'info', label: 'Info' },
+];
+
+const severityToLabel = {
+  critical: 'Critical',
+  warning: 'Warning',
+  info: 'Info',
+};
+
+const statusToLabel = {
+  NEW: 'New',
+  IN_PROGRESS: 'In Progress',
+  RESOLVED: 'Resolved',
+  ARCHIVED: 'Archived',
+};
+
+const statusToBadge = {
+  NEW: 'pending',
+  IN_PROGRESS: 'inprogress',
+  RESOLVED: 'completed',
+  ARCHIVED: 'ongoing',
+};
+
+const crewOptionId = (crew) => crew?._id || crew?.id || crew?.crewId || '';
+
+const createEmptyForm = (user) => ({
+  incidentCode: '',
+  title: '',
+  description: '',
+  severity: 'critical',
+  status: 'NEW',
+  category: 'Medical',
+  location: '',
+  reportedBy: user?.fullName || '',
+  assignedTo: '',
+  startedAt: '',
+  notes: '',
+  patientName: '',
+  patientCrewId: '',
+  patientRole: '',
+  patientAge: '',
+  patientBloodType: '',
+});
+
+const formatDateTime = (value) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString(undefined, {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
 
 export default function EmergencyIncidentLog() {
-  const user = getUser();
   const navigate = useNavigate();
+  const user = getUser();
 
-  const userFullName = user?.fullName || 'Emergency Officer';
-  const userRole = user?.role ? (user.role.charAt(0).toUpperCase() + user.role.slice(1)) : 'Emergency Officer';
-  const userVessel = user?.vessel || 'MV Ocean Explorer';
-  const userAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(userFullName)}&background=e63946&color=fff`;
+  const [incidents, setIncidents] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [filters, setFilters] = useState({ search: '', status: 'all', severity: 'all' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState('create');
+  const [formData, setFormData] = useState(createEmptyForm(user));
+  const [formErrors, setFormErrors] = useState({});
+  const [timelineInput, setTimelineInput] = useState({ label: '', description: '' });
+  const [actionInput, setActionInput] = useState({ officer: user?.fullName || '', action: '' });
+  const [notesValue, setNotesValue] = useState('');
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [crewOptions, setCrewOptions] = useState([]);
+  const [crewLoading, setCrewLoading] = useState(false);
+  const [crewError, setCrewError] = useState('');
+  const [selectedCrewId, setSelectedCrewId] = useState('');
 
-  const [filters, setFilters] = useState({ status: 'All Incidents', severity: 'All Severities', date: 'Last 24 Hours', q: '' });
+  const onLogout = () => {
+    clearSession();
+    navigate('/login');
+  };
 
-  const incidents = useMemo(() => ([
-    {
-      id: 'inc-2023-087',
-      title: 'Cardiac Emergency - John Davis',
-      icon: 'fas fa-heartbeat',
-      type: 'critical',
-      person: 'John Davis (CREW-045)',
-      location: 'Engine Room → Medical Bay',
-      started: '10:24 AM',
-      desc: 'Critical cardiac anomaly detected. HR 145 bpm with irregular rhythm. Moved to medical bay.',
-      progress: 65,
-      lastUpdate: '10:45 AM',
-      status: 'IN PROGRESS',
-    },
-    {
-      id: 'inc-2023-086',
-      title: 'Respiratory Distress - Maria Rodriguez',
-      icon: 'fas fa-lungs',
-      type: 'warning',
-      person: 'Maria Rodriguez (CREW-128)',
-      location: 'Medical Bay',
-      started: '09:45 AM',
-      desc: 'SpO2 88%. Oxygen administered and monitoring closely.',
-      progress: 40,
-      lastUpdate: '10:15 AM',
-      status: 'IN PROGRESS',
-    },
-    {
-      id: 'inc-2023-085',
-      title: 'Elevated Temperature - Robert Chen',
-      icon: 'fas fa-thermometer-full',
-      type: 'info',
-      person: 'Robert Chen (CREW-312)',
-      location: 'Crew Quarters B → Medical Bay',
-      started: '08:15 AM',
-      desc: 'High fever detected (39.2°C). Administered antipyretics. Temperature normalized.',
-      progress: 100,
-      lastUpdate: '09:30 AM',
-      status: 'RESOLVED',
-    },
-  ]), []);
-
-  const filtered = incidents.filter((i) => {
-    if (filters.status !== 'All Incidents' && !i.status.toLowerCase().includes(filters.status.toLowerCase().replace(' ', '-'))) return false;
-    if (filters.severity !== 'All Severities') {
-      if (filters.severity === 'Critical' && i.type !== 'critical') return false;
-      if (filters.severity === 'Major' && i.type !== 'warning') return false; // map demo
-      if (filters.severity === 'Minor' && i.type !== 'info') return false;
+  const fetchIncidents = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const data = await listIncidents();
+      const normalized = Array.isArray(data) ? data : [];
+      normalized.sort((a, b) => new Date(b.startedAt || b.createdAt || 0) - new Date(a.startedAt || a.createdAt || 0));
+      setIncidents(normalized);
+      if (normalized.length && !selectedId) {
+        setSelectedId(normalized[0]._id);
+      }
+    } catch (err) {
+      setError('Unable to load incidents. Please refresh.');
+    } finally {
+      setLoading(false);
     }
-    if (filters.q && !(`${i.title} ${i.person} ${i.location}`.toLowerCase().includes(filters.q.toLowerCase()))) return false;
-    return true;
-  });
+  };
+
+  useEffect(() => {
+    fetchIncidents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    const loadCrew = async () => {
+      setCrewLoading(true);
+      setCrewError('');
+      try {
+        const data = await listCrewProfiles({ status: 'active', limit: 200 });
+        if (!ignore) setCrewOptions(Array.isArray(data) ? data : []);
+      } catch (err) {
+        if (!ignore) setCrewError('Unable to load crew directory.');
+      } finally {
+        if (!ignore) setCrewLoading(false);
+      }
+    };
+    loadCrew();
+    return () => { ignore = true; };
+  }, []);
+
+  const filteredIncidents = useMemo(() => {
+    return incidents.filter((incident) => {
+      if (filters.status !== 'all' && incident.status !== filters.status) return false;
+      if (filters.severity !== 'all' && incident.severity !== filters.severity) return false;
+      if (filters.search.trim()) {
+        const q = filters.search.trim().toLowerCase();
+        const text = `${incident.incidentCode || ''} ${incident.title || ''} ${incident.patient?.name || ''} ${incident.location || ''}`.toLowerCase();
+        if (!text.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [filters, incidents]);
+
+  useEffect(() => {
+    if (!filteredIncidents.length) {
+      setSelectedId(null);
+      return;
+    }
+    if (selectedId && filteredIncidents.some((incident) => incident._id === selectedId)) {
+      return;
+    }
+    setSelectedId(filteredIncidents[0]._id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredIncidents]);
+
+  const selectedIncident = incidents.find((incident) => incident._id === selectedId) || null;
+
+  useEffect(() => {
+    if (!selectedIncident) {
+      setNotesValue('');
+      setTimelineInput({ label: '', description: '' });
+      setActionInput({ officer: user?.fullName || '', action: '' });
+      return;
+    }
+    setNotesValue(selectedIncident.notes || '');
+    setActionInput({ officer: selectedIncident.assignedTo || user?.fullName || '', action: '' });
+  }, [selectedIncident, user]);
+
+  const metrics = useMemo(() => {
+    const total = incidents.length;
+    const active = incidents.filter((incident) => incident.status !== 'RESOLVED' && incident.status !== 'ARCHIVED').length;
+    const resolved = incidents.filter((incident) => incident.status === 'RESOLVED').length;
+    const critical = incidents.filter((incident) => incident.severity === 'critical').length;
+    return { total, active, resolved, critical };
+  }, [incidents]);
+
+  const openCreateEditor = () => {
+    setEditorMode('create');
+    setFormData({
+      ...createEmptyForm(user),
+      incidentCode: `INC-${Date.now()}`,
+    });
+    setFormErrors({});
+    setIsEditorOpen(true);
+    setSelectedCrewId('');
+  };
+
+  const openEditEditor = () => {
+    if (!selectedIncident) return;
+    setEditorMode('edit');
+    setFormData({
+      incidentCode: selectedIncident.incidentCode || '',
+      title: selectedIncident.title || '',
+      description: selectedIncident.description || '',
+      severity: selectedIncident.severity || 'info',
+      status: selectedIncident.status || 'NEW',
+      category: selectedIncident.category || 'Medical',
+      location: selectedIncident.location || '',
+      reportedBy: selectedIncident.reportedBy || '',
+      assignedTo: selectedIncident.assignedTo || '',
+      startedAt: selectedIncident.startedAt ? new Date(selectedIncident.startedAt).toISOString().slice(0, 16) : '',
+      notes: selectedIncident.notes || '',
+      patientName: selectedIncident.patient?.name || '',
+      patientCrewId: selectedIncident.patient?.crewId || '',
+      patientRole: selectedIncident.patient?.role || '',
+      patientAge: selectedIncident.patient?.age ?? '',
+      patientBloodType: selectedIncident.patient?.bloodType || '',
+    });
+    setFormErrors({});
+    setIsEditorOpen(true);
+    const match = crewOptions.find((crew) => crew.crewId === selectedIncident.patient?.crewId);
+    setSelectedCrewId(crewOptionId(match));
+  };
+
+  const closeEditor = () => {
+    setIsEditorOpen(false);
+    setSubmitting(false);
+  };
+
+  const onFormChange = (field) => (event) => {
+    const value = event.target.value;
+    if (['patientName', 'patientCrewId', 'patientRole', 'patientAge', 'patientBloodType'].includes(field)) {
+      setSelectedCrewId('');
+    }
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const validateForm = () => {
+    const nextErrors = {};
+    if (!formData.incidentCode.trim()) nextErrors.incidentCode = 'Incident code is required';
+    if (!formData.title.trim()) nextErrors.title = 'Title is required';
+    if (!formData.reportedBy.trim()) nextErrors.reportedBy = 'Reporter is required';
+    if (!formData.patientName.trim()) nextErrors.patientName = 'Patient name is required';
+    if (!formData.location.trim()) nextErrors.location = 'Location is required';
+    return nextErrors;
+  };
+
+  const buildPayload = () => {
+    const payload = {
+      incidentCode: formData.incidentCode.trim(),
+      title: formData.title.trim(),
+      description: formData.description.trim(),
+      severity: (formData.severity || 'info').toLowerCase(),
+      status: (formData.status || 'NEW').toUpperCase(),
+      category: formData.category.trim(),
+      location: formData.location.trim(),
+      reportedBy: formData.reportedBy.trim(),
+      assignedTo: formData.assignedTo.trim(),
+      notes: formData.notes.trim(),
+    };
+
+    if (!payload.category) delete payload.category;
+    if (!payload.assignedTo) delete payload.assignedTo;
+    if (!payload.notes) delete payload.notes;
+
+    if (formData.startedAt) {
+      payload.startedAt = new Date(formData.startedAt);
+    }
+
+    const patient = {
+      name: formData.patientName.trim(),
+      crewId: formData.patientCrewId.trim(),
+      role: formData.patientRole.trim(),
+      bloodType: formData.patientBloodType.trim(),
+    };
+    if (formData.patientAge !== '' && formData.patientAge !== null && formData.patientAge !== undefined) {
+      const ageNum = Number(formData.patientAge);
+      if (!Number.isNaN(ageNum)) patient.age = ageNum;
+    }
+    Object.keys(patient).forEach((key) => {
+      if (patient[key] === '') {
+        delete patient[key];
+      }
+    });
+    payload.patient = patient;
+    return payload;
+  };
+
+  const submitForm = async () => {
+    const validation = validateForm();
+    setFormErrors(validation);
+    if (Object.keys(validation).length) return;
+
+    setSubmitting(true);
+    try {
+      const payload = buildPayload();
+      if (editorMode === 'create') {
+        const created = await createIncident(payload);
+        setIncidents((prev) => [created, ...prev]);
+        setSelectedId(created._id);
+      } else if (selectedIncident) {
+        const updated = await updateIncident(selectedIncident._id, payload);
+        setIncidents((prev) => prev.map((incident) => (incident._id === updated._id ? updated : incident)));
+        setSelectedId(updated._id);
+      }
+      closeEditor();
+    } catch (err) {
+      setError('Unable to save incident. Please try again.');
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedIncident) return;
+    if (!window.confirm('Delete this incident?')) return;
+    try {
+      await deleteIncident(selectedIncident._id);
+      setIncidents((prev) => prev.filter((incident) => incident._id !== selectedIncident._id));
+      setSelectedId(null);
+    } catch (err) {
+      setError('Failed to delete incident.');
+    }
+  };
+
+  const handleResolve = async () => {
+    if (!selectedIncident) return;
+    try {
+      const updated = await resolveIncident(selectedIncident._id, notesValue ? { notes: notesValue } : {});
+      setIncidents((prev) => prev.map((incident) => (incident._id === updated._id ? updated : incident)));
+      setSelectedId(updated._id);
+    } catch (err) {
+      setError('Failed to resolve incident.');
+    }
+  };
+
+  const addTimelineEntry = async () => {
+    if (!selectedIncident) return;
+    if (!timelineInput.label.trim() && !timelineInput.description.trim()) return;
+    try {
+      const updated = await appendTimelineEntry(selectedIncident._id, {
+        label: timelineInput.label.trim() || 'Update',
+        description: timelineInput.description.trim(),
+      });
+      setIncidents((prev) => prev.map((incident) => (incident._id === updated._id ? updated : incident)));
+      setTimelineInput({ label: '', description: '' });
+    } catch (err) {
+      setError('Failed to append timeline entry.');
+    }
+  };
+
+  const addActionEntry = async () => {
+    if (!selectedIncident) return;
+    if (!actionInput.action.trim()) return;
+    try {
+      const updated = await appendActionLogEntry(selectedIncident._id, {
+        officer: actionInput.officer?.trim() || user?.fullName || 'Officer',
+        action: actionInput.action.trim(),
+      });
+      setIncidents((prev) => prev.map((incident) => (incident._id === updated._id ? updated : incident)));
+      setActionInput((prev) => ({ ...prev, action: '' }));
+    } catch (err) {
+      setError('Failed to append action log.');
+    }
+  };
+
+  const handleCrewSelect = (event) => {
+    const crewId = event.target.value;
+    setSelectedCrewId(crewId);
+    if (!crewId) return;
+    const profile = crewOptions.find((crew) => crewOptionId(crew) === crewId);
+    if (!profile) return;
+    setFormData((prev) => ({
+      ...prev,
+      patientName: profile.fullName || prev.patientName || '',
+      patientCrewId: profile.crewId || prev.patientCrewId || '',
+      patientRole: profile.position || profile.role || prev.patientRole || '',
+      patientAge: profile.age !== undefined && profile.age !== null ? String(profile.age) : prev.patientAge,
+      patientBloodType: profile.bloodType || prev.patientBloodType || '',
+    }));
+  };
+
+  const saveNotes = async () => {
+    if (!selectedIncident) return;
+    setSavingNotes(true);
+    try {
+      const updated = await updateIncident(selectedIncident._id, { notes: notesValue });
+      setIncidents((prev) => prev.map((incident) => (incident._id === updated._id ? updated : incident)));
+    } catch (err) {
+      setError('Unable to update notes.');
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
+  const severityBadge = (severity) => {
+    if (severity === 'critical') return 'badge-critical';
+    if (severity === 'warning') return 'badge-pending';
+    return 'badge-ongoing';
+  };
 
   return (
-    <div className="dashboard-container emergency-dashboard">
-      <style>{`
-        .header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:30px; padding:18px 22px; background:#fff; border-radius:14px; box-shadow:0 4px 12px rgba(0,0,0,.06); }
-        .header h2{ color:#e63946; font-size:24px; font-weight:700; margin:0; }
-        .user-info{ display:flex; align-items:center; gap:10px; }
-        .user-info img{ width:40px; height:40px; border-radius:50%; margin-right:8px; }
-        .user-info .meta{ display:flex; flex-direction:column; }
-        .user-info .name{ color:#343a40; font-weight:600; line-height:1.2; }
-        .user-info small{ color:#6c757d; }
-        .status-badge{ padding:6px 12px; border-radius:9999px; font-size:12px; font-weight:600; margin-left:10px; border:1px solid rgba(230,57,70,.35); background:rgba(230,57,70,.12); color:#e63946; }
-
-        .incident-controls{ background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,.05); padding:20px; margin-bottom:20px; display:flex; flex-wrap:wrap; gap:15px; align-items:center; }
-        .filter-group{ display:flex; flex-direction:column; }
-        .filter-label{ font-size:14px; margin-bottom:5px; color:#666; font-weight:500; }
-        .filter-select{ padding:8px 12px; border:1px solid #ddd; border-radius:4px; background:#fff; min-width:150px; }
-        .search-box{ display:flex; align-items:center; background:#fff; border:1px solid #ddd; border-radius:4px; padding:0 10px; flex:1; max-width:300px; }
-        .search-box input{ border:none; padding:8px 10px; width:100%; outline:none; }
-        .btn{ padding:8px 15px; border:none; border-radius:4px; cursor:pointer; font-weight:500; transition:.3s; display:inline-flex; align-items:center; }
-        .btn i{ margin-right:5px; }
-        .btn-primary{ background:#e63946; color:#fff; }
-        .btn-success{ background:#2a9d8f; color:#fff; }
-
-        .incident-stats{ display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:20px; margin-bottom:30px; }
-        .stat-card{ background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,.05); padding:20px; text-align:center; transition:.3s; }
-        .stat-card:hover{ transform: translateY(-5px); }
-        .stat-icon{ width:60px; height:60px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:24px; margin:0 auto 15px; color:#fff; }
-        .stat-icon.critical{ background:#e63946; } .stat-icon.warning{ background:#f4a261; } .stat-icon.active{ background:#e63946; } .stat-icon.resolved{ background:#2a9d8f; }
-        .stat-value{ font-size:32px; font-weight:700; margin-bottom:5px; }
-        .stat-label{ font-size:14px; color:#777; }
-
-        .incident-list{ background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,.05); overflow:hidden; margin-bottom:30px; }
-        .incident-list-header{ display:flex; justify-content:space-between; align-items:center; padding:15px 20px; background:#f8f9fa; border-bottom:1px solid #eee; }
-        .incident-list-title{ font-weight:600; color:#e63946; }
-        .incident-actions{ display:flex; gap:10px; }
-        .incident-item{ display:flex; padding:20px; border-bottom:1px solid #eee; transition:.3s; cursor:pointer; }
-        .incident-item:hover{ background:#f8f9fa; }
-        .incident-item.active{ background:rgba(230,57,70,.1); border-left:4px solid #e63946; }
-        .incident-icon{ width:50px; height:50px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:20px; margin-right:15px; color:#fff; }
-        .incident-icon.critical{ background:#e63946; } .incident-icon.warning{ background:#f4a261; } .incident-icon.info{ background:#3a86ff; }
-        .incident-content{ flex:1; }
-        .incident-title{ font-weight:600; font-size:18px; margin-bottom:5px; }
-        .incident-meta{ display:flex; flex-wrap:wrap; gap:15px; margin-bottom:10px; }
-        .incident-meta-item{ display:flex; align-items:center; font-size:14px; color:#666; }
-        .incident-meta-item i{ margin-right:5px; color:#e63946; }
-        .incident-description{ font-size:14px; color:#777; margin-bottom:10px; }
-        .incident-progress{ display:flex; align-items:center; margin-bottom:10px; }
-        .progress-bar{ flex:1; height:6px; background:#e9ecef; border-radius:3px; overflow:hidden; margin-right:10px; }
-        .progress-fill{ height:100%; background:#e63946; border-radius:3px; }
-        .progress-text{ font-size:12px; color:#666; }
-        .incident-footer{ display:flex; justify-content:space-between; align-items:center; margin-top:10px; }
-        .incident-time{ font-size:12px; color:#999; }
-        .incident-status{ padding:4px 8px; border-radius:12px; font-size:12px; font-weight:600; }
-        .status-new{ background:rgba(230,57,70,.2); color:#e63946; } .status-in-progress{ background:rgba(244,162,97,.2); color:#f4a261; } .status-resolved{ background:rgba(42,157,143,.2); color:#2a9d8f; }
-
-        .incident-detail{ background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,.05); padding:25px; margin-bottom:30px; }
-        .detail-header{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:25px; padding-bottom:15px; border-bottom:1px solid #eee; }
-        .detail-main{ flex:1; }
-        .detail-title{ font-size:24px; font-weight:600; margin-bottom:10px; }
-        .detail-meta{ display:flex; flex-wrap:wrap; gap:15px; margin-bottom:10px; }
-        .detail-meta-item{ display:flex; align-items:center; font-size:14px; color:#666; }
-        .detail-meta-item i{ margin-right:5px; color:#e63946; }
-        .detail-actions{ display:flex; gap:10px; }
-        .tabs{ display:flex; border-bottom:1px solid #eee; margin-bottom:20px; }
-        .tab{ padding:12px 20px; cursor:pointer; border-bottom:3px solid transparent; font-weight:500; }
-        .tab.active{ border-bottom:3px solid #e63946; color:#e63946; }
-        .tab-content{ display:none; }
-        .tab-content.active{ display:block; }
-        .info-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:20px; margin-bottom:25px; }
-        .info-card{ background:#f8f9fa; border-radius:8px; padding:15px; }
-        .info-card-title{ font-size:16px; font-weight:600; margin-bottom:10px; color:#e63946; }
-        .info-item{ display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #eee; }
-        .info-item:last-child{ border-bottom:none; }
-        .info-label{ font-weight:500; color:#666; }
-        .info-value{ font-weight:500; }
-        .timeline{ margin-bottom:25px; }
-        .timeline-item{ display:flex; padding:15px 0; border-bottom:1px solid #eee; }
-        .timeline-item:last-child{ border-bottom:none; }
-        .timeline-time{ width:100px; font-weight:600; color:#e63946; font-size:14px; }
-        .timeline-content{ flex:1; }
-        .timeline-title{ font-weight:600; margin-bottom:5px; }
-        .timeline-desc{ font-size:14px; color:#666; }
-        .action-log{ margin-bottom:25px; }
-        .log-item{ padding:12px 0; border-bottom:1px solid #eee; }
-        .log-item:last-child{ border-bottom:none; }
-        .log-header{ display:flex; justify-content:space-between; margin-bottom:5px; }
-        .log-officer{ font-weight:600; }
-        .log-time{ font-size:12px; color:#999; }
-        .log-action{ font-size:14px; color:#666; }
-
-        @media (max-width:992px){ .dashboard-container{flex-direction:column;} .sidebar{width:100%; height:auto;} .sidebar-menu{display:flex; overflow-x:auto;} .sidebar-menu li{margin-bottom:0; margin-right:10px;} .sidebar-menu a{padding:10px 15px; border-left:none; border-bottom:3px solid transparent;} .sidebar-menu a:hover, .sidebar-menu a.active{border-left:none; border-bottom:3px solid #fff;} }
-        @media (max-width:768px){ .header{flex-direction:column; align-items:flex-start;} .user-info{margin-top:15px;} .incident-controls{flex-direction:column; align-items:flex-start;} .filter-group, .filter-select{width:100%;} .search-box{max-width:100%; width:100%;} .incident-stats{grid-template-columns:repeat(2, 1fr);} .incident-item{flex-direction:column;} .incident-icon{margin-right:0; margin-bottom:15px;} .detail-header{flex-direction:column;} .detail-actions{margin-top:15px; width:100%; justify-content:flex-start;} .tabs{overflow-x:auto;} }
-        @media (max-width:480px){ .incident-stats{grid-template-columns:1fr;} .incident-meta{flex-direction:column; gap:5px;} .incident-footer{flex-direction:column; align-items:flex-start; gap:10px;} .info-grid{grid-template-columns:1fr;} }
-      `}</style>
-
-      {/* Sidebar */}
-      <EmergencySidebar onLogout={() => navigate('/')} />
-
-      {/* Main Content */}
-      <div className="main-content">
-        <div className="header">
-          <h2>Incident Log & Case Management</h2>
-          <div className="user-info">
-            <img src={userAvatarUrl} alt="User" />
-            <div className="meta">
-              <div className="name">{userFullName}</div>
-              <small>{`${userRole} | ${userVessel}`}</small>
-            </div>
-            <div className="status-badge status-active">On Duty</div>
-          </div>
-        </div>
-
-        {/* Incident Controls */}
-        <div className="incident-controls">
-          <div className="filter-group">
-            <label className="filter-label">Status</label>
-            <select className="filter-select" value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}>
-              <option>All Incidents</option>
-              <option>New</option>
-              <option>In Progress</option>
-              <option>Resolved</option>
-            </select>
-          </div>
-          <div className="filter-group">
-            <label className="filter-label">Severity</label>
-            <select className="filter-select" value={filters.severity} onChange={(e) => setFilters((f) => ({ ...f, severity: e.target.value }))}>
-              <option>All Severities</option>
-              <option>Critical</option>
-              <option>Major</option>
-              <option>Minor</option>
-            </select>
-          </div>
-          <div className="filter-group">
-            <label className="filter-label">Date Range</label>
-            <select className="filter-select" value={filters.date} onChange={(e) => setFilters((f) => ({ ...f, date: e.target.value }))}>
-              <option>Last 24 Hours</option>
-              <option>Last 48 Hours</option>
-              <option>Last Week</option>
-              <option>Last Month</option>
-            </select>
-          </div>
-          <div className="search-box">
-            <i className="fas fa-search" />
-            <input type="text" placeholder="Search incidents..." value={filters.q} onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))} />
-          </div>
-          <button className="btn btn-primary" onClick={() => alert('Filters applied')}><i className="fas fa-filter" /> Apply Filters</button>
-          <button className="btn btn-success" onClick={() => alert('Open new incident form')}><i className="fas fa-plus" /> New Incident</button>
-        </div>
-
-        {/* Incident Stats */}
-        <div className="incident-stats">
-          <div className="stat-card"><div className="stat-icon critical"><i className="fas fa-exclamation-triangle" /></div><div className="stat-value">3</div><div className="stat-label">Critical Incidents</div></div>
-          <div className="stat-card"><div className="stat-icon warning"><i className="fas fa-clock" /></div><div className="stat-value">5</div><div className="stat-label">Active Incidents</div></div>
-          <div className="stat-card"><div className="stat-icon active"><i className="fas fa-tasks" /></div><div className="stat-value">12</div><div className="stat-label">Total Today</div></div>
-          <div className="stat-card"><div className="stat-icon resolved"><i className="fas fa-check-circle" /></div><div className="stat-value">8</div><div className="stat-label">Resolved Today</div></div>
-        </div>
-
-        {/* Incident List */}
-        <div className="incident-list">
-          <div className="incident-list-header">
-            <div className="incident-list-title">Active Incidents</div>
-            <div className="incident-actions">
-              <button className="btn"><i className="fas fa-sync-alt" /> Refresh</button>
-              <button className="btn"><i className="fas fa-download" /> Export</button>
+    <div className="emergency-dashboard incident-log-screen">
+      <EmergencySidebar active="incident-log" onLogout={onLogout} />
+      <div className="dashboard-main incident-log">
+        <div className="dashboard-header">
+          <div>
+            <h1 className="dashboard-title">Emergency Incident Log</h1>
+            <div className="dashboard-meta">
+              <span className="dashboard-update">Live overview of ship-wide emergencies</span>
             </div>
           </div>
-          {filtered.map((i, idx) => (
-            <div key={i.id} className={`incident-item ${idx===0 ? 'active' : ''}`}>
-              <div className={`incident-icon ${i.type}`}><i className={i.icon} /></div>
-              <div className="incident-content">
-                <div className="incident-title">{i.title}</div>
-                <div className="incident-meta">
-                  <div className="incident-meta-item"><i className="fas fa-user" /><span>{i.person}</span></div>
-                  <div className="incident-meta-item"><i className="fas fa-map-marker-alt" /><span>{i.location}</span></div>
-                  <div className="incident-meta-item"><i className="fas fa-clock" /><span>Started: {i.started}</span></div>
+          <div className="dashboard-actions">
+            <button className="btn btn-outline" onClick={fetchIncidents}>
+              <i className="fas fa-sync"></i> Refresh
+            </button>
+            <button className="btn btn-primary" onClick={openCreateEditor}>
+              <i className="fas fa-plus"></i> New Incident
+            </button>
+          </div>
+        </div>
+
+        {error && <div className="incident-error">{error}</div>}
+
+        <div className="incident-metrics">
+          <div className="incident-metric">
+            <div className="metric-icon info"><i className="fas fa-clipboard-list"></i></div>
+            <div>
+              <div className="metric-label">Total Incidents</div>
+              <div className="metric-value">{metrics.total}</div>
+            </div>
+          </div>
+          <div className="incident-metric">
+            <div className="metric-icon danger"><i className="fas fa-heartbeat"></i></div>
+            <div>
+              <div className="metric-label">Critical Cases</div>
+              <div className="metric-value">{metrics.critical}</div>
+            </div>
+          </div>
+          <div className="incident-metric">
+            <div className="metric-icon warning"><i className="fas fa-exclamation-triangle"></i></div>
+            <div>
+              <div className="metric-label">Active Responses</div>
+              <div className="metric-value">{metrics.active}</div>
+            </div>
+          </div>
+          <div className="incident-metric">
+            <div className="metric-icon success"><i className="fas fa-check-circle"></i></div>
+            <div>
+              <div className="metric-label">Resolved</div>
+              <div className="metric-value">{metrics.resolved}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="incident-layout">
+          <aside className="incident-list-panel">
+            <div className="incident-list-header">
+              <h2>Incident Queue</h2>
+              <span>{filteredIncidents.length} showing</span>
+            </div>
+            <div className="incident-list-controls">
+              <input
+                type="search"
+                className="form-control"
+                placeholder="Search code, crew, location"
+                value={filters.search}
+                onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))}
+              />
+              <select
+                className="form-control"
+                value={filters.status}
+                onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}
+              >
+                {STATUS_FILTERS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <select
+                className="form-control"
+                value={filters.severity}
+                onChange={(event) => setFilters((prev) => ({ ...prev, severity: event.target.value }))}
+              >
+                {SEVERITY_FILTERS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="incident-list">
+              {loading && <div className="incident-empty">Loading incidents…</div>}
+              {!loading && !filteredIncidents.length && (
+                <div className="incident-empty">No incidents match your filters.</div>
+              )}
+              {!loading && filteredIncidents.map((incident) => (
+                <button
+                  key={incident._id}
+                  type="button"
+                  className={`incident-list-item ${selectedId === incident._id ? 'active' : ''}`}
+                  onClick={() => setSelectedId(incident._id)}
+                >
+                  <div className="incident-list-row">
+                    <span className="incident-code">{incident.incidentCode || 'Untracked'}</span>
+                    <span className={`badge ${severityBadge(incident.severity)}`}>
+                      {severityToLabel[incident.severity] || 'Info'}
+                    </span>
+                  </div>
+                  <div className="incident-list-title">{incident.title || 'Untitled Incident'}</div>
+                  <div className="incident-list-meta">
+                    <span><i className="fas fa-user"></i> {incident.patient?.name || 'Unknown'}</span>
+                    <span><i className="fas fa-map-marker-alt"></i> {incident.location || 'No location'}</span>
+                  </div>
+                  <div className="incident-list-footer">
+                    <span className={`badge badge-${statusToBadge[incident.status] || 'pending'}`}>
+                      {statusToLabel[incident.status] || incident.status}
+                    </span>
+                    <span>{formatDateTime(incident.startedAt || incident.createdAt)}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </aside>
+
+          <section className="incident-detail-panel">
+            {!selectedIncident && (
+              <div className="incident-empty large">Select an incident to review details.</div>
+            )}
+
+            {selectedIncident && (
+              <>
+                <div className="incident-detail-header">
+                  <div>
+                    <h2>{selectedIncident.title || 'Untitled Incident'}</h2>
+                    <div className="incident-detail-tags">
+                      <span className={`badge ${severityBadge(selectedIncident.severity)}`}>
+                        {severityToLabel[selectedIncident.severity] || 'Info'}
+                      </span>
+                      <span className={`badge badge-${statusToBadge[selectedIncident.status] || 'pending'}`}>
+                        {statusToLabel[selectedIncident.status] || selectedIncident.status}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="incident-detail-actions">
+                    <button className="btn btn-outline" onClick={openEditEditor}>
+                      <i className="fas fa-edit"></i> Edit
+                    </button>
+                    <button className="btn btn-success" onClick={handleResolve} disabled={selectedIncident.status === 'RESOLVED'}>
+                      <i className="fas fa-check"></i> Resolve
+                    </button>
+                    <button className="btn btn-danger" onClick={handleDelete}>
+                      <i className="fas fa-trash"></i>
+                    </button>
+                  </div>
                 </div>
-                <div className="incident-description">{i.desc}</div>
-                <div className="incident-progress"><div className="progress-bar"><div className="progress-fill" style={{width: `${i.progress}%`}} /></div><div className="progress-text">{i.progress}% Complete</div></div>
-                <div className="incident-footer">
-                  <div className="incident-time">Last updated: {i.lastUpdate}</div>
-                  <div className={`incident-status ${i.status==='RESOLVED'?'status-resolved': i.status==='IN PROGRESS'?'status-in-progress':'status-new'}`}>{i.status}</div>
+
+                <div className="incident-section">
+                  <h3 className="incident-section-title">Patient Profile</h3>
+                  <div className="incident-meta-grid">
+                    <div className="incident-meta"><span className="label">Name</span><span className="value">{selectedIncident.patient?.name || '—'}</span></div>
+                    <div className="incident-meta"><span className="label">Crew ID</span><span className="value">{selectedIncident.patient?.crewId || '—'}</span></div>
+                    <div className="incident-meta"><span className="label">Role</span><span className="value">{selectedIncident.patient?.role || '—'}</span></div>
+                    <div className="incident-meta"><span className="label">Age</span><span className="value">{selectedIncident.patient?.age ?? '—'}</span></div>
+                    <div className="incident-meta"><span className="label">Blood Type</span><span className="value">{selectedIncident.patient?.bloodType || '—'}</span></div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          ))}
+
+                <div className="incident-section">
+                  <h3 className="incident-section-title">Incident Brief</h3>
+                  <div className="incident-meta-grid">
+                    <div className="incident-meta"><span className="label">Incident Code</span><span className="value">{selectedIncident.incidentCode || '—'}</span></div>
+                    <div className="incident-meta"><span className="label">Location</span><span className="value">{selectedIncident.location || '—'}</span></div>
+                    <div className="incident-meta"><span className="label">Severity</span><span className="value">{severityToLabel[selectedIncident.severity] || 'Info'}</span></div>
+                    <div className="incident-meta"><span className="label">Reported By</span><span className="value">{selectedIncident.reportedBy || '—'}</span></div>
+                    <div className="incident-meta"><span className="label">Assigned To</span><span className="value">{selectedIncident.assignedTo || 'Unassigned'}</span></div>
+                    <div className="incident-meta"><span className="label">Started</span><span className="value">{formatDateTime(selectedIncident.startedAt)}</span></div>
+                    <div className="incident-meta"><span className="label">Last Update</span><span className="value">{formatDateTime(selectedIncident.lastUpdatedAt || selectedIncident.updatedAt)}</span></div>
+                  </div>
+                  {selectedIncident.description && (
+                    <p className="incident-description">{selectedIncident.description}</p>
+                  )}
+                </div>
+
+                <div className="incident-section">
+                  <div className="section-header">
+                    <h3 className="incident-section-title">Response Timeline</h3>
+                    <div className="timeline-form">
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Event label"
+                        value={timelineInput.label}
+                        onChange={(event) => setTimelineInput((prev) => ({ ...prev, label: event.target.value }))}
+                      />
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Details"
+                        value={timelineInput.description}
+                        onChange={(event) => setTimelineInput((prev) => ({ ...prev, description: event.target.value }))}
+                      />
+                      <button className="btn btn-outline" onClick={addTimelineEntry}>
+                        <i className="fas fa-plus"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="incident-timeline">
+                    {(!selectedIncident.timeline || !selectedIncident.timeline.length) && (
+                      <div className="incident-empty">No timeline entries recorded.</div>
+                    )}
+                    {(selectedIncident.timeline || []).map((entry, index) => (
+                      <div key={`${entry.time}-${index}`} className="timeline-entry">
+                        <div className="entry-time">{formatDateTime(entry.time)}</div>
+                        <div>
+                          <div className="entry-title">{entry.label}</div>
+                          {entry.description && <div className="entry-detail">{entry.description}</div>}
+                          {entry.actor && <div className="entry-actor">Logged by {entry.actor}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="incident-section">
+                  <div className="section-header">
+                    <h3 className="incident-section-title">Action Log</h3>
+                    <div className="timeline-form">
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Officer"
+                        value={actionInput.officer}
+                        onChange={(event) => setActionInput((prev) => ({ ...prev, officer: event.target.value }))}
+                      />
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Action taken"
+                        value={actionInput.action}
+                        onChange={(event) => setActionInput((prev) => ({ ...prev, action: event.target.value }))}
+                      />
+                      <button className="btn btn-outline" onClick={addActionEntry}>
+                        <i className="fas fa-plus"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="incident-actions">
+                    {(!selectedIncident.actionLog || !selectedIncident.actionLog.length) && (
+                      <div className="incident-empty">No action records yet.</div>
+                    )}
+                    {(selectedIncident.actionLog || []).map((entry, index) => (
+                      <div key={`${entry.time}-${index}`} className="action-entry">
+                        <div className="entry-head">
+                          <span className="entry-officer"><i className="fas fa-user-shield"></i> {entry.officer}</span>
+                          <span className="entry-time">{formatDateTime(entry.time)}</span>
+                        </div>
+                        <div className="entry-detail">{entry.action}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="incident-section">
+                  <h3 className="incident-section-title">Incident Notes</h3>
+                  <textarea
+                    className="form-control incident-notes"
+                    rows={5}
+                    placeholder="Add summary, handover notes, or follow-up instructions"
+                    value={notesValue}
+                    onChange={(event) => setNotesValue(event.target.value)}
+                  ></textarea>
+                  <div className="notes-actions">
+                    <button className="btn btn-outline" onClick={() => setNotesValue(selectedIncident.notes || '')}>Reset</button>
+                    <button className="btn btn-primary" onClick={saveNotes} disabled={savingNotes}>
+                      <i className="fas fa-save"></i> {savingNotes ? 'Saving…' : 'Save Notes'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="incident-section attachments">
+                  <h3 className="incident-section-title">Attachments</h3>
+                  <div className="attachment-summary">
+                    <span><i className="fas fa-file-medical"></i> Reports: {(selectedIncident.attachments?.reports || []).length}</span>
+                    <span><i className="fas fa-photo-video"></i> Media: {(selectedIncident.attachments?.media || []).length}</span>
+                  </div>
+                  <p className="attachment-hint">Upload endpoints are not implemented in this demo. Use the emergency file system to manage assets.</p>
+                </div>
+              </>
+            )}
+          </section>
         </div>
 
-        {/* Incident Detail (static sample) */}
-        <div className="incident-detail" id="incident-detail">
-          <div className="detail-header">
-            <div className="detail-main">
-              <div className="detail-title">Cardiac Emergency - John Davis</div>
-              <div className="detail-meta">
-                <div className="detail-meta-item"><i className="fas fa-hashtag" /><span>INC-2023-087</span></div>
-                <div className="detail-meta-item"><i className="fas fa-user" /><span>John Davis (CREW-045)</span></div>
-                <div className="detail-meta-item"><i className="fas fa-map-marker-alt" /><span>Engine Room → Medical Bay</span></div>
-                <div className="detail-meta-item"><i className="fas fa-clock" /><span>Started: 10:24 AM | Last Update: 10:45 AM</span></div>
+        {isEditorOpen && (
+          <div className="incident-editor">
+            <div className="editor-backdrop" onClick={closeEditor}></div>
+            <div className="editor-card">
+              <div className="editor-header">
+                <h2>{editorMode === 'create' ? 'Create Incident' : 'Edit Incident'}</h2>
+                <button className="editor-close" onClick={closeEditor}><i className="fas fa-times"></i></button>
               </div>
-              <div className="incident-status status-in-progress">IN PROGRESS</div>
-            </div>
-            <div className="detail-actions">
-              <button className="btn btn-primary"><i className="fas fa-edit" /> Edit</button>
-              <button className="btn btn-success"><i className="fas fa-check" /> Resolve</button>
-              <button className="btn"><i className="fas fa-print" /> Print</button>
-            </div>
-          </div>
+              <div className="editor-body">
+                <div className="editor-grid">
+                  <label>
+                    <span>Incident Code</span>
+                    <input type="text" value={formData.incidentCode} onChange={onFormChange('incidentCode')} />
+                    {formErrors.incidentCode && <small className="error">{formErrors.incidentCode}</small>}
+                  </label>
+                  <label>
+                    <span>Title</span>
+                    <input type="text" value={formData.title} onChange={onFormChange('title')} />
+                    {formErrors.title && <small className="error">{formErrors.title}</small>}
+                  </label>
+                  <label>
+                    <span>Severity</span>
+                    <select value={formData.severity} onChange={onFormChange('severity')}>
+                      <option value="critical">Critical</option>
+                      <option value="warning">Warning</option>
+                      <option value="info">Info</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Status</span>
+                    <select value={formData.status} onChange={onFormChange('status')}>
+                      <option value="NEW">New</option>
+                      <option value="IN_PROGRESS">In Progress</option>
+                      <option value="RESOLVED">Resolved</option>
+                      <option value="ARCHIVED">Archived</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Category</span>
+                    <input type="text" value={formData.category} onChange={onFormChange('category')} />
+                  </label>
+                  <label>
+                    <span>Location</span>
+                    <input type="text" value={formData.location} onChange={onFormChange('location')} />
+                    {formErrors.location && <small className="error">{formErrors.location}</small>}
+                  </label>
+                  <label>
+                    <span>Reported By</span>
+                    <input type="text" value={formData.reportedBy} onChange={onFormChange('reportedBy')} />
+                    {formErrors.reportedBy && <small className="error">{formErrors.reportedBy}</small>}
+                  </label>
+                  <label>
+                    <span>Assigned To</span>
+                    <input type="text" value={formData.assignedTo} onChange={onFormChange('assignedTo')} />
+                  </label>
+                  <label>
+                    <span>Start Time</span>
+                    <input type="datetime-local" value={formData.startedAt} onChange={onFormChange('startedAt')} />
+                  </label>
+                </div>
 
-          <div className="tabs">
-            {['overview','timeline','actions','attachments'].map((t, i) => (
-              <div key={t} className={`tab ${i===0 ? 'active' : ''}`} data-tab={t}>{t.charAt(0).toUpperCase()+t.slice(1)}</div>
-            ))}
-          </div>
+                <label className="full">
+                  <span>Crew Directory</span>
+                  <select value={selectedCrewId} onChange={handleCrewSelect}>
+                    <option value="">Manual entry</option>
+                    {crewOptions.map((crew) => (
+                      <option key={crewOptionId(crew)} value={crewOptionId(crew)}>
+                        {crew.fullName || crew.name || 'Unnamed Crew'}{crew.crewId ? ` • ${crew.crewId}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {crewLoading && <small>Loading crew directory…</small>}
+                  {crewError && <small className="error">{crewError}</small>}
+                </label>
 
-          <div className="tab-content active" id="overview">
-            <div className="info-grid">
-              <div className="info-card">
-                <div className="info-card-title">Patient Information</div>
-                <div className="info-item"><div className="info-label">Name</div><div className="info-value">John Davis</div></div>
-                <div className="info-item"><div className="info-label">Crew ID</div><div className="info-value">CREW-045</div></div>
-                <div className="info-item"><div className="info-label">Position</div><div className="info-value">Engine Technician</div></div>
-                <div className="info-item"><div className="info-label">Age</div><div className="info-value">42</div></div>
-                <div className="info-item"><div className="info-label">Blood Type</div><div className="info-value">A+</div></div>
+                <label className="full">
+                  <span>Description</span>
+                  <textarea rows={3} value={formData.description} onChange={onFormChange('description')}></textarea>
+                </label>
+
+                <div className="editor-grid">
+                  <label>
+                    <span>Patient Name</span>
+                    <input type="text" value={formData.patientName} onChange={onFormChange('patientName')} />
+                    {formErrors.patientName && <small className="error">{formErrors.patientName}</small>}
+                  </label>
+                  <label>
+                    <span>Crew ID</span>
+                    <input type="text" value={formData.patientCrewId} onChange={onFormChange('patientCrewId')} />
+                  </label>
+                  <label>
+                    <span>Role</span>
+                    <input type="text" value={formData.patientRole} onChange={onFormChange('patientRole')} />
+                  </label>
+                  <label>
+                    <span>Age</span>
+                    <input type="number" value={formData.patientAge} onChange={onFormChange('patientAge')} min={0} />
+                  </label>
+                  <label>
+                    <span>Blood Type</span>
+                    <input type="text" value={formData.patientBloodType} onChange={onFormChange('patientBloodType')} />
+                  </label>
+                </div>
+
+                <label className="full">
+                  <span>Quick Notes</span>
+                  <textarea rows={2} value={formData.notes} onChange={onFormChange('notes')}></textarea>
+                </label>
               </div>
-              <div className="info-card">
-                <div className="info-card-title">Incident Details</div>
-                <div className="info-item"><div className="info-label">Severity</div><div className="info-value">Critical</div></div>
-                <div className="info-item"><div className="info-label">Category</div><div className="info-value">Cardiac Emergency</div></div>
-                <div className="info-item"><div className="info-label">Location</div><div className="info-value">Engine Room</div></div>
-                <div className="info-item"><div className="info-label">Reported By</div><div className="info-value">Auto Alert System</div></div>
-                <div className="info-item"><div className="info-label">Assigned To</div><div className="info-value">Dr. Sarah Johnson</div></div>
+
+              <div className="editor-footer">
+                <button className="btn btn-outline" onClick={closeEditor}>Cancel</button>
+                <button className="btn btn-primary" onClick={submitForm} disabled={submitting}>
+                  <i className="fas fa-save"></i> {submitting ? 'Saving…' : 'Save Incident'}
+                </button>
               </div>
-              <div className="info-card">
-                <div className="info-card-title">Vital Signs</div>
-                <div className="info-item"><div className="info-label">Heart Rate</div><div className="info-value">145 bpm <span style={{color:'#e63946'}}>(High)</span></div></div>
-                <div className="info-item"><div className="info-label">Blood Pressure</div><div className="info-value">165/95 mmHg <span style={{color:'#e63946'}}>(High)</span></div></div>
-                <div className="info-item"><div className="info-label">Temperature</div><div className="info-value">37.1°C <span style={{color:'#2a9d8f'}}>(Normal)</span></div></div>
-                <div className="info-item"><div className="info-label">Oxygen Saturation</div><div className="info-value">92% <span style={{color:'#f4a261'}}>(Low)</span></div></div>
-              </div>
-            </div>
-            <div className="info-card">
-              <div className="info-card-title">Incident Description</div>
-              <p>Critical cardiac anomaly detected at 10:24 AM. Patient was working in the engine room when his wearable device detected elevated heart rate (145 bpm) with irregular rhythm. Emergency protocol activated immediately. Patient was moved to medical bay for emergency treatment. Dr. Sarah Johnson is leading the medical response.</p>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

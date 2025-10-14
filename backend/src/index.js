@@ -22,9 +22,13 @@ const healthReportRoutes = require('./routes/healthReportRoutes');
 const adminAnnouncementRoutes = require('./routes/adminAnnouncementRoutes');
 const inventoryAlertRoutes = require('./routes/inventoryAlertRoutes');
 const crewMedicalRecordRoutes = require('./routes/crewMedicalRecordRoutes');
+const crewProfileRoutes = require('./routes/crewProfileRoutes');
 const emergencyCrewRoutes = require('./routes/emergencyCrewRoutes');
 const emergencyCrewLocatorRoutes = require('./routes/emergencyCrewLocatorRoutes');
 const emergencyMessagingRoutes = require('./routes/emergencyMessagingRoutes');
+const emergencyIncidentRoutes = require('./routes/emergencyIncidentRoutes');
+const emergencyReportRoutes = require('./routes/emergencyReportRoutes');
+const crewEmergencyAlertRoutes = require('./routes/crewEmergencyAlertRoutes');
 
 const app = express();
 
@@ -53,10 +57,14 @@ app.use('/api/health/mental', mentalHealthRoutes);
 app.use('/api/health/reports', healthReportRoutes);
 app.use('/api/health/inventory-alerts', inventoryAlertRoutes);
 app.use('/api/admin/announcements', adminAnnouncementRoutes);
+app.use('/api/crew/profile', crewProfileRoutes);
 app.use('/api/crew/records', crewMedicalRecordRoutes);
 app.use('/api/emergency/crew', emergencyCrewRoutes);
 app.use('/api/emergency/crew-locator', emergencyCrewLocatorRoutes);
 app.use('/api/emergency/messaging', emergencyMessagingRoutes);
+app.use('/api/emergency/incidents', emergencyIncidentRoutes);
+app.use('/api/emergency/reports', emergencyReportRoutes);
+app.use('/api/crew/emergency-alerts', crewEmergencyAlertRoutes);
 app.use('/api/health', healthRoutes);
 
 const PORT = process.env.PORT || 5000;

@@ -1,279 +1,633 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getUser } from '../../lib/token';
 import EmergencySidebar from './EmergencySidebar';
+import { getUser, clearSession } from '../../lib/token';
+import {
+  listEmergencyReports,
+  createEmergencyReport,
+  updateEmergencyReport,
+  deleteEmergencyReport,
+} from '../../lib/emergencyReportApi';
+import './emergencyOfficerDashboard.css';
+
+const STATUS_OPTIONS = [
+  { value: 'ALL', label: 'All Statuses' },
+  { value: 'DRAFT', label: 'Draft' },
+  { value: 'IN_REVIEW', label: 'In Review' },
+  { value: 'PUBLISHED', label: 'Published' },
+  { value: 'ARCHIVED', label: 'Archived' },
+];
+
+const PRIORITY_OPTIONS = [
+  { value: 'ALL', label: 'All Priorities' },
+  { value: 'LOW', label: 'Low' },
+  { value: 'MEDIUM', label: 'Medium' },
+  { value: 'HIGH', label: 'High' },
+  { value: 'CRITICAL', label: 'Critical' },
+];
+
+const TYPE_OPTIONS = [
+  'Incident Analysis',
+  'Response Performance',
+  'Medical Summary',
+  'Evacuation Log',
+  'Crew Risk',
+  'Protocol Audit',
+];
+
+const SCHEDULE_FREQ = ['Daily', 'Weekly', 'Monthly', 'Quarterly'];
+
+const statusBadge = {
+  DRAFT: 'pending',
+  IN_REVIEW: 'warning',
+  PUBLISHED: 'success',
+  ARCHIVED: 'ongoing',
+};
+
+const priorityBadge = {
+  LOW: 'info',
+  MEDIUM: 'warning',
+  HIGH: 'danger',
+  CRITICAL: 'danger',
+};
+
+const createEmptyReport = (user) => ({
+  reportCode: `REP-${Date.now()}`,
+  title: '',
+  summary: '',
+  reportType: TYPE_OPTIONS[0],
+  category: 'Emergency Response',
+  status: 'DRAFT',
+  priority: 'MEDIUM',
+  generatedBy: user?.fullName || 'Emergency Officer',
+  generatedAt: new Date().toISOString().slice(0, 16),
+  timeframeStart: new Date().toISOString().slice(0, 10),
+  timeframeEnd: new Date().toISOString().slice(0, 10),
+  tags: '',
+  sections: '',
+  recipients: '',
+  notes: '',
+});
+
+const formatDateTime = (value) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
 
 export default function EmergencyReports() {
   const user = getUser();
   const navigate = useNavigate();
 
-  const userFullName = user?.fullName || 'Emergency Officer';
-  const userRole = user?.role ? (user.role.charAt(0).toUpperCase() + user.role.slice(1)) : 'Emergency Officer';
-  const userVessel = user?.vessel || 'MV Ocean Explorer';
-  const userAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(userFullName)}&background=e63946&color=fff`;
+  const [reports, setReports] = useState([]);
+  const [filters, setFilters] = useState({ status: 'ALL', priority: 'ALL', q: '', type: 'all' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [selectedReportId, setSelectedReportId] = useState(null);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState('create');
+  const [formData, setFormData] = useState(createEmptyReport(user));
+  const [formErrors, setFormErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [previewReport, setPreviewReport] = useState(null);
 
-  const [filters, setFilters] = useState({ type: 'All Reports', period: 'Last 24 Hours', from: '2023-10-01', to: '2023-10-26' });
-  const [showModal, setShowModal] = useState(false);
+  const selectedReport = useMemo(() => reports.find((r) => r._id === selectedReportId), [reports, selectedReportId]);
 
-  const templates = useMemo(() => ([
-    { icon: 'fas fa-file-medical', title: 'Monthly Health Summary', desc: 'Comprehensive overview of crew health metrics, incidents, and response effectiveness for the month.', lastRun: 'Oct 25, 2023', formats: 'PDF, Excel' },
-    { icon: 'fas fa-tachometer-alt', title: 'Response Time Analysis', desc: 'Detailed analysis of emergency response times with trends and improvement recommendations.', lastRun: 'Oct 24, 2023', formats: 'PDF, CSV' },
-    { icon: 'fas fa-user-md', title: 'Medical Equipment Usage', desc: 'Report on medical equipment utilization, maintenance schedules, and replacement recommendations.', lastRun: 'Oct 20, 2023', formats: 'PDF, Excel' },
-    { icon: 'fas fa-vial', title: 'Health Risk Assessment', desc: 'Assessment of health risks across crew members with preventive recommendations.', lastRun: 'Oct 15, 2023', formats: 'PDF' },
-  ]), []);
+  const onLogout = () => {
+    clearSession();
+    navigate('/login');
+  };
 
-  const recent = useMemo(() => ([
-    { name: 'October Health Summary', type: 'Monthly Summary', time: 'Oct 26, 2023 08:30', status: 'Completed', format: 'PDF' },
-    { name: 'Cardiac Incident Analysis', type: 'Incident Report', time: 'Oct 25, 2023 14:15', status: 'Completed', format: 'Excel' },
-    { name: 'Response Time Q3 2023', type: 'Performance Report', time: 'Oct 24, 2023 11:45', status: 'Completed', format: 'PDF' },
-    { name: 'Emergency Protocol Usage', type: 'Protocol Analysis', time: 'Oct 22, 2023 09:30', status: 'Completed', format: 'CSV' },
-    { name: 'Crew Health Risk Assessment', type: 'Risk Analysis', time: 'Oct 23, 2023 16:20', status: 'Processing', format: 'PDF' },
-  ]), []);
+  const fetchReports = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await listEmergencyReports({
+        status: filters.status,
+        priority: filters.priority,
+        q: filters.q || undefined,
+        reportType: filters.type,
+      });
+      const items = Array.isArray(data) ? data : [];
+      setReports(items);
+    } catch (err) {
+      setError('Failed to load emergency reports.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const charts = [
-    { title: 'Incidents by Type', content: 'Incident Type Chart - Cardiac: 35%, Respiratory: 25%, Trauma: 20%, Other: 20%' },
-    { title: 'Response Time Trends', content: 'Response Time Chart - Improvement from 6.5min to 4.2min over last 30 days' },
-    { title: 'Crew Health Status', content: 'Health Status Chart - Critical: 2%, Monitoring: 8%, Stable: 85%, Offline: 5%' },
-    { title: 'Protocol Usage', content: 'Protocol Usage Chart - Cardiac: 45%, Respiratory: 30%, Evacuation: 15%, Other: 10%' },
-  ];
+  useEffect(() => {
+    fetchReports();
+  }, [filters.status, filters.priority, filters.type]);
+
+  const filteredReports = useMemo(() => {
+    const needle = filters.q.trim().toLowerCase();
+    return reports.filter((report) => {
+      if (filters.status !== 'ALL' && report.status !== filters.status) return false;
+      if (filters.priority !== 'ALL' && report.priority !== filters.priority) return false;
+      if (filters.type !== 'all' && report.reportType !== filters.type) return false;
+      if (!needle) return true;
+      const haystack = `${report.title || ''} ${report.reportCode || ''} ${report.summary || ''} ${report.tags?.join(' ') || ''}`.toLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [reports, filters]);
+
+  const openCreate = () => {
+    setEditorMode('create');
+    setSelectedReportId(null);
+    setFormData(createEmptyReport(user));
+    setFormErrors({});
+    setIsEditorOpen(true);
+  };
+
+  const openEdit = (report) => {
+    if (!report) return;
+    setEditorMode('edit');
+    setSelectedReportId(report._id);
+    setFormData({
+      reportCode: report.reportCode || '',
+      title: report.title || '',
+      summary: report.summary || '',
+      reportType: report.reportType || TYPE_OPTIONS[0],
+      category: report.category || 'Emergency Response',
+      status: report.status || 'DRAFT',
+      priority: report.priority || 'MEDIUM',
+      generatedBy: report.generatedBy || user?.fullName || '',
+      generatedAt: report.generatedAt ? new Date(report.generatedAt).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16),
+      timeframeStart: report.timeframe?.start ? new Date(report.timeframe.start).toISOString().slice(0, 10) : '',
+      timeframeEnd: report.timeframe?.end ? new Date(report.timeframe.end).toISOString().slice(0, 10) : '',
+      tags: Array.isArray(report.tags) ? report.tags.join(', ') : '',
+      sections: Array.isArray(report.sections) ? report.sections.join(', ') : '',
+      recipients: Array.isArray(report.recipients) ? report.recipients.join(', ') : '',
+      notes: report.notes || '',
+    });
+    setFormErrors({});
+    setIsEditorOpen(true);
+  };
+
+  const closeEditor = () => {
+    if (submitting) return;
+    setIsEditorOpen(false);
+  };
+
+  const onFormChange = (field) => (event) => {
+    const value = event.target.value;
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const validate = () => {
+    const nextErrors = {};
+    if (!formData.reportCode?.trim()) nextErrors.reportCode = 'Report code is required';
+    if (!formData.title?.trim()) nextErrors.title = 'Title is required';
+    if (!formData.generatedBy?.trim()) nextErrors.generatedBy = 'Generated by is required';
+    if (!formData.generatedAt) nextErrors.generatedAt = 'Generated at is required';
+    return nextErrors;
+  };
+
+  const buildPayload = () => ({
+    reportCode: formData.reportCode.trim(),
+    title: formData.title.trim(),
+    summary: formData.summary?.trim() || '',
+    reportType: formData.reportType,
+    category: formData.category?.trim() || 'Emergency Response',
+    status: formData.status,
+    priority: formData.priority,
+    generatedBy: formData.generatedBy?.trim(),
+    generatedAt: formData.generatedAt ? new Date(formData.generatedAt).toISOString() : new Date().toISOString(),
+    timeframe: {
+      start: formData.timeframeStart || undefined,
+      end: formData.timeframeEnd || undefined,
+    },
+    tags: formData.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
+    sections: formData.sections.split(',').map((tag) => tag.trim()).filter(Boolean),
+    recipients: formData.recipients.split(',').map((item) => item.trim()).filter(Boolean),
+    notes: formData.notes || '',
+  });
+
+  const submitForm = async () => {
+    const nextErrors = validate();
+    setFormErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
+
+    const payload = buildPayload();
+    setSubmitting(true);
+    try {
+      if (editorMode === 'create') {
+        const created = await createEmergencyReport(payload);
+        setReports((prev) => [created, ...prev]);
+      } else if (selectedReportId) {
+        const updated = await updateEmergencyReport(selectedReportId, payload);
+        setReports((prev) => prev.map((item) => (item._id === updated._id ? updated : item)));
+      }
+      setIsEditorOpen(false);
+      setFormData(createEmptyReport(user));
+    } catch (err) {
+      setError('Failed to save emergency report.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (report) => {
+    if (!report?._id) return;
+    if (!window.confirm('Delete this emergency report?')) return;
+    try {
+      await deleteEmergencyReport(report._id);
+      setReports((prev) => prev.filter((item) => item._id !== report._id));
+    } catch (err) {
+      setError('Failed to delete emergency report.');
+    }
+  };
+
+  const handleView = (report) => {
+    setPreviewReport(report);
+  };
+
+  const downloadReportCSV = (report) => {
+    if (!report) return;
+    const headers = ['Field', 'Value'];
+    const rows = [
+      ['Report Code', report.reportCode || ''],
+      ['Title', report.title || ''],
+      ['Type', report.reportType || ''],
+      ['Category', report.category || ''],
+      ['Priority', report.priority || ''],
+      ['Status', report.status || ''],
+      ['Generated By', report.generatedBy || ''],
+      ['Generated At', formatDateTime(report.generatedAt)],
+      ['Timeframe Start', report.timeframe?.start || ''],
+      ['Timeframe End', report.timeframe?.end || ''],
+      ['Summary', report.summary || ''],
+      ['Tags', Array.isArray(report.tags) ? report.tags.join(', ') : ''],
+      ['Sections', Array.isArray(report.sections) ? report.sections.join(', ') : ''],
+      ['Recipients', Array.isArray(report.recipients) ? report.recipients.join(', ') : ''],
+      ['Notes', report.notes || ''],
+    ];
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${report.reportCode || 'report'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadReportPDF = (report) => {
+    if (!report) return;
+    const previewHtml = `<!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>${report.reportCode || 'Emergency Report'}</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #222; padding: 24px; }
+            h1 { color: #b3202c; }
+            h2 { margin-top: 24px; color: #7a1f27; }
+            table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background: #f9dfe2; }
+          </style>
+        </head>
+        <body>
+          <h1>${report.title || 'Emergency Report'}</h1>
+          <p><strong>Report Code:</strong> ${report.reportCode || '—'}</p>
+          <p><strong>Generated By:</strong> ${report.generatedBy || '—'} | <strong>Generated At:</strong> ${formatDateTime(report.generatedAt)}</p>
+          <p><strong>Status:</strong> ${report.status || '—'} | <strong>Priority:</strong> ${report.priority || '—'} | <strong>Type:</strong> ${report.reportType || '—'}</p>
+          <p><strong>Timeframe:</strong> ${report.timeframe?.start || '—'} to ${report.timeframe?.end || '—'}</p>
+          <h2>Summary</h2>
+          <p>${(report.summary || '').replace(/\n/g, '<br/>')}</p>
+          <h2>Tags & Sections</h2>
+          <p><strong>Tags:</strong> ${Array.isArray(report.tags) ? report.tags.join(', ') : '—'}</p>
+          <p><strong>Sections:</strong> ${Array.isArray(report.sections) ? report.sections.join(', ') : '—'}</p>
+          <h2>Recipients</h2>
+          <p>${Array.isArray(report.recipients) ? report.recipients.join(', ') : '—'}</p>
+          <h2>Notes</h2>
+          <p>${(report.notes || '—').replace(/\n/g, '<br/>')}</p>
+          <script>window.onload = function() { window.print(); };</script>
+        </body>
+      </html>`;
+    const win = window.open('', '_blank');
+    if (!win) return;
+    win.document.open();
+    win.document.write(previewHtml);
+    win.document.close();
+  };
 
   return (
-    <div className="dashboard-container emergency-dashboard">
-      <style>{`
-        .header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:30px; padding:18px 22px; background:#fff; border-radius:14px; box-shadow:0 4px 12px rgba(0,0,0,.06); }
-        .header h2{ color:#e63946; font-size:24px; font-weight:700; margin:0; }
-        .user-info{ display:flex; align-items:center; gap:10px; }
-        .user-info img{ width:40px; height:40px; border-radius:50%; margin-right:8px; }
-        .user-info .meta{ display:flex; flex-direction:column; }
-        .user-info .name{ color:#343a40; font-weight:600; line-height:1.2; }
-        .user-info small{ color:#6c757d; }
-        .status-badge{ padding:6px 12px; border-radius:9999px; font-size:12px; font-weight:600; margin-left:10px; border:1px solid rgba(230,57,70,.35); background:rgba(230,57,70,.12); color:#e63946; }
+    <div className="dashboard-container emergency-dashboard incident-log-screen emergency-reports-screen">
+      <EmergencySidebar onLogout={onLogout} />
 
-        .report-controls{ background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,.05); padding:20px; margin-bottom:20px; display:flex; flex-wrap:wrap; gap:15px; align-items:center; }
-        .filter-group{ display:flex; flex-direction:column; }
-        .filter-label{ font-size:14px; margin-bottom:5px; color:#666; font-weight:500; }
-        .filter-select, .date-input{ padding:8px 12px; border:1px solid #ddd; border-radius:4px; background:#fff; }
-        .date-range{ display:flex; gap:10px; align-items:center; }
-        .btn{ padding:8px 15px; border:none; border-radius:4px; cursor:pointer; font-weight:500; transition:.3s; display:inline-flex; align-items:center; }
-        .btn i{ margin-right:5px; }
-        .btn-primary{ background:#e63946; color:#fff; }
-        .btn-success{ background:#2a9d8f; color:#fff; }
-
-        .report-stats{ display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:20px; margin-bottom:30px; }
-        .stat-card{ background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,.05); padding:20px; text-align:center; transition:.3s; }
-        .stat-card:hover{ transform: translateY(-5px); }
-        .stat-icon{ width:60px; height:60px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:24px; margin:0 auto 15px; color:#fff; }
-        .incidents{ background:#e63946; } .response{ background:#e63946; } .resolved{ background:#2a9d8f; } .crew{ background:#3a86ff; }
-        .stat-value{ font-size:32px; font-weight:700; margin-bottom:5px; }
-        .stat-label{ font-size:14px; color:#777; }
-
-        .charts-section{ display:grid; grid-template-columns:1fr 1fr; gap:25px; margin-bottom:30px; }
-        .chart-card{ background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,.05); padding:25px; }
-        .chart-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
-        .chart-title{ font-size:18px; font-weight:600; color:#e63946; }
-        .chart-actions{ display:flex; gap:10px; }
-        .chart-container{ height:300px; display:flex; align-items:center; justify-content:center; background:#f8f9fa; border-radius:8px; color:#666; font-weight:500; }
-
-        .report-templates{ background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,.05); padding:25px; margin-bottom:30px; }
-        .section-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
-        .section-title{ font-size:20px; font-weight:600; color:#e63946; }
-        .templates-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:20px; }
-        .template-card{ background:#f8f9fa; border-radius:8px; padding:20px; cursor:pointer; transition:.3s; border-left:4px solid #e63946; }
-        .template-card:hover{ transform:translateY(-3px); box-shadow:0 3px 10px rgba(0,0,0,.1); }
-        .template-icon{ width:50px; height:50px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:20px; margin-bottom:15px; color:#fff; background:#e63946; }
-        .template-title{ font-weight:600; margin-bottom:8px; font-size:18px; }
-        .template-desc{ font-size:14px; color:#666; margin-bottom:15px; }
-        .template-meta{ display:flex; justify-content:space-between; font-size:12px; color:#999; }
-
-        .recent-reports{ background:#fff; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,.05); padding:25px; }
-        .reports-table{ width:100%; border-collapse:collapse; }
-        .reports-table th, .reports-table td{ padding:12px 15px; text-align:left; border-bottom:1px solid #eee; }
-        .reports-table th{ background:#f8f9fa; font-weight:600; color:#555; }
-        .reports-table tr:hover{ background:#f8f9fa; }
-        .report-status{ padding:4px 8px; border-radius:12px; font-size:12px; font-weight:600; }
-        .status-completed{ background:rgba(42,157,143,.2); color:#2a9d8f; }
-        .status-pending{ background:rgba(244,162,97,.2); color:#f4a261; }
-        .status-failed{ background:rgba(230,57,70,.2); color:#e63946; }
-        .report-format{ padding:4px 8px; border-radius:12px; font-size:12px; font-weight:600; background:#e3f2fd; color:#3a86ff; }
-
-        .modal{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; align-items:center; justify-content:center; }
-        .modal-content{ background:#fff; border-radius:10px; width:90%; max-width:600px; padding:30px; box-shadow:0 5px 25px rgba(0,0,0,.2); }
-        .modal-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
-        .modal-title{ font-size:20px; font-weight:600; color:#e63946; }
-        .close-modal{ background:none; border:none; font-size:24px; cursor:pointer; color:#777; }
-        .modal-body{ margin-bottom:25px; }
-        .form-group{ margin-bottom:20px; }
-        .form-label{ display:block; margin-bottom:8px; font-weight:500; }
-        .form-control{ width:100%; padding:10px 15px; border:1px solid #ddd; border-radius:4px; font-size:14px; }
-        .form-row{ display:flex; gap:15px; }
-        .form-row .form-group{ flex:1; }
-        .checkbox-group{ display:flex; flex-wrap:wrap; gap:15px; margin-top:10px; }
-        .checkbox-item{ display:flex; align-items:center; }
-        .checkbox-item input{ margin-right:8px; }
-        .modal-footer{ display:flex; justify-content:flex-end; gap:10px; }
-
-        @media (max-width:992px){ .dashboard-container{flex-direction:column;} .sidebar{width:100%; height:auto;} .sidebar-menu{display:flex; overflow-x:auto;} .sidebar-menu li{margin-bottom:0; margin-right:10px;} .sidebar-menu a{padding:10px 15px; border-left:none; border-bottom:3px solid transparent;} .sidebar-menu a:hover, .sidebar-menu a.active{border-left:none; border-bottom:3px solid #fff;} .charts-section{grid-template-columns:1fr;} }
-        @media (max-width:768px){ .header{flex-direction:column; align-items:flex-start;} .user-info{margin-top:15px;} .report-controls{flex-direction:column; align-items:flex-start;} .filter-group, .filter-select{width:100%;} .date-range{width:100%; flex-direction:column;} .date-input{width:100%;} .report-stats{grid-template-columns:repeat(2, 1fr);} .templates-grid{grid-template-columns:1fr;} .reports-table{display:block; overflow-x:auto;} .form-row{flex-direction:column; gap:0;} }
-        @media (max-width:480px){ .report-stats{grid-template-columns:1fr;} .chart-actions{flex-direction:column; gap:5px;} }
-      `}</style>
-
-      {/* Sidebar */}
-      <EmergencySidebar onLogout={() => navigate('/')} />
-
-      {/* Main Content */}
-      <div className="main-content">
-        <div className="header">
-          <h2>Reports & Analytics</h2>
-          <div className="user-info">
-            <img src={userAvatarUrl} alt="User" />
-            <div className="meta">
-              <div className="name">{userFullName}</div>
-              <small>{`${userRole} | ${userVessel}`}</small>
+      <div className={`dashboard-main emergency-reports ${(isEditorOpen || previewReport) ? 'editor-open' : ''}`}>
+        <header className="dashboard-header">
+          <div>
+            <h1 className="dashboard-title">Emergency Reports</h1>
+            <div className="dashboard-meta">
+              <span><i className="fas fa-shield-alt" /> Incident intelligence and analytics</span>
+              <span><i className="fas fa-clipboard-list" /> {reports.length} total reports</span>
             </div>
-            <div className="status-badge status-active">On Duty</div>
+            {error && <div className="incident-error">{error}</div>}
           </div>
-        </div>
+          <div className="dashboard-actions">
+            <button className="btn btn-outline" onClick={fetchReports}><i className="fas fa-sync" /> Refresh</button>
+            <button className="btn btn-primary" onClick={openCreate}><i className="fas fa-plus-circle" /> Create Report</button>
+          </div>
+        </header>
 
-        {/* Report Controls */}
-        <div className="report-controls">
-          <div className="filter-group">
-            <label className="filter-label">Report Type</label>
-            <select className="filter-select" value={filters.type} onChange={(e) => setFilters((f) => ({ ...f, type: e.target.value }))}>
-              <option>All Reports</option>
-              <option>Incident Reports</option>
-              <option>Health Analytics</option>
-              <option>Response Times</option>
-              <option>Crew Health</option>
+        <section className="incident-filters">
+          <div className="filters-inline">
+            <input
+              className="form-control"
+              placeholder="Search reports"
+              value={filters.q}
+              onChange={(e) => setFilters((prev) => ({ ...prev, q: e.target.value }))}
+            />
+            <select
+              className="form-control"
+              value={filters.status}
+              onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+            >
+              {STATUS_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <select
+              className="form-control"
+              value={filters.priority}
+              onChange={(e) => setFilters((prev) => ({ ...prev, priority: e.target.value }))}
+            >
+              {PRIORITY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <select
+              className="form-control"
+              value={filters.type}
+              onChange={(e) => setFilters((prev) => ({ ...prev, type: e.target.value }))}
+            >
+              <option value="all">All Types</option>
+              {TYPE_OPTIONS.map((type) => (
+                <option key={type} value={type}>{type}</option>
+              ))}
             </select>
           </div>
-          <div className="filter-group">
-            <label className="filter-label">Time Period</label>
-            <select className="filter-select" value={filters.period} onChange={(e) => setFilters((f) => ({ ...f, period: e.target.value }))}>
-              <option>Last 24 Hours</option>
-              <option>Last 7 Days</option>
-              <option>Last 30 Days</option>
-              <option>Last 3 Months</option>
-              <option>Custom Range</option>
-            </select>
+          <div className="filters-summary">
+            {loading ? 'Loading reports…' : `${filteredReports.length} result${filteredReports.length === 1 ? '' : 's'} found`}
           </div>
-          <div className="date-range" style={{ display: filters.period === 'Custom Range' ? 'flex' : 'none' }}>
-            <div className="filter-group"><label className="filter-label">From Date</label><input type="date" className="date-input" value={filters.from} onChange={(e) => setFilters((f)=>({ ...f, from: e.target.value }))} /></div>
-            <div className="filter-group"><label className="filter-label">To Date</label><input type="date" className="date-input" value={filters.to} onChange={(e) => setFilters((f)=>({ ...f, to: e.target.value }))} /></div>
+        </section>
+
+        <section className="reports-table-panel">
+          <div className="section-header">
+            <div>
+              <div className="section-title">Reports Table View</div>
+              <div className="section-subtitle">Quick snapshot of all filtered reports.</div>
+            </div>
+            <div className="section-meta">Showing {filteredReports.length} report{filteredReports.length === 1 ? '' : 's'}</div>
           </div>
-          <button className="btn btn-primary" onClick={() => alert(`Generating ${filters.type} for ${filters.period}`)}><i className="fas fa-chart-bar" /> Generate Report</button>
-          <button className="btn btn-success" onClick={() => setShowModal(true)}><i className="fas fa-plus" /> Create Custom Report</button>
-        </div>
+          <div className="table-responsive">
+            {filteredReports.length === 0 ? (
+              <div className="incident-empty">No reports available for the current filters.</div>
+            ) : (
+              <table className="reports-table">
+                <thead>
+                  <tr>
+                    <th>Report Code</th>
+                    <th>Title</th>
+                    <th>Type</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Generated</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredReports.map((report) => (
+                    <tr
+                      key={`table-${report._id}`}
+                      className={report._id === selectedReportId ? 'row-highlight' : ''}
+                      onClick={() => setSelectedReportId(report._id)}
+                    >
+                      <td>{report.reportCode}</td>
+                      <td>{report.title || 'Untitled report'}</td>
+                      <td>{report.reportType || '—'}</td>
+                      <td>
+                        <span className={`badge badge-${priorityBadge[report.priority] || 'info'}`}>
+                          {report.priority || '—'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`badge badge-${statusBadge[report.status] || 'ongoing'}`}>
+                          {report.status?.replace('_', ' ') || '—'}
+                        </span>
+                      </td>
+                      <td>{formatDateTime(report.generatedAt)}</td>
+                      <td>
+                        <div className="reports-table-actions">
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-small"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleView(report);
+                            }}
+                          >
+                            <i className="fas fa-eye" /> View
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-small"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openEdit(report);
+                            }}
+                          >
+                            <i className="fas fa-pen" /> Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-small"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              downloadReportCSV(report);
+                            }}
+                          >
+                            <i className="fas fa-file-csv" /> CSV
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-small"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              downloadReportPDF(report);
+                            }}
+                          >
+                            <i className="fas fa-file-pdf" /> PDF
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-danger btn-small"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleDelete(report);
+                            }}
+                          >
+                            <i className="fas fa-trash" /> Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </section>
+      </div>
 
-        {/* Report Stats */}
-        <div className="report-stats">
-          <div className="stat-card"><div className="stat-icon incidents"><i className="fas fa-exclamation-triangle" /></div><div className="stat-value">18</div><div className="stat-label">Total Incidents</div></div>
-          <div className="stat-card"><div className="stat-icon response"><i className="fas fa-clock" /></div><div className="stat-value">4.2</div><div className="stat-label">Avg Response Time (min)</div></div>
-          <div className="stat-card"><div className="stat-icon resolved"><i className="fas fa-check-circle" /></div><div className="stat-value">94%</div><div className="stat-label">Incidents Resolved</div></div>
-          <div className="stat-card"><div className="stat-icon crew"><i className="fas fa-user-injured" /></div><div className="stat-value">12</div><div className="stat-label">Crew Treated</div></div>
+      {isEditorOpen && (
+        <div className="incident-editor">
+          <div className="editor-backdrop" onClick={closeEditor} />
+          <div className="editor-card report-editor">
+            <header className="editor-header">
+              <h2>{editorMode === 'create' ? 'Create Emergency Report' : 'Update Emergency Report'}</h2>
+              <button className="editor-close" onClick={closeEditor} aria-label="Close"><i className="fas fa-times" /></button>
+            </header>
+            <form className="editor-body" onSubmit={(event) => { event.preventDefault(); submitForm(); }}>
+              <div className="editor-grid compact">
+                <label>
+                  <span>Report Code</span>
+                  <input value={formData.reportCode} onChange={onFormChange('reportCode')} />
+                  {formErrors.reportCode && <small className="error">{formErrors.reportCode}</small>}
+                </label>
+                <label>
+                  <span>Title</span>
+                  <input value={formData.title} onChange={onFormChange('title')} />
+                  {formErrors.title && <small className="error">{formErrors.title}</small>}
+                </label>
+                <label>
+                  <span>Status</span>
+                  <select value={formData.status} onChange={onFormChange('status')}>
+                    {STATUS_OPTIONS.filter((option) => option.value !== 'ALL').map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Priority</span>
+                  <select value={formData.priority} onChange={onFormChange('priority')}>
+                    {PRIORITY_OPTIONS.filter((option) => option.value !== 'ALL').map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Generated By</span>
+                  <input value={formData.generatedBy} onChange={onFormChange('generatedBy')} />
+                  {formErrors.generatedBy && <small className="error">{formErrors.generatedBy}</small>}
+                </label>
+                <label>
+                  <span>Generated At</span>
+                  <input type="datetime-local" value={formData.generatedAt} onChange={onFormChange('generatedAt')} />
+                  {formErrors.generatedAt && <small className="error">{formErrors.generatedAt}</small>}
+                </label>
+                <label>
+                  <span>Timeframe Start</span>
+                  <input type="date" value={formData.timeframeStart} onChange={onFormChange('timeframeStart')} />
+                </label>
+                <label>
+                  <span>Timeframe End</span>
+                  <input type="date" value={formData.timeframeEnd} onChange={onFormChange('timeframeEnd')} />
+                </label>
+              </div>
+              <label className="full">
+                <span>Summary</span>
+                <textarea rows={4} value={formData.summary} onChange={onFormChange('summary')} />
+              </label>
+              <div className="editor-grid compact">
+                <label>
+                  <span>Tags</span>
+                  <input value={formData.tags} onChange={onFormChange('tags')} placeholder="Comma separated" />
+                </label>
+                <label>
+                  <span>Sections</span>
+                  <input value={formData.sections} onChange={onFormChange('sections')} placeholder="Comma separated" />
+                </label>
+                <label className="full">
+                  <span>Recipients</span>
+                  <input value={formData.recipients} onChange={onFormChange('recipients')} placeholder="Comma separated" />
+                </label>
+              </div>
+              <footer className="editor-footer">
+                <button type="button" className="btn btn-outline" onClick={closeEditor} disabled={submitting}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={submitting}>
+                  {submitting ? 'Saving…' : editorMode === 'create' ? 'Create Report' : 'Update Report'}
+                </button>
+              </footer>
+            </form>
+          </div>
         </div>
+      )}
 
-        {/* Charts Section */}
-        <div className="charts-section">
-          {charts.map((c) => (
-            <div key={c.title} className="chart-card">
-              <div className="chart-header">
-                <div className="chart-title">{c.title}</div>
-                <div className="chart-actions">
-                  <button className="btn btn-sm"><i className="fas fa-download" /></button>
-                  <button className="btn btn-sm"><i className="fas fa-expand" /></button>
+      {previewReport && (
+        <div className="incident-editor">
+          <div className="editor-backdrop" onClick={() => setPreviewReport(null)} />
+          <div className="editor-card report-editor">
+            <header className="editor-header">
+              <h2>Report Overview</h2>
+              <button className="editor-close" onClick={() => setPreviewReport(null)} aria-label="Close"><i className="fas fa-times" /></button>
+            </header>
+            <div className="editor-body">
+              <div className="editor-grid compact">
+                <div className="incident-meta">
+                  <span className="label">Report Code</span>
+                  <span className="value">{previewReport.reportCode || '—'}</span>
+                </div>
+                <div className="incident-meta">
+                  <span className="label">Status</span>
+                  <span className="value">{previewReport.status || '—'}</span>
+                </div>
+                <div className="incident-meta">
+                  <span className="label">Priority</span>
+                  <span className="value">{previewReport.priority || '—'}</span>
+                </div>
+                <div className="incident-meta">
+                  <span className="label">Generated</span>
+                  <span className="value">{formatDateTime(previewReport.generatedAt)}</span>
                 </div>
               </div>
-              <div className="chart-container">[{c.content}]</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Report Templates */}
-        <div className="report-templates">
-          <div className="section-header">
-            <div className="section-title">Report Templates</div>
-            <button className="btn btn-primary"><i className="fas fa-plus" /> New Template</button>
-          </div>
-          <div className="templates-grid">
-            {templates.map((t, i) => (
-              <div key={i} className="template-card" onClick={() => alert(`Using template: ${t.title}`)}>
-                <div className="template-icon"><i className={t.icon} /></div>
-                <div className="template-title">{t.title}</div>
-                <div className="template-desc">{t.desc}</div>
-                <div className="template-meta"><span>Last run: {t.lastRun}</span><span>{t.formats}</span></div>
+              <div className="incident-section">
+                <h3 className="incident-section-title">Summary</h3>
+                <p className="incident-description">{previewReport.summary || 'No summary provided.'}</p>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Recent Reports */}
-        <div className="recent-reports">
-          <div className="section-header">
-            <div className="section-title">Recently Generated Reports</div>
-            <button className="btn"><i className="fas fa-history" /> View All</button>
-          </div>
-          <table className="reports-table">
-            <thead>
-              <tr><th>Report Name</th><th>Type</th><th>Generated</th><th>Status</th><th>Format</th><th>Actions</th></tr>
-            </thead>
-            <tbody>
-              {recent.map((r, i) => (
-                <tr key={i}>
-                  <td>{r.name}</td>
-                  <td>{r.type}</td>
-                  <td>{r.time}</td>
-                  <td><span className={`report-status ${r.status==='Completed'?'status-completed': r.status==='Processing'?'status-pending':'status-failed'}`}>{r.status}</span></td>
-                  <td><span className="report-format">{r.format}</span></td>
-                  <td>
-                    {r.status==='Completed' ? (
-                      <>
-                        <button className="btn btn-primary btn-sm"><i className="fas fa-download" /></button>
-                        <button className="btn btn-sm"><i className="fas fa-share" /></button>
-                      </>
-                    ) : (
-                      <button className="btn btn-sm" disabled><i className="fas fa-sync fa-spin" /></button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Create Report Modal */}
-      <div className="modal" style={{ display: showModal ? 'flex' : 'none' }}>
-        <div className="modal-content">
-          <div className="modal-header">
-            <div className="modal-title">Create Custom Report</div>
-            <button className="close-modal" onClick={() => setShowModal(false)}>&times;</button>
-          </div>
-          <div className="modal-body">
-            <div className="form-group"><label className="form-label">Report Name</label><input type="text" className="form-control" placeholder="Enter report name" /></div>
-            <div className="form-row">
-              <div className="form-group"><label className="form-label">Report Type</label><select className="form-control"><option>Incident Analysis</option><option>Health Metrics</option><option>Response Times</option><option>Equipment Usage</option><option>Custom Analysis</option></select></div>
-              <div className="form-group"><label className="form-label">Output Format</label><select className="form-control"><option>PDF</option><option>Excel</option><option>CSV</option><option>HTML</option></select></div>
-            </div>
-            <div className="form-row">
-              <div className="form-group"><label className="form-label">Start Date</label><input type="date" className="form-control" defaultValue={filters.from} /></div>
-              <div className="form-group"><label className="form-label">End Date</label><input type="date" className="form-control" defaultValue={filters.to} /></div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Include Data</label>
-              <div className="checkbox-group">
-                {['Incident Records','Response Times','Vital Signs','Protocol Usage','Equipment Data'].map((lab) => (
-                  <label key={lab} className="checkbox-item"><input type="checkbox" defaultChecked={['Incident Records','Response Times','Vital Signs'].includes(lab)} /> {lab}</label>
-                ))}
+              <div className="incident-section">
+                <h3 className="incident-section-title">Details</h3>
+                <div className="incident-meta-grid">
+                  <div className="incident-meta"><span className="label">Type</span><span className="value">{previewReport.reportType || '—'}</span></div>
+                  <div className="incident-meta"><span className="label">Category</span><span className="value">{previewReport.category || '—'}</span></div>
+                  <div className="incident-meta"><span className="label">Generated By</span><span className="value">{previewReport.generatedBy || '—'}</span></div>
+                  <div className="incident-meta"><span className="label">Timeframe Start</span><span className="value">{previewReport.timeframe?.start || '—'}</span></div>
+                  <div className="incident-meta"><span className="label">Timeframe End</span><span className="value">{previewReport.timeframe?.end || '—'}</span></div>
+                </div>
+              </div>
+              <div className="incident-section">
+                <h3 className="incident-section-title">Tags & Recipients</h3>
+                <p className="incident-description"><strong>Tags:</strong> {Array.isArray(previewReport.tags) ? previewReport.tags.join(', ') : '—'}</p>
+                <p className="incident-description"><strong>Recipients:</strong> {Array.isArray(previewReport.recipients) ? previewReport.recipients.join(', ') : '—'}</p>
+              </div>
+              <div className="incident-section">
+                <h3 className="incident-section-title">Notes</h3>
+                <p className="incident-description">{previewReport.notes || 'No additional notes.'}</p>
               </div>
             </div>
-            <div className="form-group"><label className="form-label">Email Report To</label><input type="text" className="form-control" placeholder="Enter email addresses (comma separated)" /></div>
-          </div>
-          <div className="modal-footer">
-            <button className="btn" onClick={() => setShowModal(false)}>Cancel</button>
-            <button className="btn btn-primary" onClick={() => { alert('Custom report generation started...'); setShowModal(false); setTimeout(()=>alert('Custom report generated successfully!'), 1500); }}>Generate Report</button>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

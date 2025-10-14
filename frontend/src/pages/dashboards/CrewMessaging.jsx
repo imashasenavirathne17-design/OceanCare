@@ -2,6 +2,25 @@ import React from 'react';
 import CrewSidebar from './CrewSidebar';
 import MessagingShell from './messaging/MessagingShell';
 
+const CREW_TEMPLATES = [
+  {
+    key: 'wellness',
+    title: 'Wellness Check-in',
+    desc: 'Checking in on your duty shift. Let us know if you need medical assistance or rest arrangements.',
+  },
+  {
+    key: 'schedule',
+    title: 'Duty Schedule Update',
+    desc: 'Reminder: Your next duty rotation begins in 2 hours. Confirm readiness with the bridge team.',
+  },
+  {
+    key: 'safety',
+    title: 'Safety Reminder',
+    desc: 'Please conduct a quick safety self-check and ensure your station meets current safety protocols.',
+    cls: 'urgent',
+  },
+];
+
 const CREW_THEME = {
   wrapperClass: 'crew-dashboard',
   background: '#f5f7fb',
@@ -60,9 +79,11 @@ export default function CrewMessaging() {
     <MessagingShell
       SidebarComponent={CrewSidebar}
       pageTitle="Crew Messaging"
-      contactFilter="crew"
+      contactFilter={['admin', 'crew', 'health', 'emergency', 'inventory']}
       placeholder="Search shipmates or departments"
       statusBadge="Watch Duty"
+      templates={CREW_TEMPLATES}
+      emptyMessage="Select a shipmate or department lead to start a conversation."
       theme={CREW_THEME}
     />
   );

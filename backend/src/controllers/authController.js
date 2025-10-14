@@ -6,7 +6,14 @@ const JWT_EXPIRES_IN = '7d';
 
 function signToken(user) {
   return jwt.sign(
-    { sub: user._id, role: user.role, email: user.email, name: user.fullName },
+    {
+      sub: user._id.toString(),
+      role: user.role,
+      email: user.email,
+      name: user.fullName,
+      fullName: user.fullName,
+      crewId: user.crewId || null,
+    },
     process.env.JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
   );
@@ -49,6 +56,7 @@ exports.register = async (req, res) => {
       fullName: user.fullName,
       email: user.email,
       role: user.role,
+      crewId: user.crewId || null,
       createdAt: user.createdAt,
     });
   } catch (err) {
@@ -76,7 +84,13 @@ exports.login = async (req, res) => {
     const token = signToken(user);
     return res.json({
       token,
-      user: { id: user._id, fullName: user.fullName, email: user.email, role: user.role },
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        crewId: user.crewId || null,
+      },
     });
   } catch (err) {
     console.error(err);

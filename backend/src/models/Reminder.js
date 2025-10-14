@@ -20,8 +20,7 @@ const ReminderSchema = new mongoose.Schema(
     // Patient/Crew information
     crewId: {
       type: String,
-      required: true,
-      index: true
+      required: true
     },
     crewName: {
       type: String,

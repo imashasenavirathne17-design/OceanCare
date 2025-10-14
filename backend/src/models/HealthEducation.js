@@ -23,6 +23,7 @@ const healthEducationSchema = new Schema(
   {
     title: { type: String, required: true, trim: true },
     category: { type: String, required: true, trim: true },
+    icon: { type: String, trim: true, default: 'fas fa-book-medical' },
     status: {
       type: String,
       enum: ['draft', 'published', 'scheduled', 'archived'],

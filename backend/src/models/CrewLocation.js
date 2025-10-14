@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const CrewLocationSchema = new mongoose.Schema(
   {
-    crewId: { type: String, required: true, index: true },
+    crewId: { type: String, required: true },
     crewName: { type: String, required: true },
     department: { type: String },
     role: { type: String },

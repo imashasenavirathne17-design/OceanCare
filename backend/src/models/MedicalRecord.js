@@ -21,6 +21,10 @@ const MedicalRecordSchema = new mongoose.Schema(
     notes: { type: String, default: '' },
     files: { type: [FileSchema], default: [] },
     createdBy: { type: String }, // user id or email
+    status: { type: String, default: 'open', index: true },
+    metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
+    metrics: { type: mongoose.Schema.Types.Mixed, default: {} },
+    nextDueDate: { type: String, default: '' },
   },
   { timestamps: true }
 );

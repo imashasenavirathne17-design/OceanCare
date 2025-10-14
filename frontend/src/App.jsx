@@ -19,10 +19,6 @@ import RequireAuth from './components/RequireAuth';
 import CrewDashboard from './pages/dashboards/CrewDashboard';
 import CrewHealthCheck from './pages/dashboards/CrewHealthCheck';
 import CrewHealthRecords from './pages/dashboards/CrewHealthRecords';
-import CrewExaminations from './pages/dashboards/CrewExaminations';
-import CrewChronic from './pages/dashboards/CrewChronic';
-import CrewMental from './pages/dashboards/CrewMental';
-import CrewVaccinations from './pages/dashboards/CrewVaccinations';
 import CrewReminders from './pages/dashboards/CrewReminders';
 import CrewEmergency from './pages/dashboards/CrewEmergency';
 import CrewHealthEducation from './pages/dashboards/CrewHealthEducation';
@@ -47,6 +43,7 @@ import InventoryStorageZones from './pages/dashboards/InventoryStorageZones';
 import InventoryReports from './pages/dashboards/InventoryReports';
 import InventoryAuditTrail from './pages/dashboards/InventoryAuditTrail';
 import InventoryBarcodeScanning from './pages/dashboards/InventoryBarcodeScanning';
+import InventoryWasteDisposal from './pages/dashboards/InventoryWasteDisposal';
 import InventoryPredictiveRestocking from './pages/dashboards/InventoryPredictiveRestocking';
 import InventoryFleetTransfer from './pages/dashboards/InventoryFleetTransfer';
 import AdminDashboard from './pages/dashboards/AdminDashboard';
@@ -63,7 +60,6 @@ import HealthVaccination from './pages/dashboards/HealthVaccination';
 import HealthInventoryAlerts from './pages/dashboards/HealthInventoryAlerts';
 import HealthEducation from './pages/dashboards/HealthEducation';
 import HealthReports from './pages/dashboards/HealthReports';
-import InventoryWasteDisposal from './pages/dashboards/InventoryWasteDisposal';
 import HealthMental from './pages/dashboards/HealthMental';
 import HealthEmergency from './pages/dashboards/HealthEmergency';
 import HealthPermissions from './pages/dashboards/HealthPermissions';
@@ -92,10 +88,6 @@ function App() {
         <Route element={<RequireAuth roles={["crew"]} />}>
           <Route path="/dashboard/crew" element={<CrewDashboard />} />
           <Route path="/dashboard/crew/records" element={<CrewHealthRecords />} />
-          <Route path="/dashboard/crew/examinations" element={<CrewExaminations />} />
-          <Route path="/dashboard/crew/chronic" element={<CrewChronic />} />
-          <Route path="/dashboard/crew/mental-health" element={<CrewMental />} />
-          <Route path="/dashboard/crew/vaccinations" element={<CrewVaccinations />} />
           <Route path="/dashboard/crew/reminders" element={<CrewReminders />} />
           <Route path="/dashboard/crew/emergency" element={<CrewEmergency />} />
           <Route path="/dashboard/crew/education" element={<CrewHealthEducation />} />

@@ -1,11 +1,12 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getUser } from '../../../lib/token';
 import {
   listMessagingContacts,
-  listMessagingHistory,
   listThreadMessages,
   sendEmergencyMessage,
+  updateEmergencyMessageContent,
+  deleteEmergencyMessage,
 } from '../../../lib/emergencyMessagingApi';
 
 const AVATAR_COLORS = ['e63946', '3a86ff', 'f4a261', '2a9d8f', 'ffb703', '8338ec', 'ff006e'];
@@ -445,6 +446,73 @@ const buildThemeStyles = (theme) => `
   background:${theme.statusFailedBg};
   color:${theme.statusFailedColor};
 }
+.${theme.shellClass} .message-meta-actions {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  margin-left:auto;
+}
+.${theme.shellClass} .message-meta-actions button {
+  background:transparent;
+  border:1px solid ${theme.softBorder};
+  border-radius:6px;
+  padding:4px 8px;
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:0.4px;
+  cursor:pointer;
+  color:${theme.templateUseColor || theme.primary};
+  transition:.2s;
+}
+.${theme.shellClass} .message-meta-actions button:hover:not(:disabled) {
+  background:${theme.actionHoverBg};
+}
+.${theme.shellClass} .message-meta-actions button:disabled {
+  opacity:0.6;
+  cursor:not-allowed;
+}
+.${theme.shellClass} .message-edit-area {
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.${theme.shellClass} .message-edit-area textarea {
+  width:100%;
+  min-height:80px;
+  border-radius:8px;
+  border:1px solid ${theme.border};
+  padding:10px 12px;
+  resize:vertical;
+  font-family:inherit;
+}
+.${theme.shellClass} .message-edit-actions {
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+}
+.${theme.shellClass} .message-edit-actions button {
+  padding:6px 14px;
+  border-radius:999px;
+  border:1px solid ${theme.border};
+  background:${theme.surface};
+  cursor:pointer;
+  font-size:12px;
+  font-weight:600;
+}
+.${theme.shellClass} .message-edit-actions button.primary {
+  background:${theme.primaryButtonBg};
+  color:${theme.primaryButtonColor};
+  border:none;
+}
+.${theme.shellClass} .chat-action-error {
+  margin:12px 24px 0;
+  padding:10px 14px;
+  border-radius:10px;
+  border:1px solid ${theme.statusFailedColor};
+  background:${theme.statusFailedBg};
+  color:${theme.statusFailedColor};
+  font-size:12px;
+}
 .${theme.shellClass} .chat-empty {
   flex:1;
   display:flex;
@@ -734,12 +802,6 @@ const buildThemeStyles = (theme) => `
 }
 `;
 
-const priorityLabel = {
-  urgent: 'Urgent',
-  high: 'High',
-  normal: 'Normal',
-};
-
 const roleFiltersFromProp = (filterProp) => {
   if (!filterProp || filterProp === 'all') return null;
   if (Array.isArray(filterProp)) {
@@ -781,6 +843,7 @@ export default function MessagingShell({
   const navigate = useNavigate();
   const user = getUser();
   const currentUserId = user?._id || user?.id || user?.userId || '';
+  const currentCrewId = user?.crewId ? String(user.crewId) : '';
   const userFullName = user?.fullName || 'Officer';
   const userRole = user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'Officer';
   const userVessel = user?.vessel || '';
@@ -803,31 +866,137 @@ export default function MessagingShell({
   const [threadLoading, setThreadLoading] = useState(false);
   const [threadError, setThreadError] = useState('');
 
-  const [history, setHistory] = useState([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyError, setHistoryError] = useState('');
-
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const chatRef = useRef(null);
 
-  const [showDetail, setShowDetail] = useState(false);
-  const [detailMessage, setDetailMessage] = useState(null);
+  const [editingMessageId, setEditingMessageId] = useState('');
+  const [editDraft, setEditDraft] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const [deletingMessageId, setDeletingMessageId] = useState('');
+  const [actionError, setActionError] = useState('');
+
+  const beginEditMessage = (msg) => {
+    setEditingMessageId(msg.id);
+    setEditDraft(msg.text);
+    setEditSaving(false);
+    setActionError('');
+  };
+
+  const cancelEditMessage = () => {
+    setEditingMessageId('');
+    setEditDraft('');
+    setEditSaving(false);
+  };
+
+  const saveEditedMessage = async () => {
+    if (!editingMessageId) return;
+    const trimmed = editDraft.trim();
+    if (!trimmed) {
+      setActionError('Updated message cannot be empty.');
+      return;
+    }
+    try {
+      setEditSaving(true);
+      await updateEmergencyMessageContent(editingMessageId, { content: trimmed });
+      cancelEditMessage();
+      await loadThread(activeId);
+    } catch (err) {
+      console.error('saveEditedMessage error', err);
+      setActionError('Failed to update message.');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleDeleteMessage = async (messageId) => {
+    if (!messageId || deletingMessageId) return;
+    // eslint-disable-next-line no-alert
+    const confirmed = window.confirm('Delete this message? This action cannot be undone.');
+    if (!confirmed) return;
+    try {
+      setDeletingMessageId(messageId);
+      setActionError('');
+      await deleteEmergencyMessage(messageId);
+      if (editingMessageId === messageId) {
+        cancelEditMessage();
+      }
+      await loadThread(activeId);
+    } catch (err) {
+      console.error('handleDeleteMessage error', err);
+      setActionError('Failed to delete message.');
+    } finally {
+      setDeletingMessageId('');
+    }
+  };
+
+  const departmentLabelForRole = useCallback((role) => {
+    const normalized = (role || '').toLowerCase();
+    switch (normalized) {
+      case 'health':
+        return 'Medical Team';
+      case 'emergency':
+        return 'Emergency Response';
+      case 'inventory':
+        return 'Logistics & Supply';
+      case 'admin':
+        return 'Bridge & Command';
+      default:
+        return 'Crew';
+    }
+  }, []);
+
+  const roleLabelFor = useCallback((role, fallbackPosition) => {
+    if (fallbackPosition) return fallbackPosition;
+    const normalized = (role || '').toLowerCase();
+    switch (normalized) {
+      case 'health':
+        return 'Medical Officer';
+      case 'emergency':
+        return 'Emergency Officer';
+      case 'inventory':
+        return 'Logistics Coordinator';
+      case 'admin':
+        return 'Command Officer';
+      default:
+        return 'Crew Member';
+    }
+  }, []);
 
   const loadContacts = async () => {
     setLoadingContacts(true);
     setContactsError('');
     try {
       const data = await listMessagingContacts();
-      const formatted = (data || []).map((c) => ({
-        id: c.crewId || c.id,
-        name: c.fullName,
-        department: c.department || 'Crew',
-        roleLabel: c.position || c.department || 'Crew Member',
-        avatarBg: colorFromString(c.crewId || c.fullName),
-        status: c.status === 'active' ? 'online' : 'offline',
-        accountRole: c.role || 'crew',
-      }));
+      const formatted = (data || [])
+        .map((raw) => ({
+          ...raw,
+          id: String(raw.id || raw._id || raw.crewId || ''),
+        }))
+        .filter((c) => {
+          if (!c.id) return false;
+          if (currentUserId && String(c.id) === String(currentUserId)) return false;
+          if (currentCrewId && c.crewId && String(c.crewId) === currentCrewId) return false;
+          return true;
+        })
+        .map((c) => {
+          const accountRole = String(c.role || 'crew').toLowerCase();
+          const department = c.department || departmentLabelForRole(accountRole);
+          const roleLabel = roleLabelFor(accountRole, c.position);
+          const avatarSeed = c.crewId || c.fullName || c.email || c.id;
+          return {
+            id: c.id,
+            contactId: c.id,
+            crewId: c.crewId || '',
+            name: c.fullName,
+            department,
+            roleLabel,
+            avatarBg: colorFromString(String(avatarSeed || 'Crewmate')),
+            status: c.status === 'active' ? 'online' : 'offline',
+            accountRole,
+          };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
 
       const filteredByRole = roleFilters
         ? formatted.filter((c) => roleFilters.includes(String(c.accountRole).toLowerCase()))
@@ -844,20 +1013,6 @@ export default function MessagingShell({
       setContactsError('Failed to load contacts');
     } finally {
       setLoadingContacts(false);
-    }
-  };
-
-  const loadHistory = async () => {
-    setHistoryLoading(true);
-    setHistoryError('');
-    try {
-      const data = await listMessagingHistory({ limit: 10 });
-      setHistory(data || []);
-    } catch (err) {
-      console.error('listMessagingHistory error', err);
-      setHistoryError('Failed to load message history');
-    } finally {
-      setHistoryLoading(false);
     }
   };
 
@@ -878,6 +1033,8 @@ export default function MessagingShell({
         time: formatTime(m.sentAt),
         status: m.status,
         priority: m.priority,
+        rawStatus: m.status,
+        canEdit: currentUserId && String(m.fromId) === String(currentUserId) && (!m.status || m.status === 'sent'),
       }));
       setThreadMessages(formatted);
       if (chatRef.current) {
@@ -893,7 +1050,6 @@ export default function MessagingShell({
 
   useEffect(() => {
     loadContacts();
-    loadHistory();
   }, []);
 
   useEffect(() => {
@@ -933,6 +1089,7 @@ export default function MessagingShell({
   const handleSend = async () => {
     const content = input.trim();
     if (!content || !activeContact || sending) return;
+    setActionError('');
     const tempId = `temp-${Date.now()}`;
     const optimistic = {
       id: tempId,
@@ -953,23 +1110,13 @@ export default function MessagingShell({
         toName: activeContact.name,
         content,
       });
-      await Promise.all([loadThread(activeContact.id), loadHistory()]);
+      await loadThread(activeContact.id);
     } catch (err) {
       console.error('sendEmergencyMessage error', err);
       setThreadMessages((prev) => prev.map((msg) => (msg.id === tempId ? { ...msg, status: 'failed' } : msg)));
     } finally {
       setSending(false);
     }
-  };
-
-  const openDetail = (message) => {
-    setDetailMessage(message);
-    setShowDetail(true);
-  };
-
-  const closeDetail = () => {
-    setShowDetail(false);
-    setDetailMessage(null);
   };
 
   return (
@@ -1074,22 +1221,65 @@ export default function MessagingShell({
                       <i className="fas fa-info-circle" /> This is the start of your conversation with {activeContact.name}
                     </div>
                   ) : (
-                    threadMessages.map((msg) => (
-                      <div
-                        key={msg.id}
-                        className={`message ${msg.isMine ? 'mine' : 'theirs'} ${msg.status === 'failed' ? 'failed' : ''}`}
-                      >
-                        <div className="message-text">{msg.text}</div>
-                        <div className="message-meta">
-                          <span>{msg.time}</span>
-                          {msg.status && (
-                            <span className={`state ${msg.status}`}>{msg.status}</span>
+                    threadMessages.map((msg) => {
+                      const isEditing = editingMessageId === msg.id;
+                      const isDeleting = deletingMessageId === msg.id;
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`message ${msg.isMine ? 'mine' : 'theirs'} ${msg.status === 'failed' ? 'failed' : ''}`}
+                        >
+                          {isEditing ? (
+                            <div className="message-edit-area">
+                              <textarea
+                                value={editDraft}
+                                onChange={(e) => setEditDraft(e.target.value)}
+                                disabled={editSaving}
+                              />
+                              <div className="message-edit-actions">
+                                <button type="button" onClick={cancelEditMessage} disabled={editSaving}>Cancel</button>
+                                <button
+                                  type="button"
+                                  className="primary"
+                                  onClick={saveEditedMessage}
+                                  disabled={editSaving}
+                                >
+                                  {editSaving ? 'Saving…' : 'Save'}
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="message-text">{msg.text}</div>
+                              <div className="message-meta">
+                                <span>{msg.time}</span>
+                                {msg.status && (
+                                  <span className={`state ${msg.status}`}>{msg.status}</span>
+                                )}
+                                <div className="message-meta-actions">
+                                  {msg.canEdit && (
+                                    <button type="button" onClick={() => beginEditMessage(msg)} disabled={editSaving || deletingMessageId}>Edit</button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteMessage(msg.id)}
+                                    disabled={isDeleting || editSaving}
+                                  >
+                                    {isDeleting ? 'Deleting…' : 'Delete'}
+                                  </button>
+                                </div>
+                              </div>
+                            </>
                           )}
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
+
+                {actionError && (
+                  <div className="chat-action-error">{actionError}</div>
+                )}
 
                 <div className="chat-input">
                   <div className="message-compose">
@@ -1127,136 +1317,27 @@ export default function MessagingShell({
               </div>
             )}
           </div>
-        </div>
 
-        <div className="quick-templates">
-          <div className="section-header">
-            <div className="section-title">Quick Message Templates</div>
-            <button className="btn btn-primary"><i className="fas fa-plus" /> New Template</button>
+          <div className="quick-templates">
+            <div className="section-header">
+              <div className="section-title">Quick Message Templates</div>
+            </div>
+            <div className="templates-grid">
+              {templates.map((template) => (
+                <div
+                  key={template.key}
+                  className={`template-card ${template.cls || ''}`}
+                  onClick={() => setInput(template.desc)}
+                >
+                  <div className="template-title">{template.title}</div>
+                  <div className="template-desc">{template.desc}</div>
+                  <div className="template-use">Click to populate compose area</div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="templates-grid">
-            {templates.map((template) => (
-              <div
-                key={template.key}
-                className={`template-card ${template.cls || ''}`}
-                onClick={() => setInput(template.desc)}
-              >
-                <div className="template-title">{template.title}</div>
-                <div className="template-desc">{template.desc}</div>
-                <div className="template-use">Click to populate compose area</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="message-history">
-          <div className="section-header">
-            <div className="section-title">Recent Message History</div>
-            <button className="btn" onClick={loadHistory}><i className="fas fa-sync" /> Refresh</button>
-          </div>
-          {historyLoading ? (
-            <div className="empty-state">Loading history…</div>
-          ) : historyError ? (
-            <div className="empty-state" style={{ color: '#b3202c' }}>{historyError}</div>
-          ) : history.length === 0 ? (
-            <div className="empty-state">No messages have been sent yet.</div>
-          ) : (
-            <table className="history-table">
-              <thead>
-                <tr>
-                  <th>Recipient</th>
-                  <th>Message</th>
-                  <th>Sent</th>
-                  <th>Priority</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((message) => {
-                  const id = message.id || message._id || message.threadId;
-                  const recipient = message.toName || message.recipientName || message.to || 'Unknown recipient';
-                  const text = message.content || message.message || '';
-                  const sentAt = message.sentAt || message.createdAt || message.updatedAt;
-                  const sentLabel = sentAt ? new Date(sentAt).toLocaleString() : 'Unknown';
-                  const priority = message.priority;
-                  const status = message.status;
-
-                  return (
-                    <tr
-                      key={id || `${recipient}-${sentAt}`}
-                      onClick={() => openDetail(message)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <td>{recipient}</td>
-                      <td>{text}</td>
-                      <td>{sentLabel}</td>
-                      <td>
-                        {priority ? (
-                          <span className={`message-priority priority-${priority}`}>
-                            {priorityLabel[priority] || priority}
-                          </span>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td>
-                        {status ? (
-                          <span className={`message-status status-${status}`}>
-                            {status}
-                          </span>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
         </div>
       </div>
-
-      {showDetail && detailMessage && (
-        <div className="detail-modal" onClick={closeDetail}>
-          <div
-            className="detail-card"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="detail-header">
-              <div className="detail-title">Message details</div>
-              <button className="detail-close" onClick={closeDetail}>
-                <i className="fas fa-times" />
-              </button>
-            </div>
-            <div className="detail-body">
-              <div className="detail-row">
-                <span>Recipient</span>
-                <span>{detailMessage.toName || detailMessage.recipientName || detailMessage.to || 'Unknown recipient'}</span>
-              </div>
-              <div className="detail-row">
-                <span>Sent</span>
-                <span>
-                  {detailMessage.sentAt || detailMessage.createdAt || detailMessage.updatedAt
-                    ? new Date(detailMessage.sentAt || detailMessage.createdAt || detailMessage.updatedAt).toLocaleString()
-                    : 'Unknown'}
-                </span>
-              </div>
-              <div className="detail-row">
-                <span>Priority</span>
-                <span>{detailMessage.priority ? (priorityLabel[detailMessage.priority] || detailMessage.priority) : '—'}</span>
-              </div>
-              <div className="detail-row">
-                <span>Status</span>
-                <span>{detailMessage.status || '—'}</span>
-              </div>
-              <div className="detail-message">
-                {detailMessage.content || detailMessage.message || 'No message content available.'}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

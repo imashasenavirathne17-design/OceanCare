@@ -253,6 +253,260 @@ exports.deleteReminder = async (req, res) => {
   }
 };
 
+// ==================== CREW-FACING REMINDER CRUD ====================
+
+const toDateOrUndefined = (value) => {
+  if (!value) return undefined;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+};
+
+const translateStatusFilter = (status) => {
+  if (!status || status === 'all') return undefined;
+  if (status === 'active') return { $in: ['scheduled', 'pending'] };
+  return status;
+};
+
+const normalizeCrewReminderPayload = (body = {}) => {
+  const payload = {};
+  if (body.type) payload.type = body.type;
+  if (body.title) payload.title = body.title;
+  if (body.description !== undefined) payload.description = body.description;
+  if (body.notes !== undefined) payload.notes = body.notes;
+  if (body.tags !== undefined) payload.tags = Array.isArray(body.tags) ? body.tags : [body.tags];
+  if (body.status) payload.status = body.status;
+  if (body.scheduledDate) {
+    const date = toDateOrUndefined(body.scheduledDate);
+    if (date) payload.scheduledDate = date;
+  }
+  if (body.scheduledTime !== undefined) payload.scheduledTime = body.scheduledTime || null;
+  if (body.recurrencePattern !== undefined) {
+    payload.isRecurring = body.recurrencePattern && body.recurrencePattern !== 'none';
+    payload.recurrencePattern = payload.isRecurring ? body.recurrencePattern : undefined;
+  }
+  if (body.recurrenceEnd) {
+    const end = toDateOrUndefined(body.recurrenceEnd);
+    if (end) payload.recurrenceEnd = end;
+  }
+  return payload;
+};
+
+const mapReminderForCrew = (reminder) => {
+  if (!reminder) return reminder;
+  if (typeof reminder.toObject === 'function') return reminder.toObject();
+  return reminder;
+};
+
+exports.listMyReminders = async (req, res) => {
+  try {
+    const crewId = req.user?.crewId;
+    if (!crewId) {
+      return res.status(403).json({ message: 'Crew profile not associated with this account' });
+    }
+
+    const { type, status, from, to } = req.query;
+    const filter = { crewId };
+
+    if (type && type !== 'all') filter.type = type;
+    const statusFilter = translateStatusFilter(status);
+    if (statusFilter) filter.status = statusFilter;
+
+    if (from || to) {
+      const range = {};
+      const fromDate = toDateOrUndefined(from);
+      const toDate = toDateOrUndefined(to);
+      if (fromDate) range.$gte = fromDate;
+      if (toDate) range.$lte = toDate;
+      if (Object.keys(range).length > 0) {
+        filter.scheduledDate = range;
+      }
+    }
+
+    const reminders = await Reminder.find(filter)
+      .sort({ scheduledDate: 1, scheduledTime: 1 })
+      .lean();
+
+    return res.json({ reminders: reminders.map(mapReminderForCrew) });
+  } catch (error) {
+    console.error('List crew reminders error:', error);
+    return res.status(500).json({ message: 'Failed to load reminders' });
+  }
+};
+
+exports.createMyReminder = async (req, res) => {
+  try {
+    const crewId = req.user?.crewId;
+    if (!crewId) {
+      return res.status(403).json({ message: 'Crew profile not associated with this account' });
+    }
+
+    const crewName = req.user?.fullName || req.user?.name || 'Crew Member';
+    const {
+      type = 'other',
+      title,
+      description,
+      scheduledDate,
+      scheduledTime,
+      notes,
+      recurrencePattern,
+      recurrenceEnd,
+      tags,
+    } = req.body || {};
+
+    if (!title || !scheduledDate) {
+      return res.status(400).json({ message: 'Title and scheduled date are required' });
+    }
+
+    const payload = normalizeCrewReminderPayload({
+      type,
+      title,
+      description,
+      scheduledDate,
+      scheduledTime,
+      notes,
+      recurrencePattern,
+      recurrenceEnd,
+      tags,
+    });
+
+    payload.crewId = crewId;
+    payload.crewName = crewName;
+    payload.createdBy = req.user?.sub || null;
+    payload.createdByName = crewName;
+
+    const reminder = await Reminder.create(payload);
+    return res.status(201).json(mapReminderForCrew(reminder));
+  } catch (error) {
+    console.error('Create crew reminder error:', error);
+    return res.status(500).json({ message: 'Failed to create reminder' });
+  }
+};
+
+exports.updateMyReminder = async (req, res) => {
+  try {
+    const crewId = req.user?.crewId;
+    if (!crewId) {
+      return res.status(403).json({ message: 'Crew profile not associated with this account' });
+    }
+
+    const updates = normalizeCrewReminderPayload(req.body);
+    updates.updatedBy = req.user?.sub || null;
+    updates.updatedByName = req.user?.fullName || req.user?.name || 'Crew Member';
+
+    const reminder = await Reminder.findOneAndUpdate(
+      { _id: req.params.id, crewId },
+      updates,
+      { new: true, runValidators: true }
+    );
+
+    if (!reminder) {
+      return res.status(404).json({ message: 'Reminder not found' });
+    }
+
+    return res.json(mapReminderForCrew(reminder));
+  } catch (error) {
+    console.error('Update crew reminder error:', error);
+    return res.status(500).json({ message: 'Failed to update reminder' });
+  }
+};
+
+exports.deleteMyReminder = async (req, res) => {
+  try {
+    const crewId = req.user?.crewId;
+    if (!crewId) {
+      return res.status(403).json({ message: 'Crew profile not associated with this account' });
+    }
+
+    const reminder = await Reminder.findOneAndDelete({ _id: req.params.id, crewId });
+
+    if (!reminder) {
+      return res.status(404).json({ message: 'Reminder not found' });
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Delete crew reminder error:', error);
+    return res.status(500).json({ message: 'Failed to delete reminder' });
+  }
+};
+
+exports.markMyReminderCompleted = async (req, res) => {
+  try {
+    const crewId = req.user?.crewId;
+    if (!crewId) {
+      return res.status(403).json({ message: 'Crew profile not associated with this account' });
+    }
+
+    const reminder = await Reminder.findOne({ _id: req.params.id, crewId });
+    if (!reminder) {
+      return res.status(404).json({ message: 'Reminder not found' });
+    }
+
+    await reminder.markCompleted(req.user?.sub || null, req.user?.fullName || 'Crew Member', req.body?.notes || '');
+    return res.json(mapReminderForCrew(reminder));
+  } catch (error) {
+    console.error('Mark crew reminder completed error:', error);
+    return res.status(500).json({ message: 'Failed to mark reminder as completed' });
+  }
+};
+
+exports.snoozeMyReminder = async (req, res) => {
+  try {
+    const crewId = req.user?.crewId;
+    if (!crewId) {
+      return res.status(403).json({ message: 'Crew profile not associated with this account' });
+    }
+
+    const minutes = parseInt(req.body?.minutes ?? 60, 10);
+    const reminder = await Reminder.findOne({ _id: req.params.id, crewId });
+    if (!reminder) {
+      return res.status(404).json({ message: 'Reminder not found' });
+    }
+
+    await reminder.snooze(Number.isNaN(minutes) ? 60 : minutes);
+    return res.json(mapReminderForCrew(reminder));
+  } catch (error) {
+    console.error('Snooze crew reminder error:', error);
+    return res.status(500).json({ message: 'Failed to snooze reminder' });
+  }
+};
+
+exports.rescheduleMyReminder = async (req, res) => {
+  try {
+    const crewId = req.user?.crewId;
+    if (!crewId) {
+      return res.status(403).json({ message: 'Crew profile not associated with this account' });
+    }
+
+    const { scheduledDate, scheduledTime } = req.body || {};
+    if (!scheduledDate) {
+      return res.status(400).json({ message: 'New scheduled date is required' });
+    }
+
+    const reminder = await Reminder.findOneAndUpdate(
+      { _id: req.params.id, crewId },
+      {
+        scheduledDate: new Date(scheduledDate),
+        scheduledTime,
+        status: 'scheduled',
+        snoozedUntil: null,
+        updatedBy: req.user?.sub || null,
+        updatedByName: req.user?.fullName || req.user?.name || 'Crew Member',
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!reminder) {
+      return res.status(404).json({ message: 'Reminder not found' });
+    }
+
+    return res.json(mapReminderForCrew(reminder));
+  } catch (error) {
+    console.error('Reschedule crew reminder error:', error);
+    return res.status(500).json({ message: 'Failed to reschedule reminder' });
+  }
+};
+
 // ==================== REMINDER ACTIONS ====================
 
 // Mark reminder as completed

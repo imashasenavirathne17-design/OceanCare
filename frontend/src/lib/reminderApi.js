@@ -2,6 +2,7 @@ import { getToken } from './token';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api';
 const REMINDERS_BASE = `${API_BASE}/health/reminders`;
+const MY_REMINDERS_BASE = `${REMINDERS_BASE}/my`;
 
 // Helper function to get headers with auth token
 const getHeaders = () => {
@@ -33,6 +34,15 @@ export const createReminder = async (reminderData) => {
   return handleResponse(response);
 };
 
+export const createMyReminder = async (reminderData) => {
+  const response = await fetch(MY_REMINDERS_BASE, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(reminderData)
+  });
+  return handleResponse(response);
+};
+
 // Get all reminders with filters
 export const listReminders = async (filters = {}) => {
   const params = new URLSearchParams();
@@ -44,6 +54,23 @@ export const listReminders = async (filters = {}) => {
   });
 
   const url = params.toString() ? `${REMINDERS_BASE}?${params}` : REMINDERS_BASE;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  return handleResponse(response);
+};
+
+export const listMyReminders = async (filters = {}) => {
+  const params = new URLSearchParams();
+
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      params.append(key, value);
+    }
+  });
+
+  const url = params.toString() ? `${MY_REMINDERS_BASE}?${params}` : MY_REMINDERS_BASE;
   const response = await fetch(url, {
     method: 'GET',
     headers: getHeaders()
@@ -70,9 +97,26 @@ export const updateReminder = async (id, updates) => {
   return handleResponse(response);
 };
 
+export const updateMyReminder = async (id, updates) => {
+  const response = await fetch(`${MY_REMINDERS_BASE}/${id}`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(updates)
+  });
+  return handleResponse(response);
+};
+
 // Delete reminder
 export const deleteReminder = async (id) => {
   const response = await fetch(`${REMINDERS_BASE}/${id}`, {
+    method: 'DELETE',
+    headers: getHeaders()
+  });
+  return handleResponse(response);
+};
+
+export const deleteMyReminder = async (id) => {
+  const response = await fetch(`${MY_REMINDERS_BASE}/${id}`, {
     method: 'DELETE',
     headers: getHeaders()
   });
@@ -91,6 +135,15 @@ export const markReminderCompleted = async (id, notes = '') => {
   return handleResponse(response);
 };
 
+export const markMyReminderCompleted = async (id, notes = '') => {
+  const response = await fetch(`${MY_REMINDERS_BASE}/${id}/complete`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ notes })
+  });
+  return handleResponse(response);
+};
+
 // Snooze reminder
 export const snoozeReminder = async (id, minutes = 60) => {
   const response = await fetch(`${REMINDERS_BASE}/${id}/snooze`, {
@@ -101,9 +154,27 @@ export const snoozeReminder = async (id, minutes = 60) => {
   return handleResponse(response);
 };
 
+export const snoozeMyReminder = async (id, minutes = 60) => {
+  const response = await fetch(`${MY_REMINDERS_BASE}/${id}/snooze`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ minutes })
+  });
+  return handleResponse(response);
+};
+
 // Reschedule reminder
 export const rescheduleReminder = async (id, scheduledDate, scheduledTime) => {
   const response = await fetch(`${REMINDERS_BASE}/${id}/reschedule`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ scheduledDate, scheduledTime })
+  });
+  return handleResponse(response);
+};
+
+export const rescheduleMyReminder = async (id, scheduledDate, scheduledTime) => {
+  const response = await fetch(`${MY_REMINDERS_BASE}/${id}/reschedule`, {
     method: 'POST',
     headers: getHeaders(),
     body: JSON.stringify({ scheduledDate, scheduledTime })

@@ -25,3 +25,13 @@ export const updateEmergencyMessageStatus = async (id, status) => {
   const { data } = await api.patch(`/emergency/messaging/messages/${id}/status`, { status });
   return data;
 };
+
+export const updateEmergencyMessageContent = async (id, payload) => {
+  const { data } = await api.patch(`/emergency/messaging/messages/${id}`, payload);
+  return data;
+};
+
+export const deleteEmergencyMessage = async (id) => {
+  const { data } = await api.delete(`/emergency/messaging/messages/${id}`);
+  return data;
+};

@@ -1,64 +1,226 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getUser, clearSession } from '../../lib/token';
+import {
+  listCrewEmergencyAlerts,
+  createCrewEmergencyAlert,
+  updateCrewEmergencyAlert,
+  deleteCrewEmergencyAlert,
+} from '../../lib/crewEmergencyAlertApi';
 import './crewDashboard.css';
 import CrewSidebar from './CrewSidebar';
+
+const STATUS_LABELS = {
+  reported: 'Reported',
+  acknowledged: 'Acknowledged',
+  resolved: 'Resolved',
+  cancelled: 'Cancelled',
+};
+
+const TYPE_OPTIONS = [
+  { value: 'medical', label: 'Medical Emergency' },
+  { value: 'safety', label: 'Safety Concern' },
+  { value: 'symptoms', label: 'Severe Symptoms' },
+  { value: 'accident', label: 'Accident / Injury' },
+  { value: 'other', label: 'Other' },
+];
+
+const URGENCY_LABELS = {
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+};
+
+const formatDateTime = (value) => {
+  if (!value) return 'Unknown';
+  try {
+    return new Date(value).toLocaleString();
+  } catch (err) {
+    return 'Unknown';
+  }
+};
 
 export default function CrewEmergency() {
   const navigate = useNavigate();
   const user = getUser();
+  const role = (user?.role || '').toLowerCase();
+  const isCrewUser = role === 'crew';
 
-  const [form, setForm] = useState({
+  const buildInitialForm = useCallback(() => ({
     type: '',
     location: '',
     description: '',
     urgency: 'high',
-    crewId: user?.crewId || 'CD12345',
-    date: new Date().toISOString(),
-  });
-  const [modalOpen, setModalOpen] = useState(false);
+    status: 'reported',
+  }), []);
 
-  useEffect(() => {
-    // keep date current each mount
-    setForm((f) => ({ ...f, date: new Date().toISOString() }));
+  const [form, setForm] = useState(buildInitialForm);
+  const [editingId, setEditingId] = useState('');
+  const [formError, setFormError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+
+  const [alerts, setAlerts] = useState([]);
+  const [loadingAlerts, setLoadingAlerts] = useState(false);
+  const [alertsError, setAlertsError] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+
+  const [modalState, setModalState] = useState({ open: false, title: '', message: '' });
+
+  const openModal = useCallback((title, message) => {
+    setModalState({ open: true, title, message });
   }, []);
 
-  const onLogout = () => { clearSession(); navigate('/login'); };
+  const closeModal = useCallback(() => {
+    setModalState({ open: false, title: '', message: '' });
+  }, []);
 
-  const onChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+  const resetForm = useCallback(() => {
+    setForm(buildInitialForm());
+    setEditingId('');
+    setFormError('');
+  }, [buildInitialForm]);
 
-  const triggerEmergencyAlert = () => {
-    if (window.confirm('Are you sure you want to trigger an emergency alert? This will notify all emergency personnel.')) {
-      setModalOpen(true);
-      // Here you could also POST to backend immediate alert endpoint
+  const loadAlerts = useCallback(async () => {
+    try {
+      setLoadingAlerts(true);
+      setAlertsError('');
+      const data = await listCrewEmergencyAlerts();
+      const normalized = (data || []).map((item) => ({
+        ...item,
+        id: item.id || item._id || item.alertId || '',
+      }));
+      setAlerts(normalized);
+    } catch (err) {
+      console.error('listCrewEmergencyAlerts error:', err);
+      setAlertsError('Failed to load emergency alerts.');
+    } finally {
+      setLoadingAlerts(false);
     }
+  }, []);
+
+  useEffect(() => {
+    loadAlerts();
+  }, [loadAlerts]);
+
+  const onLogout = () => {
+    clearSession();
+    navigate('/login');
   };
 
-  const onSubmit = (e) => {
-    e.preventDefault();
-    if (!form.type || !form.description) {
-      alert('Please select an emergency type and provide a description.');
+  const onChange = (event) => {
+    const { name, value } = event.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const scrollToForm = useCallback(() => {
+    resetForm();
+    setShowForm(true);
+    window.requestAnimationFrame(() => {
+      const el = document.getElementById('crewEmergencyForm');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  }, [resetForm]);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setFormError('');
+
+    if (!form.type || !form.description.trim()) {
+      setFormError('Emergency type and description are required.');
       return;
     }
-    setModalOpen(true);
-    // Simulate submission success; integrate backend call as needed
-    setForm({ type: '', location: '', description: '', urgency: 'high', crewId: user?.crewId || 'CD12345', date: new Date().toISOString() });
+
+    const payload = {
+      type: form.type,
+      location: form.location,
+      description: form.description.trim(),
+      urgency: form.urgency,
+    };
+
+    if (editingId && form.status) {
+      payload.status = form.status;
+    }
+
+    try {
+      setSubmitting(true);
+      if (editingId) {
+        await updateCrewEmergencyAlert(editingId, payload);
+        openModal('Emergency alert updated', 'Your emergency alert has been updated successfully.');
+      } else {
+        await createCrewEmergencyAlert(payload);
+        openModal('Emergency alert reported', 'Emergency and medical officers have been notified.');
+      }
+      await loadAlerts();
+      resetForm();
+      setShowForm(false);
+    } catch (err) {
+      console.error('handleSubmit error:', err);
+      setFormError('Failed to save emergency alert. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const contacts = [
-    { icon: 'fas fa-user-md', name: 'Dr. Sarah Johnson', role: 'Health Officer', phone: 'Ext. 701', channel: 'Channel 7' },
-    { icon: 'fas fa-plus-circle', name: 'Michael Chen', role: 'Emergency Officer', phone: 'Ext. 702', channel: 'Channel 2' },
-    { icon: 'fas fa-user-shield', name: 'Captain Rodriguez', role: 'Ship Captain', phone: 'Ext. 700', channel: 'Channel 1' },
-    { icon: 'fas fa-first-aid', name: 'Medical Team', role: 'Emergency Response', phone: 'Ext. 703', channel: 'Channel 9' },
-  ];
+  const handleEdit = (alert) => {
+    setForm({
+      type: alert.type || '',
+      location: alert.location || '',
+      description: alert.description || '',
+      urgency: alert.urgency || 'high',
+      status: alert.status || 'reported',
+    });
+    setEditingId(alert.id || alert._id || '');
+    setFormError('');
+    setShowForm(true);
+    const el = document.getElementById('crewEmergencyForm');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const handleDelete = async (alert) => {
+    const confirmed = window.confirm('Delete this emergency alert? This cannot be undone.');
+    if (!confirmed) return;
+
+    try {
+      await deleteCrewEmergencyAlert(alert.id || alert._id || '');
+      if (editingId && (alert.id === editingId || alert._id === editingId)) {
+        resetForm();
+        setShowForm(false);
+      }
+      openModal('Emergency alert deleted', 'The emergency alert has been removed.');
+      await loadAlerts();
+    } catch (err) {
+      console.error('handleDelete error:', err);
+      setAlertsError('Failed to delete the alert.');
+    }
+  };
+
+  const filteredAlerts = useMemo(() => alerts.filter((alert) => {
+    if (statusFilter !== 'all' && alert.status !== statusFilter) return false;
+    if (typeFilter !== 'all' && alert.type !== typeFilter) return false;
+    return true;
+  }), [alerts, statusFilter, typeFilter]);
+
+  const summary = useMemo(() => {
+    const total = alerts.length;
+    const active = alerts.filter((a) => a.status === 'reported' || a.status === 'acknowledged').length;
+    const resolved = alerts.filter((a) => a.status === 'resolved').length;
+    return { total, active, resolved };
+  }, [alerts]);
+
+  const statusOptionsForEdit = isCrewUser ? ['reported', 'cancelled'] : Object.keys(STATUS_LABELS);
+  const isEditing = Boolean(editingId);
 
   return (
     <div className="crew-dashboard">
       <div className="dashboard-container">
-        {/* Sidebar */}
         <CrewSidebar onLogout={onLogout} />
 
-        {/* Main Content */}
         <main className="main-content">
           <div className="dash-header">
             <h2>Emergency Assistance</h2>
@@ -66,105 +228,234 @@ export default function CrewEmergency() {
               <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || 'Crew')}&background=3a86ff&color=fff`} alt="User" />
               <div>
                 <div>{user?.fullName || 'Crew User'}</div>
-                <small>Crew ID: {user?.crewId || 'CD12345'}</small>
+                <small>Crew ID: {user?.crewId || '—'}</small>
               </div>
-              <div className="status-badge status-active">Active</div>
+              <div className="status-badge status-active">On Duty</div>
             </div>
           </div>
 
-          <div className="emergency-container" style={{ background: '#fff', borderRadius: 10, boxShadow: '0 5px 15px rgba(0,0,0,0.05)', padding: 30, marginBottom: 30, textAlign: 'center' }}>
-            <div className="emergency-alert" style={{ background: 'linear-gradient(135deg, var(--danger) 0%, #c1121f 100%)', color: '#fff', padding: 40, borderRadius: 10, marginBottom: 30 }}>
-              <div className="emergency-icon" style={{ fontSize: 60, marginBottom: 20 }}>
-                <i className="fas fa-exclamation-triangle"></i>
+          <section style={{ marginBottom: 24 }}>
+            <div style={{ background: 'linear-gradient(135deg, var(--danger) 0%, #c1121f 100%)', color: '#fff', borderRadius: 12, padding: 32, display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'center', boxShadow: '0 16px 30px rgba(193, 18, 31, 0.3)' }}>
+              <div style={{ flex: '1 1 260px' }}>
+                <h3 style={{ margin: 0, fontSize: 26, fontWeight: 700 }}>Emergency Alert Centre</h3>
+                <p style={{ opacity: 0.9, lineHeight: 1.6, marginTop: 12 }}>
+                  Report incidents immediately. Emergency and medical officers receive alerts in real time
+                  and can acknowledge or resolve them within the operations dashboard.
+                </p>
+                <button className="btn btn-light" onClick={scrollToForm} style={{ marginTop: 18, padding: '12px 22px', fontWeight: 600 }}>
+                  <i className="fas fa-plus-circle" /> New Emergency
+                </button>
               </div>
-              <h2 className="emergency-title" style={{ fontSize: 28, marginBottom: 15 }}>Emergency Alert System</h2>
-              <p className="emergency-description" style={{ fontSize: 16, marginBottom: 25, opacity: 0.9 }}>Use this button only in case of genuine emergency. Health and Emergency Officers will be notified immediately.</p>
-              <button className="btn btn-danger" onClick={triggerEmergencyAlert} style={{ fontSize: 18, padding: '15px 30px' }}>
-                <i className="fas fa-bell"></i> Trigger Emergency Alert
-              </button>
+              <div style={{ display: 'flex', gap: 16, flex: '1 1 240px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                <div style={{ background: 'rgba(255,255,255,0.12)', borderRadius: 10, padding: 16, minWidth: 140 }}>
+                  <div style={{ fontSize: 12, textTransform: 'uppercase', opacity: 0.75 }}>Active</div>
+                  <div style={{ fontSize: 28, fontWeight: 700 }}>{summary.active}</div>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.12)', borderRadius: 10, padding: 16, minWidth: 140 }}>
+                  <div style={{ fontSize: 12, textTransform: 'uppercase', opacity: 0.75 }}>Resolved</div>
+                  <div style={{ fontSize: 28, fontWeight: 700 }}>{summary.resolved}</div>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.12)', borderRadius: 10, padding: 16, minWidth: 140 }}>
+                  <div style={{ fontSize: 12, textTransform: 'uppercase', opacity: 0.75 }}>Total</div>
+                  <div style={{ fontSize: 28, fontWeight: 700 }}>{summary.total}</div>
+                </div>
+              </div>
             </div>
+          </section>
 
-            <div className="emergency-form" style={{ background: '#f8f9fa', padding: 25, borderRadius: 10, marginTop: 30, textAlign: 'left' }}>
-              <h3 className="form-title" style={{ fontSize: 22, marginBottom: 20, color: 'var(--dark)', textAlign: 'left' }}>Report Emergency Situation</h3>
-              <form onSubmit={onSubmit} id="emergencyForm">
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: showForm ? 'minmax(0, 420px) minmax(0, 1fr)' : 'minmax(0, 1fr)',
+            gap: 24,
+            alignItems: 'flex-start',
+          }}
+        >
+          {showForm && (
+            <section style={{ background: '#fff', borderRadius: 12, padding: 24, boxShadow: '0 10px 24px rgba(0,0,0,0.08)' }}>
+              <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>{isEditing ? 'Update emergency alert' : 'Report emergency situation'}</h3>
+              <p style={{ color: '#6c757d', marginTop: 8 }}>
+                Provide as much detail as possible so the response team can reach you quickly.
+              </p>
+              <form id="crewEmergencyForm" onSubmit={handleSubmit} style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div className="form-group">
                   <label>Emergency Type *</label>
                   <select name="type" className="form-control" value={form.type} onChange={onChange} required>
                     <option value="">Select emergency type</option>
-                    <option value="medical">Medical Emergency</option>
-                    <option value="safety">Safety Concern</option>
-                    <option value="symptoms">Severe Symptoms</option>
-                    <option value="accident">Accident/Injury</option>
-                    <option value="other">Other</option>
+                    {TYPE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
                   </select>
                 </div>
 
                 <div className="form-group">
-                  <label>Your Current Location</label>
-                  <input type="text" name="location" className="form-control" placeholder="Deck, cabin number, or area" value={form.location} onChange={onChange} />
+                  <label>Your current location</label>
+                  <input
+                    type="text"
+                    name="location"
+                    className="form-control"
+                    placeholder="Deck, cabin number, or area"
+                    value={form.location}
+                    onChange={onChange}
+                  />
                 </div>
 
                 <div className="form-group">
-                  <label>Emergency Description *</label>
-                  <textarea name="description" className="form-control" placeholder="Please describe the emergency situation in detail..." value={form.description} onChange={onChange} required></textarea>
+                  <label>Description *</label>
+                  <textarea
+                    name="description"
+                    className="form-control"
+                    placeholder="Describe the emergency situation in detail..."
+                    value={form.description}
+                    onChange={onChange}
+                    rows={4}
+                    required
+                  />
                 </div>
 
                 <div className="form-group">
-                  <label>Urgency Level</label>
+                  <label>Urgency level</label>
                   <select name="urgency" className="form-control" value={form.urgency} onChange={onChange}>
-                    <option value="high">High - Immediate response needed</option>
-                    <option value="medium">Medium - Response within 30 minutes</option>
-                    <option value="low">Low - Non-urgent but important</option>
+                    <option value="high">High – immediate response needed</option>
+                    <option value="medium">Medium – response within 30 minutes</option>
+                    <option value="low">Low – monitor and assist</option>
                   </select>
                 </div>
 
-                <input type="hidden" name="crewId" value={form.crewId} />
-                <input type="hidden" name="date" value={form.date} />
-
-                <button type="submit" className="btn btn-danger" style={{ width: '100%', fontSize: 18, padding: '15px 30px' }}>
-                  <i className="fas fa-paper-plane"></i> Submit Emergency Report
-                </button>
-              </form>
-            </div>
-          </div>
-
-          <div className="emergency-contacts" style={{ background: '#fff', borderRadius: 10, boxShadow: '0 5px 15px rgba(0,0,0,0.05)', padding: 30, marginBottom: 30 }}>
-            <h3 className="form-title">Emergency Contacts</h3>
-            <p>In case of emergency, you can directly contact these officers:</p>
-            <div className="contacts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 20, marginTop: 20 }}>
-              {contacts.map((c, i) => (
-                <div key={i} className="contact-card" style={{ background: '#f8f9fa', padding: 20, borderRadius: 8, textAlign: 'center', transition: 'transform .3s' }}>
-                  <div className="contact-icon" style={{ fontSize: 30, color: 'var(--primary)', marginBottom: 15 }}>
-                    <i className={c.icon}></i>
+                {isEditing && (
+                  <div className="form-group">
+                    <label>Status</label>
+                    <select name="status" className="form-control" value={form.status} onChange={onChange}>
+                      {statusOptionsForEdit.map((value) => (
+                        <option key={value} value={value}>{STATUS_LABELS[value]}</option>
+                      ))}
+                    </select>
+                    <small style={{ color: '#6c757d' }}>Crew can mark alerts as reported or cancelled if situation resolves.</small>
                   </div>
-                  <div className="contact-name" style={{ fontWeight: 600, marginBottom: 5 }}>{c.name}</div>
-                  <div className="contact-role" style={{ color: '#777', fontSize: 14, marginBottom: 10 }}>{c.role}</div>
-                  <div className="contact-info" style={{ fontSize: 14 }}>
-                    <p><i className="fas fa-phone"></i> {c.phone}</p>
-                    <p><i className="fas fa-walkie-talkie"></i> {c.channel}</p>
-                  </div>
+                )}
+
+                {formError && (
+                  <div style={{ color: 'var(--danger)', fontSize: 14 }}>{formError}</div>
+                )}
+
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <button type="submit" className="btn btn-danger" disabled={submitting}>
+                    {submitting ? 'Saving…' : isEditing ? 'Update alert' : 'Submit emergency report'}
+                  </button>
+                  {isEditing && (
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => {
+                        resetForm();
+                        setShowForm(false);
+                      }}
+                      disabled={submitting}
+                    >
+                      Cancel edit
+                    </button>
+                  )}
                 </div>
-              ))}
-            </div>
+              </form>
+              </section>
+            )}
+
+            <section style={{ background: '#fff', borderRadius: 12, padding: 24, boxShadow: '0 10px 24px rgba(0,0,0,0.08)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Your emergency alerts</h3>
+                  <p style={{ color: '#6c757d', marginTop: 8 }}>Track acknowledgement and resolution progress in real time.</p>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <select className="form-control" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                    <option value="all">All statuses</option>
+                    {Object.keys(STATUS_LABELS).map((value) => (
+                      <option key={value} value={value}>{STATUS_LABELS[value]}</option>
+                    ))}
+                  </select>
+                  <select className="form-control" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                    <option value="all">All types</option>
+                    {TYPE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 16 }}>
+                {loadingAlerts ? (
+                  <div className="empty-state">Loading alerts…</div>
+                ) : alertsError ? (
+                  <div className="empty-state" style={{ color: 'var(--danger)' }}>{alertsError}</div>
+                ) : filteredAlerts.length === 0 ? (
+                  <div className="empty-state">No emergency alerts found for the selected filters.</div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
+                      <thead>
+                        <tr>
+                          <th>Type</th>
+                          <th>Description</th>
+                          <th>Location</th>
+                          <th>Urgency</th>
+                          <th>Status</th>
+                          <th>Reported</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredAlerts.map((alert) => (
+                          <tr key={alert.id}>
+                            <td style={{ textTransform: 'capitalize' }}>{alert.type}</td>
+                            <td style={{ maxWidth: 260, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>
+                              <div style={{ fontWeight: 600, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{alert.description}</div>
+                              {alert.notes && <small style={{ color: '#6c757d' }}>{alert.notes}</small>}
+                            </td>
+                            <td>{alert.location || '—'}</td>
+                            <td>
+                              <span className={`badge badge-${alert.urgency || 'high'}`}>
+                                {URGENCY_LABELS[alert.urgency] || alert.urgency}
+                              </span>
+                            </td>
+                            <td>
+                              <span className={`badge status-${alert.status || 'reported'}`}>
+                                {STATUS_LABELS[alert.status] || alert.status}
+                              </span>
+                            </td>
+                            <td>{formatDateTime(alert.reportedAt || alert.createdAt)}</td>
+                            <td>
+                              <div style={{ display: 'flex', gap: 8 }}>
+                                <button type="button" className="btn btn-sm" onClick={() => handleEdit(alert)}>
+                                  <i className="fas fa-edit" /> Edit
+                                </button>
+                                <button type="button" className="btn btn-sm btn-danger" onClick={() => handleDelete(alert)}>
+                                  <i className="fas fa-trash" /> Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
         </main>
       </div>
 
-      {/* Emergency Modal */}
-      {modalOpen && (
-        <div className="modal" onClick={(e) => e.target.classList.contains('modal') && setModalOpen(false)}>
-          <div className="modal-content" style={{ textAlign: 'center' }}>
+      {modalState.open && (
+        <div className="modal" onClick={(event) => event.target.classList.contains('modal') && closeModal()}>
+          <div className="modal-content" style={{ maxWidth: 420 }}>
             <div className="modal-header">
-              <h3 className="modal-title">Emergency Alert Sent!</h3>
-              <button className="close-modal" onClick={() => setModalOpen(false)}>&times;</button>
+              <h3 className="modal-title">{modalState.title}</h3>
+              <button className="close-modal" onClick={closeModal}>&times;</button>
             </div>
-            <div className="modal-icon" style={{ fontSize: 50, color: 'var(--danger)', margin: '20px 0' }}>
-              <i className="fas fa-check-circle"></i>
+            <div style={{ padding: '16px 0', color: '#2c3e50' }}>{modalState.message}</div>
+            <div style={{ textAlign: 'right' }}>
+              <button className="btn btn-primary" onClick={closeModal}>OK</button>
             </div>
-            <p>Health and Emergency Officers have been notified of your emergency.</p>
-            <p><strong>Response team is on the way.</strong></p>
-            <p>Please stay where you are if it is safe to do so.</p>
-            <button className="btn btn-danger" onClick={() => setModalOpen(false)} style={{ marginTop: 20 }}>OK</button>
           </div>
         </div>
       )}

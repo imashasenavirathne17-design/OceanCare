@@ -120,3 +120,70 @@ exports.updateMessageStatus = async (req, res) => {
     res.status(500).json({ message: 'Failed to update message status' });
   }
 };
+
+exports.updateMessageContent = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { content } = req.body;
+    if (!content || !content.trim()) {
+      return res.status(400).json({ message: 'Content is required' });
+    }
+
+    const userId = String(req.user?.sub || '');
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const message = await EmergencyMessage.findById(id);
+    if (!message) {
+      return res.status(404).json({ message: 'Message not found' });
+    }
+
+    if (String(message.fromId) !== userId) {
+      return res.status(403).json({ message: 'You can only edit messages you sent' });
+    }
+
+    if (message.status !== 'sent') {
+      return res.status(409).json({ message: 'Only messages with status "sent" can be edited' });
+    }
+
+    message.content = content.trim();
+    await message.save();
+
+    res.json(message);
+  } catch (err) {
+    console.error('updateMessageContent error:', err);
+    res.status(500).json({ message: 'Failed to update message' });
+  }
+};
+
+exports.deleteMessage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = String(req.user?.sub || '');
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const message = await EmergencyMessage.findById(id);
+    if (!message) {
+      return res.status(404).json({ message: 'Message not found' });
+    }
+
+    const requester = await User.findById(userId).lean();
+    const requesterRole = requester?.role || '';
+    const privileged = ['admin', 'emergency', 'health'].includes(String(requesterRole).toLowerCase());
+    const isParticipant = String(message.fromId) === userId || String(message.toId) === userId;
+
+    if (!privileged && !isParticipant) {
+      return res.status(403).json({ message: 'You do not have permission to delete this message' });
+    }
+
+    await message.deleteOne();
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('deleteMessage error:', err);
+    res.status(500).json({ message: 'Failed to delete message' });
+  }
+};

@@ -1,6 +1,15 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearSession, getUser } from '../../lib/token';
+import {
+  listMyReminders,
+  deleteMyReminder,
+  markMyReminderCompleted,
+  snoozeMyReminder,
+  rescheduleMyReminder,
+  getReminderStatusDisplay,
+  formatReminderTime,
+} from '../../lib/reminderApi';
 import CrewSidebar from './CrewSidebar';
 import './crewDashboard.css';
 
@@ -9,31 +18,56 @@ export default function CrewReminders() {
   const user = getUser();
   const printRecords = () => { window.print(); };
 
-  
   const onLogout = () => { clearSession(); navigate('/login'); };
-  // Demo reminders dataset
-  const [reminders, setReminders] = useState([
-    { id: 1, type: 'medication', title: 'Vitamin D Supplement', date: new Date().toISOString().split('T')[0], time: '08:00', repeat: 'daily', notes: 'Take with breakfast', status: 'active', created: '2025-09-01' },
-    { id: 2, type: 'vaccination', title: 'Influenza Booster', date: '2025-10-25', time: '14:00', repeat: 'none', notes: 'Important vaccination before winter season', status: 'active', created: '2025-09-15' },
-    { id: 3, type: 'appointment', title: 'Health Officer Appointment', date: '2025-10-30', time: '10:00', repeat: 'none', notes: 'Routine check-up', status: 'active', created: '2025-10-05' },
-    { id: 4, type: 'medication', title: 'Pain Reliever', date: '2025-09-14', time: '14:00', repeat: 'none', notes: 'For headache', status: 'completed', created: '2025-09-14' },
-    { id: 5, type: 'checkup', title: 'Blood Pressure Check', date: new Date().toISOString().split('T')[0], time: '15:00', repeat: 'none', notes: 'Snoozed from earlier', status: 'snoozed', created: '2025-09-15' },
-  ]);
-  const [activeTab, setActiveTab] = useState('active'); // active | completed | snoozed
-  const [form, setForm] = useState({ id: null, type: '', title: '', date: '', time: '', repeat: 'none', notes: '', crewId: user?.crewId || 'CD12345', status: 'active' });
-  const [successOpen, setSuccessOpen] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
-  const [formOpen, setFormOpen] = useState(false);
-  const [viewMode, setViewMode] = useState('list'); // list | calendar
+
+  const [reminders, setReminders] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState('active');
+  const [viewMode, setViewMode] = useState('list');
+
+  const normalizeReminder = useCallback((item) => {
+    if (!item) return item;
+    const statusInfo = getReminderStatusDisplay(item);
+    return {
+      ...item,
+      id: item._id || item.id,
+      statusLabel: statusInfo.label,
+      statusClass: statusInfo.class,
+      displayTime: formatReminderTime(item),
+    };
+  }, []);
+
+  const fetchReminders = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const { reminders: apiReminders = [] } = await listMyReminders({ status: 'all' });
+      setReminders(apiReminders.map(normalizeReminder));
+    } catch (err) {
+      console.error('Failed to fetch reminders', err);
+      setError(err.message || 'Failed to load reminders');
+    } finally {
+      setLoading(false);
+    }
+  }, [normalizeReminder, user?.crewId]);
+
+  useEffect(() => {
+    fetchReminders();
+  }, [fetchReminders]);
+
+  const showSuccess = (message) => {
+    console.info(message);
+  };
 
   // Overview counters (computed after reminders is defined)
   const counts = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
     return {
-      active: reminders.filter(r => r.status === 'active').length,
-      completed: reminders.filter(r => r.status === 'completed').length,
-      snoozed: reminders.filter(r => r.status === 'snoozed').length,
-      today: reminders.filter(r => r.date === today).length,
+      active: reminders.filter((r) => ['scheduled', 'pending', 'active'].includes(r.status)).length,
+      completed: reminders.filter((r) => r.status === 'completed').length,
+      snoozed: reminders.filter((r) => r.status === 'snoozed').length,
+      today: reminders.filter((r) => (r.scheduledDate || '').slice(0, 10) === today).length,
     };
   }, [reminders]);
 
@@ -51,7 +85,7 @@ export default function CrewReminders() {
     const weeks = [];
     for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
     const map = reminders.reduce((acc, r) => {
-      const k = r.date;
+      const k = (r.scheduledDate || '').slice(0, 10);
       acc[k] = (acc[k] || 0) + 1;
       return acc;
     }, {});
@@ -68,7 +102,11 @@ export default function CrewReminders() {
     { key: 'snoozed', label: 'Snoozed' },
   ];
 
-  const filteredByTab = (status) => reminders.filter(r => r.status === status);
+  const filteredByTab = (key) => {
+    if (key === 'active') return reminders.filter((r) => r.status === 'scheduled' || r.status === 'pending' || r.status === 'active');
+    return reminders.filter((r) => r.status === key);
+  };
+
   const iconOf = (type) => {
     switch (type) {
       case 'medication': return { icon: 'fas fa-pills', color: 'var(--warning)' };
@@ -78,53 +116,93 @@ export default function CrewReminders() {
       default: return { icon: 'fas fa-bell', color: 'var(--primary)' };
     }
   };
-  const formatDate = (ds) => new Date(ds).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  const formatDate = (value) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
 
-  const markComplete = (id) => {
-    setReminders((rs) => rs.map(r => r.id === id ? { ...r, status: 'completed' } : r));
-    setSuccessMessage('Reminder marked as completed.');
-    setSuccessOpen(true);
-  };
-  const snoozeReminder = (id) => {
-    setReminders((rs) => rs.map(r => {
-      if (r.id !== id) return r;
-      const [h, m] = r.time.split(':').map(n => parseInt(n, 10));
-      const date = new Date();
-      date.setHours(h, m + 60); // +1 hour
-      const hh = String(date.getHours()).padStart(2, '0');
-      const mm = String(date.getMinutes()).padStart(2, '0');
-      return { ...r, status: 'snoozed', time: `${hh}:${mm}` };
-    }));
-    setSuccessMessage('Reminder snoozed for 1 hour.');
-    setSuccessOpen(true);
-  };
-  const activateReminder = (id) => {
-    setReminders((rs) => rs.map(r => r.id === id ? { ...r, status: 'active' } : r));
-    setSuccessMessage('Reminder activated.');
-    setSuccessOpen(true);
-  };
-  const editReminder = (id) => {
-    const r = reminders.find(x => x.id === id);
-    if (!r) return;
-    setForm({ ...r });
-    setFormOpen(true);
-  };
-  const resetForm = () => setForm({ id: null, type: '', title: '', date: '', time: '', repeat: 'none', notes: '', crewId: user?.crewId || 'CD12345', status: 'active' });
-  const onChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
-  const onSubmit = (e) => {
-    e.preventDefault();
-    if (!form.type || !form.title || !form.date || !form.time) return;
-    if (form.id) {
-      setReminders((rs) => rs.map(r => r.id === form.id ? { ...form } : r));
-      setSuccessMessage('Your reminder has been updated successfully.');
-    } else {
-      const newId = reminders.length > 0 ? Math.max(...reminders.map(r => r.id)) + 1 : 1;
-      setReminders((rs) => [{ ...form, id: newId, created: new Date().toISOString().split('T')[0] }, ...rs]);
-      setSuccessMessage('Your reminder has been created successfully.');
+  const handleMarkCompleted = async (reminderId) => {
+    try {
+      await markMyReminderCompleted(reminderId);
+      await fetchReminders();
+      showSuccess('Reminder marked as completed.');
+    } catch (err) {
+      console.error('Failed to mark reminder completed', err);
+      alert(err.message || 'Failed to mark reminder completed');
     }
-    setSuccessOpen(true);
-    resetForm();
-    setFormOpen(false);
+  };
+
+  const handleSnooze = async (reminderId) => {
+    try {
+      await snoozeMyReminder(reminderId, 60);
+      await fetchReminders();
+      showSuccess('Reminder snoozed for 1 hour.');
+    } catch (err) {
+      console.error('Failed to snooze reminder', err);
+      alert(err.message || 'Failed to snooze reminder');
+    }
+  };
+
+  const handleActivate = async (reminderId) => {
+    try {
+      const reminder = reminders.find((r) => r.id === reminderId || r._id === reminderId);
+      if (!reminder) return;
+      await rescheduleMyReminder(reminderId, reminder.scheduledDate, reminder.scheduledTime);
+      await fetchReminders();
+      showSuccess('Reminder activated.');
+    } catch (err) {
+      console.error('Failed to activate reminder', err);
+      alert(err.message || 'Failed to activate reminder');
+    }
+  };
+
+  const handleDelete = async (reminderId) => {
+    if (!window.confirm('Delete this reminder?')) return;
+    try {
+      await deleteMyReminder(reminderId);
+      await fetchReminders();
+      showSuccess('Reminder deleted successfully.');
+    } catch (err) {
+      console.error('Failed to delete reminder', err);
+      alert(err.message || 'Failed to delete reminder');
+    }
+  };
+
+  const handleReschedule = async (reminder) => {
+    const newDate = prompt('Enter new scheduled date (YYYY-MM-DD):', (reminder.scheduledDate || '').slice(0, 10));
+    if (!newDate) return;
+    const newTime = prompt('Enter new scheduled time (HH:MM):', reminder.scheduledTime || '08:00');
+    if (!newTime) return;
+    try {
+      await rescheduleMyReminder(reminder.id || reminder._id, newDate, newTime);
+      showSuccess('Reminder rescheduled successfully.');
+      await fetchReminders();
+    } catch (err) {
+      console.error('Failed to reschedule reminder', err);
+      alert(err.message || 'Failed to reschedule reminder');
+    }
+  };
+
+  const renderReminderActions = (reminder) => {
+    const id = reminder.id || reminder._id;
+    const isActive = reminder.status === 'scheduled' || reminder.status === 'pending' || reminder.status === 'active';
+    return (
+      <div className="reminder-actions" style={{ display: 'flex', gap: 10 }}>
+        {isActive && (
+          <button className="btn btn-success" onClick={() => handleMarkCompleted(id)}>Complete</button>
+        )}
+        {isActive && (
+          <button className="btn btn-warning" onClick={() => handleSnooze(id)}>Snooze</button>
+        )}
+        {reminder.status === 'snoozed' && (
+          <button className="btn btn-primary" onClick={() => handleActivate(id)}>Activate</button>
+        )}
+        <button className="btn btn-outline" onClick={() => handleReschedule(reminder)}>Reschedule</button>
+        <button className="btn btn-danger" onClick={() => handleDelete(id)}>Delete</button>
+      </div>
+    );
   };
 
   return (
@@ -151,9 +229,6 @@ export default function CrewReminders() {
                 <div className="section-title">Your Reminders</div>
                 <div className="section-subtitle">Keep track of medications and follow-up actions</div>
               </div>
-              <button className="btn btn-primary" onClick={() => { resetForm(); setFormOpen(true); }}>
-                <i className="fas fa-plus" style={{ marginRight: 6 }}></i> New Reminder
-              </button>
             </div>
 
             {/* Overview counters */}
@@ -186,7 +261,11 @@ export default function CrewReminders() {
               </div>
             </div>
 
-            {viewMode === 'list' ? (
+            {loading ? (
+              <div style={{ padding: 30, textAlign: 'center' }}>Loading reminders…</div>
+            ) : error ? (
+              <div style={{ padding: 30, textAlign: 'center', color: 'var(--danger)' }}>{error}</div>
+            ) : viewMode === 'list' ? (
               tabList.map(t => (
                 <div key={t.key} className={`reminder-content ${activeTab === t.key ? 'active' : ''}`} style={{ display: activeTab === t.key ? 'block' : 'none' }}>
                   {filteredByTab(t.key).length === 0 ? (
@@ -194,28 +273,18 @@ export default function CrewReminders() {
                   ) : (
                     filteredByTab(t.key).map((r) => {
                       const { icon, color } = iconOf(r.type);
+                      const key = r.id || r._id;
                       return (
-                        <div key={r.id} className={`reminder-item ${r.status === 'completed' ? 'completed' : ''}`}>
+                        <div key={key} className={`reminder-item ${r.status === 'completed' ? 'completed' : ''}`}>
                           <div className="reminder-icon" style={{ backgroundColor: color }}>
                             <i className={icon}></i>
                           </div>
                           <div className="reminder-info">
                             <div className="reminder-title">{r.title}</div>
-                            <div className="reminder-time">Due: {formatDate(r.date)} at {r.time} {r.repeat !== 'none' ? `• Repeats: ${r.repeat}` : ''}</div>
+                            <div className="reminder-time">Due: {formatDate(r.scheduledDate)} at {r.scheduledTime || '—'}</div>
                             {r.notes && <div className="reminder-notes" style={{ fontSize: 14, color: '#777', marginTop: 5 }}>{r.notes}</div>}
                           </div>
-                          <div className="reminder-actions" style={{ display: 'flex', gap: 10 }}>
-                            {(r.status === 'active' || r.status === 'snoozed') && (
-                              <button className="btn btn-success" onClick={() => markComplete(r.id)}>Complete</button>
-                            )}
-                            {r.status === 'active' && (
-                              <button className="btn btn-warning" onClick={() => snoozeReminder(r.id)}>Snooze</button>
-                            )}
-                            {r.status === 'snoozed' && (
-                              <button className="btn btn-primary" onClick={() => activateReminder(r.id)}>Activate</button>
-                            )}
-                            <button className="btn btn-primary" onClick={() => editReminder(r.id)}>Edit</button>
-                          </div>
+                          {renderReminderActions(r)}
                         </div>
                       );
                     })
@@ -248,78 +317,8 @@ export default function CrewReminders() {
             )}
           </section>
 
-          {/* New reminder form modal */}
-          {formOpen && (
-            <div className="modal" onClick={(e) => e.target.classList.contains('modal') && setFormOpen(false)}>
-              <div className="modal-content" style={{ maxWidth: 500 }}>
-                <div className="modal-header">
-                  <h3 className="modal-title">{form.id ? 'Edit Reminder' : 'New Reminder'}</h3>
-                  <button className="close-modal" onClick={() => setFormOpen(false)}>&times;</button>
-                </div>
-                <form onSubmit={onSubmit} id="reminderForm">
-                  <div className="form-grid">
-                    <div className="form-group">
-                      <label>Reminder Type *</label>
-                      <select name="type" className="form-control" value={form.type} onChange={onChange} required>
-                        <option value="">Select type</option>
-                        <option value="medication">Medication</option>
-                        <option value="appointment">Appointment</option>
-                        <option value="vaccination">Vaccination</option>
-                        <option value="checkup">Health Check</option>
-                        <option value="other">Other</option>
-                      </select>
-                    </div>
-                    <div className="form-group">
-                      <label>Title *</label>
-                      <input name="title" className="form-control" placeholder="Enter reminder title" value={form.title} onChange={onChange} required />
-                    </div>
-                    <div className="form-group">
-                      <label>Date *</label>
-                      <input name="date" type="date" className="form-control" value={form.date} onChange={onChange} required />
-                    </div>
-                    <div className="form-group">
-                      <label>Time *</label>
-                      <input name="time" type="time" className="form-control" value={form.time} onChange={onChange} required />
-                    </div>
-                    <div className="form-group">
-                      <label>Repeat</label>
-                      <select name="repeat" className="form-control" value={form.repeat} onChange={onChange}>
-                        <option value="none">Never</option>
-                        <option value="daily">Daily</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="monthly">Monthly</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label>Notes</label>
-                    <textarea name="notes" className="form-control" rows={3} placeholder="Additional notes..." value={form.notes} onChange={onChange}></textarea>
-                  </div>
-                  <input type="hidden" name="crewId" value={form.crewId} />
-                  <input type="hidden" name="status" value={form.status} />
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                    <button type="button" className="btn" onClick={() => setFormOpen(false)}>Cancel</button>
-                    <button type="submit" className="btn btn-primary">{form.id ? 'Update Reminder' : 'Create Reminder'}</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
           </main>
       </div>
-      {/* Success Modal */}
-      {successOpen && (
-        <div className="modal" onClick={(e) => e.target.classList.contains('modal') && setSuccessOpen(false)}>
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3 className="modal-title">Success!</h3>
-              <button className="close-modal" onClick={() => setSuccessOpen(false)}>&times;</button>
-            </div>
-            <p>{successMessage || 'Your reminder has been created successfully.'}</p>
-            <button className="btn btn-primary" onClick={() => setSuccessOpen(false)}>OK</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

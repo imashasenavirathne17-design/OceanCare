@@ -38,7 +38,7 @@ const normalizeTags = (value) => {
 
 const buildFilter = (query = {}) => {
   const filter = {};
-  const { q, status, category, featured, createdBy, from, to } = query;
+  const { q, status, category, featured, createdBy, from, to, publishedOnly } = query;
 
   if (q) {
     const regex = { $regex: q, $options: 'i' };
@@ -63,6 +63,10 @@ const buildFilter = (query = {}) => {
 
   if (featured === 'true') filter.featured = true;
   if (featured === 'false') filter.featured = false;
+
+  if (publishedOnly === 'true') {
+    filter.status = 'published';
+  }
 
   const createdById = toObjectId(createdBy);
   if (createdById) filter.createdBy = createdById;
@@ -168,6 +172,7 @@ exports.createEducation = async (req, res) => {
       featured,
       thumbnailUrl,
       attachments,
+      icon,
       campaign,
     } = req.body;
 
@@ -189,6 +194,7 @@ exports.createEducation = async (req, res) => {
       attachments: Array.isArray(attachments)
         ? attachments.map((a) => ({ label: a.label?.trim(), url: a.url?.trim() })).filter((a) => a.label || a.url)
         : undefined,
+      icon: icon ? String(icon).trim() : undefined,
       campaign: campaign
         ? {
             title: campaign.title?.trim(),
@@ -224,6 +230,7 @@ exports.updateEducation = async (req, res) => {
     if (updates.tags) updates.tags = normalizeTags(updates.tags);
     if (typeof updates.featured !== 'undefined') updates.featured = Boolean(updates.featured);
     if (updates.thumbnailUrl) updates.thumbnailUrl = String(updates.thumbnailUrl).trim();
+    if (updates.icon) updates.icon = String(updates.icon).trim();
 
     if (Array.isArray(updates.attachments)) {
       updates.attachments = updates.attachments

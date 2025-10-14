@@ -571,17 +571,17 @@
 .countdown-label { font-size: 12px; color: #777; }
 
 /* Modals */
-.modal {
+.crew-dashboard .modal {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
   background-color: rgba(0, 0, 0, 0.5);
   z-index: 1000;
-  display: flex;
+  display: flex !important;
   align-items: center;
   justify-content: center;
 }
 
-.modal-content {
+.crew-dashboard .modal-content {
   background: white;
   border-radius: 10px;
   padding: 30px;
@@ -592,17 +592,17 @@
   overflow-y: auto; /* enable scrolling when content is taller than viewport */
 }
 
-.modal-content:focus-within { box-shadow: 0 10px 30px rgba(58,134,255,0.25); outline: 2px solid rgba(58,134,255,0.3); }
+.crew-dashboard .modal-content:focus-within { box-shadow: 0 10px 30px rgba(58,134,255,0.25); outline: 2px solid rgba(58,134,255,0.3); }
 
-.modal-header {
+.crew-dashboard .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
 }
 
-.modal-title { font-size: 20px; font-weight: 600; color: var(--primary); }
-.close-modal { background: none; border: none; font-size: 24px; cursor: pointer; color: #777; }
+.crew-dashboard .modal-title { font-size: 20px; font-weight: 600; color: var(--primary); }
+.crew-dashboard .close-modal { background: none; border: none; font-size: 24px; cursor: pointer; color: #777; }
 
 /* Responsive */
 @media (max-width: 992px) {

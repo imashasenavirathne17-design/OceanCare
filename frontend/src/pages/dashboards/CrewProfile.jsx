@@ -1,8 +1,21 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearSession, getUser } from '../../lib/token';
 import './crewDashboard.css';
 import CrewSidebar from './CrewSidebar';
+import { getCrewProfile, updateCrewProfile } from '../../lib/crewProfileApi';
+
+const ALLERGY_OPTIONS = [
+  { key: 'none', label: 'None' },
+  { key: 'penicillin', label: 'Penicillin' },
+  { key: 'shellfish', label: 'Shellfish' },
+  { key: 'other', label: 'Other' },
+];
+
+const formatStatValue = (value) => {
+  if (value === undefined || value === null || value === '') return '—';
+  return value;
+};
 
 export default function CrewProfile() {
   const navigate = useNavigate();
@@ -10,68 +23,202 @@ export default function CrewProfile() {
   const onLogout = () => { clearSession(); navigate('/login'); };
 
   const [activeTab, setActiveTab] = useState('personal');
-
-  // Forms state (demo defaults)
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [profile, setProfile] = useState(null);
   const [personal, setPersonal] = useState({
-    firstName: (user?.fullName || 'Crew').split(' ')[0] || 'John',
-    lastName: (user?.fullName || 'User').split(' ')[1] || 'Doe',
-    email: user?.email || 'john.doe@oceancare.com',
-    phone: '+1 (555) 123-4567',
-    birthDate: '1985-06-15',
-    nationality: 'United States',
-    address: '123 Maritime Ave, Seattle, WA 98101, USA'
+    firstName: '',
+    lastName: '',
+    email: user?.email || '',
+    phone: '',
+    birthDate: '',
+    nationality: '',
+    address: '',
+    vessel: '',
+    crewId: user?.crewId || '',
   });
   const [medical, setMedical] = useState({
-    bloodType: 'O+',
-    height: 180,
-    weight: 82,
-    conditions: 'None',
+    bloodType: '',
+    height: '',
+    weight: '',
+    conditions: '',
     allergies: new Set(['none']),
     allergyDetails: '',
-    medications: 'Vitamin D supplement (1000 IU daily)'
+    medications: '',
   });
   const [settings, setSettings] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
-    notifications: new Set(['email', 'sms', 'reminders']),
-    language: 'en'
+    notifications: new Set(['email']),
+    language: 'en',
   });
-
   const [successOpen, setSuccessOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState('Your changes have been saved successfully.');
   const [addContactOpen, setAddContactOpen] = useState(false);
-
-  const [contacts, setContacts] = useState([
-    { id: 1, name: 'Sarah Doe', relation: 'Spouse', phone: '+1 (555) 987-6543' },
-    { id: 2, name: 'Michael Doe', relation: 'Brother', phone: '+1 (555) 456-7890' },
-  ]);
+  const [contacts, setContacts] = useState([]);
   const [newContact, setNewContact] = useState({ name: '', relation: '', phone: '', email: '' });
+  const [saving, setSaving] = useState(false);
 
-  const statBlocks = useMemo(() => ([
-    { value: 42, label: 'Health Checks' },
-    { value: 5, label: 'Vaccinations' },
-    { value: '100%', label: 'Compliance' },
-  ]), []);
+  const hydrateProfile = useCallback((data) => {
+    if (!data) return;
+    setProfile(data);
+    const personalData = data.personal || {};
+    setPersonal({
+      firstName: personalData.firstName || '',
+      lastName: personalData.lastName || '',
+      email: personalData.email || user?.email || '',
+      phone: personalData.phone || '',
+      birthDate: personalData.birthDate || '',
+      nationality: personalData.nationality || '',
+      address: personalData.address || '',
+      vessel: personalData.vessel || '',
+      crewId: personalData.crewId || personal.crewId || user?.crewId || '',
+    });
+    const medicalData = data.medical || {};
+    setMedical({
+      bloodType: medicalData.bloodType || '',
+      height: medicalData.height === null || medicalData.height === undefined ? '' : String(medicalData.height),
+      weight: medicalData.weight === null || medicalData.weight === undefined ? '' : String(medicalData.weight),
+      conditions: medicalData.conditions || '',
+      allergies: new Set(Array.isArray(medicalData.allergies) && medicalData.allergies.length ? medicalData.allergies : ['none']),
+      allergyDetails: medicalData.allergyDetails || '',
+      medications: medicalData.medications || '',
+    });
+    const settingsData = data.settings || {};
+    setSettings({
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: '',
+      notifications: new Set(Array.isArray(settingsData.notifications) && settingsData.notifications.length ? settingsData.notifications : ['email']),
+      language: settingsData.language || 'en',
+    });
+    setContacts(Array.isArray(data.emergencyContacts) ? data.emergencyContacts.map((c) => ({ ...c })) : []);
+    setNewContact({ name: '', relation: '', phone: '', email: '' });
+  }, [personal.crewId, user?.crewId, user?.email]);
+
+  const loadProfile = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const data = await getCrewProfile();
+      hydrateProfile(data);
+    } catch (err) {
+      setError('Failed to load profile information.');
+    } finally {
+      setLoading(false);
+    }
+  }, [hydrateProfile]);
+
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
+
+  const statBlocks = useMemo(() => {
+    const stats = profile?.stats || {};
+    return [
+      { value: formatStatValue(stats.healthChecks), label: 'Health Checks' },
+      { value: formatStatValue(stats.vaccinations), label: 'Vaccinations' },
+      { value: formatStatValue(stats.compliance), label: 'Compliance' },
+    ];
+  }, [profile]);
 
   const showSuccess = (msg) => { setSuccessMessage(msg); setSuccessOpen(true); };
 
-  // Handlers
-  const onPersonalSubmit = (e) => { e.preventDefault(); showSuccess('Personal information updated successfully.'); };
-  const onMedicalSubmit = (e) => { e.preventDefault(); showSuccess('Medical information updated successfully.'); };
-  const onSettingsSubmit = (e) => {
+  const onPersonalSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSaving(true);
+    try {
+      const payload = {
+        personal: {
+          firstName: personal.firstName.trim(),
+          lastName: personal.lastName.trim(),
+          email: personal.email.trim(),
+          phone: personal.phone.trim(),
+          birthDate: personal.birthDate || '',
+          nationality: personal.nationality.trim(),
+          address: personal.address.trim(),
+          vessel: personal.vessel.trim(),
+          crewId: personal.crewId.trim(),
+        },
+      };
+      const updated = await updateCrewProfile(payload);
+      hydrateProfile(updated);
+      showSuccess('Personal information updated successfully.');
+    } catch (err) {
+      setError('Failed to update personal information.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onMedicalSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSaving(true);
+    try {
+      const payload = {
+        medical: {
+          bloodType: medical.bloodType,
+          height: medical.height,
+          weight: medical.weight,
+          conditions: medical.conditions,
+          allergies: Array.from(medical.allergies),
+          allergyDetails: medical.allergyDetails,
+          medications: medical.medications,
+        },
+      };
+      const updated = await updateCrewProfile(payload);
+      hydrateProfile(updated);
+      showSuccess('Medical information updated successfully.');
+    } catch (err) {
+      setError('Failed to update medical information.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onSettingsSubmit = async (e) => {
     e.preventDefault();
     if (settings.newPassword && settings.newPassword !== settings.confirmPassword) {
       alert('New passwords do not match.');
       return;
     }
-    showSuccess('Account settings updated successfully.');
+    setError('');
+    setSaving(true);
+    try {
+      const payload = {
+        settings: {
+          notifications: Array.from(settings.notifications),
+          language: settings.language,
+        },
+      };
+      const updated = await updateCrewProfile(payload);
+      hydrateProfile(updated);
+      showSuccess('Account settings updated successfully.');
+    } catch (err) {
+      setError('Failed to update settings.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const toggleAllergy = (key) => {
     setMedical((m) => {
       const next = new Set(m.allergies);
-      if (next.has(key)) next.delete(key); else next.add(key);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        if (key === 'none') {
+          next.clear();
+          next.add('none');
+        } else {
+          next.delete('none');
+          next.add(key);
+        }
+      }
+      if (next.size === 0) next.add('none');
       return { ...m, allergies: next };
     });
   };
@@ -84,24 +231,70 @@ export default function CrewProfile() {
     });
   };
 
-  const addContact = (e) => {
+  const addContact = async (e) => {
     e.preventDefault();
     if (!newContact.name || !newContact.relation || !newContact.phone) return;
-    const id = contacts.length ? Math.max(...contacts.map(c => c.id)) + 1 : 1;
-    setContacts((cs) => [...cs, { id, ...newContact }]);
-    setNewContact({ name: '', relation: '', phone: '', email: '' });
-    setAddContactOpen(false);
-    showSuccess('Emergency contact added successfully.');
-  };
-
-  const deleteContact = (id) => {
-    if (window.confirm('Are you sure you want to delete this emergency contact?')) {
-      setContacts((cs) => cs.filter((c) => c.id !== id));
-      showSuccess('Contact deleted.');
+    setError('');
+    setSaving(true);
+    try {
+      const updatedContacts = [...contacts, { ...newContact }];
+      const payload = {
+        emergencyContacts: updatedContacts.map((c) => ({
+          id: c.id || undefined,
+          name: c.name.trim(),
+          relation: c.relation.trim(),
+          phone: c.phone.trim(),
+          email: c.email.trim(),
+        })),
+      };
+      const updated = await updateCrewProfile(payload);
+      hydrateProfile(updated);
+      setAddContactOpen(false);
+      showSuccess('Emergency contact added successfully.');
+    } catch (err) {
+      setError('Failed to add emergency contact.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const avatarInitial = (user?.fullName || 'Crew User').trim().charAt(0).toUpperCase();
+  const deleteContact = async (id) => {
+    if (window.confirm('Are you sure you want to delete this emergency contact?')) {
+      setError('');
+      setSaving(true);
+      try {
+        const remaining = contacts.filter((c) => c.id !== id);
+        const payload = {
+          emergencyContacts: remaining.map((c) => ({
+            id: c.id,
+            name: c.name,
+            relation: c.relation,
+            phone: c.phone,
+            email: c.email,
+          })),
+        };
+        const updated = await updateCrewProfile(payload);
+        hydrateProfile(updated);
+        showSuccess('Contact deleted.');
+      } catch (err) {
+        setError('Failed to delete contact.');
+      } finally {
+        setSaving(false);
+      }
+    }
+  };
+
+  const avatarInitial = (() => {
+    const nameSource = `${personal.firstName} ${personal.lastName}`.trim() || user?.fullName || 'Crew User';
+    return nameSource.trim().charAt(0).toUpperCase();
+  })();
+
+  const displayName = (() => {
+    const combined = `${personal.firstName} ${personal.lastName}`.trim();
+    return combined || user?.fullName || 'Crew User';
+  })();
+
+  const crewIdDisplay = personal.crewId || user?.crewId || 'CD12345';
 
   return (
     <div className="crew-dashboard">
@@ -114,10 +307,10 @@ export default function CrewProfile() {
           <div className="dash-header">
             <h2>My Profile</h2>
             <div className="user-info">
-              <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || 'Crew')}&background=3a86ff&color=fff`} alt="User" />
+              <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(displayName || 'Crew')}&background=3a86ff&color=fff`} alt="User" />
               <div>
-                <div>{user?.fullName || 'Crew User'}</div>
-                <small>Crew ID: {user?.crewId || 'CD12345'}</small>
+                <div>{displayName}</div>
+                <small>Crew ID: {crewIdDisplay}</small>
               </div>
               <div className="status-badge status-active">Active</div>
             </div>
@@ -130,9 +323,9 @@ export default function CrewProfile() {
                 <span>{avatarInitial}</span>
               </div>
               <div className="profile-info" style={{ flex: 1 }}>
-                <h3 style={{ fontSize: 24, marginBottom: 5 }}>{user?.fullName || 'John Doe'}</h3>
-                <p style={{ color: '#777', marginBottom: 10 }}>Crew Member • Deck Department</p>
-                <p style={{ color: '#777' }}>MV Ocean Explorer • Since 2022</p>
+                <h3 style={{ fontSize: 24, marginBottom: 5 }}>{displayName}</h3>
+                <p style={{ color: '#777', marginBottom: 10 }}>Crew Member • {profile?.personal?.department || 'Deck Department'}</p>
+                <p style={{ color: '#777' }}>{personal.vessel || 'MV Ocean Explorer'} • Active</p>
               </div>
               <div className="profile-stats" style={{ display: 'flex', gap: 20 }}>
                 {statBlocks.map((s, i) => (
@@ -171,34 +364,34 @@ export default function CrewProfile() {
                   <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 20, marginBottom: 20 }}>
                     <div className="form-group">
                       <label>First Name</label>
-                      <input className="form-control" value={personal.firstName} onChange={(e) => setPersonal((p) => ({ ...p, firstName: e.target.value }))} required />
+                      <input className="form-control" value={personal.firstName} onChange={(e) => setPersonal((p) => ({ ...p, firstName: e.target.value }))} required disabled={saving} />
                     </div>
                     <div className="form-group">
                       <label>Last Name</label>
-                      <input className="form-control" value={personal.lastName} onChange={(e) => setPersonal((p) => ({ ...p, lastName: e.target.value }))} required />
+                      <input className="form-control" value={personal.lastName} onChange={(e) => setPersonal((p) => ({ ...p, lastName: e.target.value }))} required disabled={saving} />
                     </div>
                     <div className="form-group">
                       <label>Email Address</label>
-                      <input type="email" className="form-control" value={personal.email} onChange={(e) => setPersonal((p) => ({ ...p, email: e.target.value }))} required />
+                      <input type="email" className="form-control" value={personal.email} onChange={(e) => setPersonal((p) => ({ ...p, email: e.target.value }))} required disabled={saving} />
                     </div>
                     <div className="form-group">
                       <label>Phone Number</label>
-                      <input className="form-control" value={personal.phone} onChange={(e) => setPersonal((p) => ({ ...p, phone: e.target.value }))} />
+                      <input className="form-control" value={personal.phone} onChange={(e) => setPersonal((p) => ({ ...p, phone: e.target.value }))} disabled={saving} />
                     </div>
                     <div className="form-group">
                       <label>Date of Birth</label>
-                      <input type="date" className="form-control" value={personal.birthDate} onChange={(e) => setPersonal((p) => ({ ...p, birthDate: e.target.value }))} />
+                      <input type="date" className="form-control" value={personal.birthDate} onChange={(e) => setPersonal((p) => ({ ...p, birthDate: e.target.value }))} disabled={saving} />
                     </div>
                     <div className="form-group">
                       <label>Nationality</label>
-                      <input className="form-control" value={personal.nationality} onChange={(e) => setPersonal((p) => ({ ...p, nationality: e.target.value }))} />
+                      <input className="form-control" value={personal.nationality} onChange={(e) => setPersonal((p) => ({ ...p, nationality: e.target.value }))} disabled={saving} />
                     </div>
                   </div>
                   <div className="form-group">
                     <label>Residential Address</label>
-                    <textarea className="form-control" rows={3} value={personal.address} onChange={(e) => setPersonal((p) => ({ ...p, address: e.target.value }))} />
+                    <textarea className="form-control" rows={3} value={personal.address} onChange={(e) => setPersonal((p) => ({ ...p, address: e.target.value }))} disabled={saving} />
                   </div>
-                  <button className="btn btn-primary" type="submit">Update Personal Information</button>
+                  <button className="btn btn-primary" type="submit" disabled={saving}>Update Personal Information</button>
                 </form>
               </div>
             )}
@@ -212,49 +405,44 @@ export default function CrewProfile() {
                   <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 20, marginBottom: 20 }}>
                     <div className="form-group">
                       <label>Blood Type</label>
-                      <input className="form-control" value={medical.bloodType} disabled />
-                      <small style={{ color: '#777' }}>Contact Health Officer to update</small>
+                      <input className="form-control" value={medical.bloodType} onChange={(e) => setMedical((m) => ({ ...m, bloodType: e.target.value }))} disabled={saving} />
+                      <small style={{ color: '#777' }}>Contact Health Officer to verify changes</small>
                     </div>
                     <div className="form-group">
                       <label>Height (cm)</label>
-                      <input type="number" className="form-control" value={medical.height} onChange={(e) => setMedical((m) => ({ ...m, height: e.target.value }))} />
+                      <input type="number" className="form-control" value={medical.height} onChange={(e) => setMedical((m) => ({ ...m, height: e.target.value }))} disabled={saving} />
                     </div>
                     <div className="form-group">
                       <label>Weight (kg)</label>
-                      <input type="number" className="form-control" value={medical.weight} onChange={(e) => setMedical((m) => ({ ...m, weight: e.target.value }))} />
+                      <input type="number" className="form-control" value={medical.weight} onChange={(e) => setMedical((m) => ({ ...m, weight: e.target.value }))} disabled={saving} />
                     </div>
                     <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                       <label>Known Medical Conditions</label>
-                      <textarea className="form-control" rows={3} value={medical.conditions} onChange={(e) => setMedical((m) => ({ ...m, conditions: e.target.value }))}></textarea>
+                      <textarea className="form-control" rows={3} value={medical.conditions} onChange={(e) => setMedical((m) => ({ ...m, conditions: e.target.value }))} disabled={saving}></textarea>
                     </div>
                   </div>
 
                   <div className="form-group">
                     <label>Allergies</label>
                     <div className="checkbox-group" style={{ display: 'flex', flexWrap: 'wrap', gap: 15, marginTop: 10 }}>
-                      {[
-                        { key: 'none', label: 'None' },
-                        { key: 'penicillin', label: 'Penicillin' },
-                        { key: 'shellfish', label: 'Shellfish' },
-                        { key: 'other', label: 'Other' },
-                      ].map((a) => (
+                      {ALLERGY_OPTIONS.map((a) => (
                         <label key={a.key} className="checkbox-item" style={{ display: 'flex', alignItems: 'center' }}>
-                          <input type="checkbox" checked={medical.allergies.has(a.key)} onChange={() => toggleAllergy(a.key)} style={{ marginRight: 8 }} />
+                          <input type="checkbox" checked={medical.allergies.has(a.key)} onChange={() => toggleAllergy(a.key)} style={{ marginRight: 8 }} disabled={saving} />
                           {a.label}
                         </label>
                       ))}
                     </div>
                     {medical.allergies.has('other') && (
-                      <textarea className="form-control" rows={2} placeholder="Specify other allergies" style={{ marginTop: 10 }} value={medical.allergyDetails} onChange={(e) => setMedical((m) => ({ ...m, allergyDetails: e.target.value }))}></textarea>
+                      <textarea className="form-control" rows={2} placeholder="Specify other allergies" style={{ marginTop: 10 }} value={medical.allergyDetails} onChange={(e) => setMedical((m) => ({ ...m, allergyDetails: e.target.value }))} disabled={saving}></textarea>
                     )}
                   </div>
 
                   <div className="form-group">
                     <label>Current Medications</label>
-                    <textarea className="form-control" rows={3} placeholder="List any current medications" value={medical.medications} onChange={(e) => setMedical((m) => ({ ...m, medications: e.target.value }))}></textarea>
+                    <textarea className="form-control" rows={3} placeholder="List any current medications" value={medical.medications} onChange={(e) => setMedical((m) => ({ ...m, medications: e.target.value }))} disabled={saving}></textarea>
                   </div>
 
-                  <button className="btn btn-primary" type="submit">Update Medical Information</button>
+                  <button className="btn btn-primary" type="submit" disabled={saving}>Update Medical Information</button>
                 </form>
               </div>
             )}
@@ -273,12 +461,12 @@ export default function CrewProfile() {
                       </div>
                       <div className="contact-actions" style={{ display: 'flex', gap: 10 }}>
                         <button className="btn btn-outline btn-sm" onClick={() => alert('Editing contact ' + c.id)}>Edit</button>
-                        <button className="btn btn-primary btn-sm" onClick={() => deleteContact(c.id)}>Delete</button>
+                        <button className="btn btn-primary btn-sm" onClick={() => deleteContact(c.id)} disabled={saving}>Delete</button>
                       </div>
                     </div>
                   ))}
                 </div>
-                <button className="btn btn-primary" style={{ marginTop: 20 }} onClick={() => setAddContactOpen(true)}>
+                <button className="btn btn-primary" style={{ marginTop: 20 }} onClick={() => setAddContactOpen(true)} disabled={saving}>
                   <i className="fas fa-plus"></i> Add Emergency Contact
                 </button>
               </div>
@@ -345,6 +533,23 @@ export default function CrewProfile() {
         </main>
       </div>
 
+      {loading && (
+        <div className="modal" style={{ display: 'flex' }}>
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3 className="modal-title">Loading Profile</h3>
+            </div>
+            <p>Fetching your profile details...</p>
+          </div>
+        </div>
+      )}
+
+      {!loading && error && (
+        <div style={{ background: 'rgba(230, 57, 70, 0.12)', color: '#e63946', padding: '12px 16px', borderRadius: 8, margin: 20 }}>
+          {error}
+        </div>
+      )}
+
       {/* Add Contact Modal */}
       {addContactOpen && (
         <div className="modal" onClick={(e) => e.target.classList.contains('modal') && setAddContactOpen(false)}>
@@ -370,7 +575,7 @@ export default function CrewProfile() {
                 <label>Email Address</label>
                 <input type="email" className="form-control" value={newContact.email} onChange={(e) => setNewContact((c) => ({ ...c, email: e.target.value }))} />
               </div>
-              <button className="btn btn-primary" type="submit" style={{ width: '100%', marginTop: 20 }}>Add Contact</button>
+              <button className="btn btn-primary" type="submit" style={{ width: '100%', marginTop: 20 }} disabled={saving}>Add Contact</button>
             </form>
           </div>
         </div>
