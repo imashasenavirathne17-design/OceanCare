@@ -423,11 +423,21 @@ export default function HealthReminders() {
                           <td className="nowrap">{reminder.displayTime}</td>
                           <td><span className={`status-badge ${reminder.statusClass}`}>{reminder.statusLabel}</span></td>
                           <td className="action-buttons">
-                            <button className="btn btn-outline btn-sm" onClick={() => handleMarkCompleted(reminder)}>Mark Done</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => handleSnooze(reminder)}>Snooze</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => handleReschedule(reminder)}>Reschedule</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => handleEdit(reminder)}>Edit</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => handleDelete(reminder)}>Delete</button>
+                            <button className="btn btn-action btn-sm" onClick={() => handleMarkCompleted(reminder)}>
+                              <i className="fas fa-check"></i> Mark Done
+                            </button>
+                            <button className="btn btn-action btn-sm" onClick={() => handleSnooze(reminder)}>
+                              <i className="fas fa-clock"></i> Snooze
+                            </button>
+                            <button className="btn btn-action btn-sm" onClick={() => handleReschedule(reminder)}>
+                              <i className="fas fa-calendar-alt"></i> Reschedule
+                            </button>
+                            <button className="btn btn-action btn-sm" onClick={() => handleEdit(reminder)}>
+                              <i className="fas fa-pen"></i> Edit
+                            </button>
+                            <button className="btn btn-action btn-sm delete" onClick={() => handleDelete(reminder)}>
+                              <i className="fas fa-trash"></i> Delete
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -511,10 +521,18 @@ export default function HealthReminders() {
                         <div className={`card-due ${reminder.statusClass}`}>{reminder.statusLabel}</div>
                       </div>
                       <div className="card-actions">
-                        <button className="btn btn-outline btn-sm" onClick={() => handleReschedule(reminder)}>Reschedule</button>
-                        <button className="btn btn-outline btn-sm" onClick={() => handleMarkCompleted(reminder)}>Mark Complete</button>
-                        <button className="btn btn-outline btn-sm" onClick={() => handleEdit(reminder)}>Edit</button>
-                        <button className="btn btn-outline btn-sm" onClick={() => handleDelete(reminder)}>Delete</button>
+                        <button className="btn btn-action btn-sm" onClick={() => handleReschedule(reminder)}>
+                          <i className="fas fa-calendar-alt"></i> Reschedule
+                        </button>
+                        <button className="btn btn-action btn-sm" onClick={() => handleMarkCompleted(reminder)}>
+                          <i className="fas fa-check"></i> Mark Complete
+                        </button>
+                        <button className="btn btn-action btn-sm" onClick={() => handleEdit(reminder)}>
+                          <i className="fas fa-pen"></i> Edit
+                        </button>
+                        <button className="btn btn-action btn-sm delete" onClick={() => handleDelete(reminder)}>
+                          <i className="fas fa-trash"></i> Delete
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -558,10 +576,18 @@ export default function HealthReminders() {
                             <td><span className={`status-badge ${reminder.statusClass}`}>{reminder.statusLabel}</span></td>
                             <td className="nowrap">{reminder.followup?.priority || '—'}</td>
                             <td className="action-buttons">
-                              <button className="btn btn-outline btn-sm" onClick={() => handleReschedule(reminder)}>Reschedule</button>
-                              <button className="btn btn-outline btn-sm" onClick={() => handleMarkCompleted(reminder)}>Complete</button>
-                              <button className="btn btn-outline btn-sm" onClick={() => handleEdit(reminder)}>Edit</button>
-                              <button className="btn btn-outline btn-sm" onClick={() => handleDelete(reminder)}>Delete</button>
+                              <button className="btn btn-action btn-sm" onClick={() => handleReschedule(reminder)}>
+                                <i className="fas fa-calendar-alt"></i> Reschedule
+                              </button>
+                              <button className="btn btn-action btn-sm" onClick={() => handleMarkCompleted(reminder)}>
+                                <i className="fas fa-check"></i> Complete
+                              </button>
+                              <button className="btn btn-action btn-sm" onClick={() => handleEdit(reminder)}>
+                                <i className="fas fa-pen"></i> Edit
+                              </button>
+                              <button className="btn btn-action btn-sm delete" onClick={() => handleDelete(reminder)}>
+                                <i className="fas fa-trash"></i> Delete
+                              </button>
                             </td>
                           </tr>
                         ))}
@@ -648,8 +674,12 @@ export default function HealthReminders() {
                           <td>Weekly</td>
                           <td><span className="status-badge status-active">Active</span></td>
                           <td className="action-buttons">
-                            <button className="btn btn-outline btn-sm">Edit</button>
-                            <button className="btn btn-outline btn-sm">Disable</button>
+                            <button className="btn btn-action btn-sm">
+                              <i className="fas fa-pen"></i> Edit
+                            </button>
+                            <button className="btn btn-action btn-sm delete">
+                              <i className="fas fa-ban"></i> Disable
+                            </button>
                           </td>
                         </tr>
                         <tr>
@@ -658,8 +688,12 @@ export default function HealthReminders() {
                           <td>Weekly</td>
                           <td><span className="status-badge status-active">Active</span></td>
                           <td className="action-buttons">
-                            <button className="btn btn-outline btn-sm">Edit</button>
-                            <button className="btn btn-outline btn-sm">Disable</button>
+                            <button className="btn btn-action btn-sm">
+                              <i className="fas fa-pen"></i> Edit
+                            </button>
+                            <button className="btn btn-action btn-sm delete">
+                              <i className="fas fa-ban"></i> Disable
+                            </button>
                           </td>
                         </tr>
                         <tr>
@@ -668,8 +702,12 @@ export default function HealthReminders() {
                           <td>Monthly</td>
                           <td><span className="status-badge status-active">Active</span></td>
                           <td className="action-buttons">
-                            <button className="btn btn-outline btn-sm">Edit</button>
-                            <button className="btn btn-outline btn-sm">Disable</button>
+                            <button className="btn btn-action btn-sm">
+                              <i className="fas fa-pen"></i> Edit
+                            </button>
+                            <button className="btn btn-action btn-sm delete">
+                              <i className="fas fa-ban"></i> Disable
+                            </button>
                           </td>
                         </tr>
                       </tbody>

@@ -469,10 +469,10 @@ export default function HealthReports() {
             <div className="page-header">
               <div className="page-title">Reports Dashboard</div>
               <div className="page-actions">
-                <button className="btn btn-outline" type="button">
+                <button className="btn btn-action btn-sm" type="button">
                   <i className="fas fa-download"></i> Export CSV
                 </button>
-                <button className="btn btn-primary" type="button" onClick={openCreateModal}>
+                <button className="btn btn-action btn-sm" type="button" onClick={openCreateModal}>
                   <i className="fas fa-plus"></i> New Report
                 </button>
               </div>
@@ -643,41 +643,57 @@ export default function HealthReports() {
                               <div className="report-actions">
                                 <button
                                   type="button"
-                                  className="btn btn-outline btn-sm"
+                                  className="btn btn-action btn-sm"
                                   disabled={downloadingId === `${id}-pdf`}
                                   onClick={() => handleDownloadReport(report, 'pdf')}
                                 >
-                                  {downloadingId === `${id}-pdf` ? 'Downloading...' : 'PDF'}
+                                  {downloadingId === `${id}-pdf` ? (
+                                    <>
+                                      <i className="fas fa-spinner fa-spin"></i> Downloading...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <i className="fas fa-file-pdf"></i> PDF
+                                    </>
+                                  )}
                                 </button>
                                 <button
                                   type="button"
-                                  className="btn btn-outline btn-sm"
+                                  className="btn btn-action btn-sm"
                                   disabled={downloadingId === `${id}-csv`}
                                   onClick={() => handleDownloadReport(report, 'csv')}
                                 >
-                                  {downloadingId === `${id}-csv` ? 'Downloading...' : 'CSV'}
+                                  {downloadingId === `${id}-csv` ? (
+                                    <>
+                                      <i className="fas fa-spinner fa-spin"></i> Downloading...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <i className="fas fa-file-csv"></i> CSV
+                                    </>
+                                  )}
                                 </button>
                                 <button
                                   type="button"
-                                  className="btn btn-outline btn-sm"
+                                  className="btn btn-action btn-sm"
                                   onClick={() => handleSelectReport(report)}
                                 >
-                                  View
+                                  <i className="fas fa-book"></i> View
                                 </button>
                                 <button
                                   type="button"
-                                  className="btn btn-outline btn-sm"
+                                  className="btn btn-action btn-sm"
                                   onClick={() => openEditModal(report)}
                                 >
-                                  Edit
+                                  <i className="fas fa-pen"></i> Edit
                                 </button>
                                 <button
                                   type="button"
-                                  className="btn btn-outline btn-sm"
+                                  className="btn btn-action btn-sm delete"
                                   disabled={isDeleting}
                                   onClick={() => handleDeleteReport(report)}
                                 >
-                                  {isDeleting ? 'Deleting...' : 'Delete'}
+                                  <i className="fas fa-trash"></i> {isDeleting ? 'Deleting...' : 'Delete'}
                                 </button>
                               </div>
                             </td>
@@ -1004,8 +1020,8 @@ export default function HealthReports() {
               </div>
 
               <div className="report-modal-actions">
-                <button type="button" className="btn btn-outline" onClick={closeModal}>
-                  Cancel
+                <button type="button" className="btn btn-action btn-sm" onClick={closeModal}>
+                  <i className="fas fa-times"></i> Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={saving}>
                   {saving ? 'Saving...' : modalMode === 'edit' ? 'Update Report' : 'Create Report'}

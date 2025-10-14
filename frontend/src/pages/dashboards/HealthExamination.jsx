@@ -380,7 +380,9 @@ export default function HealthExamination() {
                       </div>
                       <div style={{ display: 'flex', gap: 10 }}>
                         <button className="btn btn-outline" onClick={() => setViewOpen(false)}>Close</button>
-                        <button className="btn btn-primary" onClick={() => { setViewOpen(false); editExam(viewExamId); }}>Edit</button>
+                        <button className="btn btn-action btn-sm" onClick={() => { setViewOpen(false); editExam(viewExamId); }}>
+                          <i className="fas fa-pen"></i> Edit
+                        </button>
                       </div>
                     </div>
                   );
@@ -391,10 +393,18 @@ export default function HealthExamination() {
                           </td>
                           <td>{u.priority}</td>
                           <td className="action-buttons">
-                            <button className="btn btn-outline btn-sm" onClick={() => startExam(u.id)}>Start</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => rescheduleExam(u.id)}>Reschedule</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => editExam(u.id)}>Edit</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => removeExam(u.id)}>Delete</button>
+                            <button className="btn btn-action btn-sm" onClick={() => startExam(u.id)}>
+                              <i className="fas fa-play"></i> Start
+                            </button>
+                            <button className="btn btn-action btn-sm" onClick={() => rescheduleExam(u.id)}>
+                              <i className="fas fa-calendar-alt"></i> Reschedule
+                            </button>
+                            <button className="btn btn-action btn-sm" onClick={() => editExam(u.id)}>
+                              <i className="fas fa-pen"></i> Edit
+                            </button>
+                            <button className="btn btn-action btn-sm delete" onClick={() => removeExam(u.id)}>
+                              <i className="fas fa-trash"></i> Delete
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -444,9 +454,15 @@ export default function HealthExamination() {
                           <td>{c.findings}</td>
                           <td className="nowrap">{c.officer}</td>
                           <td className="action-buttons">
-                            <button className="btn btn-outline btn-sm" onClick={() => viewExam(c.id)}>View</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => editExam(c.id)}>Edit</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => removeExam(c.id)}>Delete</button>
+                            <button className="btn btn-action btn-sm" onClick={() => viewExam(c.id)}>
+                              <i className="fas fa-book"></i> View
+                            </button>
+                            <button className="btn btn-action btn-sm" onClick={() => editExam(c.id)}>
+                              <i className="fas fa-pen"></i> Edit
+                            </button>
+                            <button className="btn btn-action btn-sm delete" onClick={() => removeExam(c.id)}>
+                              <i className="fas fa-trash"></i> Delete
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -482,7 +498,9 @@ export default function HealthExamination() {
                         <td>2023-09-15</td>
                         <td className="action-buttons">
                           <button className="btn btn-outline btn-sm">Use</button>
-                          <button className="btn btn-outline btn-sm">Edit</button>
+                          <button className="btn btn-action btn-sm">
+                            <i className="fas fa-pen"></i> Edit
+                          </button>
                         </td>
                       </tr>
                       <tr>
@@ -491,7 +509,9 @@ export default function HealthExamination() {
                         <td>2023-08-22</td>
                         <td className="action-buttons">
                           <button className="btn btn-outline btn-sm">Use</button>
-                          <button className="btn btn-outline btn-sm">Edit</button>
+                          <button className="btn btn-action btn-sm">
+                            <i className="fas fa-pen"></i> Edit
+                          </button>
                         </td>
                       </tr>
                       <tr>

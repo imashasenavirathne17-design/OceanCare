@@ -350,32 +350,55 @@ export default function HealthInventoryAlerts() {
                           </td>
                           <td className="action-buttons">
                             <button
-                              className="btn btn-outline btn-sm"
-                              disabled={actionsDisabled}
+                              className="btn btn-action btn-sm"
                               onClick={() => openEditModal(alert)}
                             >
-                              Edit
+                              <i className="fas fa-pen"></i> Edit
                             </button>
                             <button
-                              className="btn btn-outline btn-sm"
+                              className="btn btn-action btn-sm"
                               disabled={actionsDisabled || !canAck || isProcessing(alert._id, 'acknowledge')}
                               onClick={() => handleAcknowledge(alert._id)}
                             >
-                              {isProcessing(alert._id, 'acknowledge') ? 'Saving...' : 'Acknowledge'}
+                              {isProcessing(alert._id, 'acknowledge') ? (
+                                <>
+                                  <i className="fas fa-spinner fa-spin"></i> Saving...
+                                </>
+                              ) : (
+                                <>
+                                  <i className="fas fa-check"></i> Acknowledge
+                                </>
+                              )}
                             </button>
                             <button
-                              className="btn btn-outline btn-sm"
+                              className="btn btn-action btn-sm"
                               disabled={actionsDisabled || !canResolve || isProcessing(alert._id, 'resolve')}
                               onClick={() => handleResolve(alert._id)}
                             >
-                              {isProcessing(alert._id, 'resolve') ? 'Saving...' : 'Resolve'}
+                              {isProcessing(alert._id, 'resolve') ? (
+                                <>
+                                  <i className="fas fa-spinner fa-spin"></i> Resolving...
+                                </>
+                              ) : (
+                                <>
+                                  <i className="fas fa-check-double"></i> Resolve
+                                </>
+                              )}
                             </button>
                             <button
-                              className="btn btn-outline btn-sm"
+                              className="btn btn-action btn-sm delete"
                               disabled={actionsDisabled || isProcessing(alert._id, 'delete')}
                               onClick={() => handleDelete(alert._id)}
                             >
-                              {isProcessing(alert._id, 'delete') ? 'Deleting...' : 'Delete'}
+                              {isProcessing(alert._id, 'delete') ? (
+                                <>
+                                  <i className="fas fa-spinner fa-spin"></i> Deleting...
+                                </>
+                              ) : (
+                                <>
+                                  <i className="fas fa-trash"></i> Delete
+                                </>
+                              )}
                             </button>
                           </td>
                         </tr>

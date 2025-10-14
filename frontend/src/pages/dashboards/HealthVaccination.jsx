@@ -417,10 +417,10 @@ export default function HealthVaccination() {
             <div className="page-header">
               <div className="page-title">Vaccination Overview</div>
               <div className="page-actions">
-                <button className="btn btn-outline">
+                <button className="btn btn-action btn-sm">
                   <i className="fas fa-file-import"></i> Import Records
                 </button>
-                <button className="btn btn-vaccination" onClick={openCreateModal}>
+                <button className="btn btn-action btn-sm" onClick={openCreateModal}>
                   <i className="fas fa-plus"></i> New Vaccination
                 </button>
               </div>
@@ -538,17 +538,17 @@ export default function HealthVaccination() {
                               <td>{rec.notes || '—'}</td>
                               <td className="action-buttons">
                                 <button
-                                  className="btn btn-outline btn-sm"
+                                  className="btn btn-action btn-sm"
                                   onClick={() => handleEditRecord(rec)}
                                 >
-                                  Edit
+                                  <i className="fas fa-pen"></i> Edit
                                 </button>
                                 <button
-                                  className="btn btn-outline btn-sm"
+                                  className="btn btn-action btn-sm delete"
                                   onClick={() => handleDeleteRecord(rec)}
                                   disabled={deletingId === key}
                                 >
-                                  {deletingId === key ? 'Deleting…' : 'Delete'}
+                                  <i className="fas fa-trash"></i> {deletingId === key ? 'Deleting…' : 'Delete'}
                                 </button>
                               </td>
                             </tr>
@@ -893,9 +893,9 @@ export default function HealthVaccination() {
                   </div>
               </div>
 
-              <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-                <button type="button" className="btn btn-outline" onClick={closeVaccinationModal} style={{ flex: 1 }}>
-                  Cancel
+              <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
+                <button type="button" className="btn btn-action btn-sm" onClick={closeVaccinationModal} style={{ flex: 1 }}>
+                  <i className="fas fa-times"></i> Cancel
                 </button>
                 <button type="submit" className="btn btn-vaccination" style={{ flex: 1 }} disabled={saving}>
                   {saving ? 'Saving...' : modalMode === 'edit' ? 'Update Vaccination Record' : 'Save Vaccination Record'}
