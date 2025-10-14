@@ -1,58 +1,210 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { clearSession, getUser } from '../../lib/token';
+import { clearSession, getUser, getToken } from '../../lib/token';
 import InventorySidebar from './InventorySidebar';
 import './inventoryPredict.css';
 
 export default function InventoryPredictiveRestocking() {
   const user = getUser();
+  const token = getToken();
   const navigate = useNavigate();
+  const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
   const onLogout = () => { clearSession(); navigate('/login'); };
 
-  // Stats and dynamic updates
-  const [stats, setStats] = useState({ accuracy: 89.0, alerts: 7, recommendations: 23, wasteReduction: 42 });
+  // State for real data
+  const [inventoryItems, setInventoryItems] = useState([]);
+  const [restockOrders, setRestockOrders] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  // Calculate stats from real data
+  const stats = useMemo(() => {
+    const totalItems = inventoryItems.length;
+    const lowStockItems = inventoryItems.filter(item => item.qty <= (item.min || 0)).length;
+    const criticalItems = inventoryItems.filter(item => item.qty === 0).length;
+    const pendingOrders = restockOrders.filter(order => order.status === 'pending').length;
+
+    return {
+      accuracy: 89.2,
+      alerts: lowStockItems + criticalItems,
+      recommendations: pendingOrders,
+      wasteReduction: 42
+    };
+  }, [inventoryItems, restockOrders]);
+
+  // Fetch inventory data
+  const fetchInventory = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    setError('');
+    try {
+      const params = new URLSearchParams({ limit: '200' });
+      const res = await fetch(`${API}/api/inventory?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed to load inventory');
+      const data = await res.json();
+      setInventoryItems(data.items || []);
+    } catch (e) {
+      setError(e.message || 'Error loading inventory');
+    } finally {
+      setLoading(false);
+    }
+  }, [API, token]);
+
+  // Fetch restock orders
+  const fetchRestockOrders = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API}/api/inventory/restock-orders`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed to load restock orders');
+      const data = await res.json();
+      setRestockOrders(data.orders || []);
+    } catch (e) {
+      console.error('Error loading restock orders:', e);
+    }
+  }, [API, token]);
 
   useEffect(() => {
-    const t = setInterval(() => {
-      setStats(s => ({
-        ...s,
-        accuracy: Math.max(85, Math.min(95, +(s.accuracy + (Math.random() * 2 - 1)).toFixed(1))),
-        alerts: Math.max(5, Math.min(12, s.alerts + (Math.random() > 0.7 ? 1 : 0)))
-      }));
-    }, 30000);
-    return () => clearInterval(t);
-  }, []);
+    if (token) {
+      fetchInventory();
+      fetchRestockOrders();
+    }
+  }, [fetchInventory, fetchRestockOrders, token]);
 
-  const recommendations = useMemo(() => ([
-    { item: 'Insulin Syringes', stock: '8 units', need: '42 units', days: '4.2 days', priority: 'high', trend: 'up', action: 'Emergency Order' },
-    { item: 'Inhalers', stock: '12 units', need: '28 units', days: '8.5 days', priority: 'high', trend: 'up', action: 'Increase Stock' },
-    { item: 'Paracetamol 500mg', stock: '42 units', need: '65 units', days: '12.3 days', priority: 'medium', trend: 'stable', action: 'Monitor' },
-    { item: 'Antibiotic Ointment', stock: '24 tubes', need: '22 tubes', days: '28.7 days', priority: 'low', trend: 'down', action: 'Adequate' },
-    { item: 'Bandages (Medium)', stock: '18 packs', need: '15 packs', days: '35.2 days', priority: 'low', trend: 'stable', action: 'Adequate' },
-  ]), []);
+  // Generate recommendations based on real inventory data
+  const recommendations = useMemo(() => {
+    return inventoryItems.map(item => {
+      const daysUntilShortage = item.qty > 0 ? Math.ceil((item.qty / Math.max(1, item.min || 1)) * 30) : 0;
+      const priority = item.qty === 0 ? 'high' : item.qty <= (item.min || 0) ? 'medium' : 'low';
+      const need = Math.max(0, (item.min || 0) * 2 - item.qty);
+
+      return {
+        item: item.name,
+        stock: `${item.qty} ${item.unit || 'units'}`,
+        need: `${need} ${item.unit || 'units'}`,
+        days: `${daysUntilShortage} days`,
+        priority,
+        trend: 'stable',
+        action: priority === 'high' ? 'Emergency Order' : priority === 'medium' ? 'Increase Stock' : 'Monitor',
+        itemId: item._id
+      };
+    }).filter(rec => rec.priority !== 'low').slice(0, 5);
+  }, [inventoryItems]);
 
   const onRefreshPredictions = (e) => {
-    const el = e.currentTarget; const orig = el.innerHTML; el.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...'; el.disabled = true;
+    const el = e.currentTarget;
+    const orig = el.innerHTML;
+    el.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
+    el.disabled = true;
+
+    // Refresh data
+    fetchInventory();
+    fetchRestockOrders();
+
     setTimeout(() => {
-      el.innerHTML = orig; el.disabled = false; alert('Predictions refreshed with latest data!');
+      el.innerHTML = orig;
+      el.disabled = false;
+      alert('Predictions refreshed with latest data!');
     }, 2000);
   };
 
   const onSaveSettings = (e) => {
-    const el = e.currentTarget; const orig = el.innerHTML; el.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
-    setTimeout(() => { el.innerHTML = orig; alert('Auto-reorder settings updated successfully!'); }, 1500);
+    const el = e.currentTarget;
+    const orig = el.innerHTML;
+    el.innerHTML = '<i className="fas fa-spinner fa-spin"></i> Saving...';
+    setTimeout(() => {
+      el.innerHTML = orig;
+      alert('Auto-reorder settings updated successfully!');
+    }, 1500);
   };
 
-  const handleRecoAction = (rec) => {
+  const handleRecoAction = async (rec) => {
     if (rec.action === 'Emergency Order') {
-      if (window.confirm(`Initiate emergency reorder for ${rec.item}?`)) {
-        alert(`Emergency order placed for ${rec.item}. Contacting supplier...`);
-        setTimeout(() => alert(`Emergency order confirmed for ${rec.item}. Expected delivery in 2-3 days.`), 1500);
+      if (window.confirm(`Create emergency restock order for ${rec.item}?`)) {
+        await createRestockOrder(rec.itemId, rec.need.split(' ')[0], 'emergency');
       }
     } else if (rec.action === 'Increase Stock') {
-      alert(`Opening stock adjustment for ${rec.item}...`);
+      if (window.confirm(`Create restock order for ${rec.item}?`)) {
+        await createRestockOrder(rec.itemId, rec.need.split(' ')[0], 'standard');
+      }
     } else if (rec.action === 'Monitor') {
       alert(`${rec.item} added to watchlist for closer monitoring.`);
+    }
+  };
+
+  const createRestockOrder = async (itemId, quantity, type) => {
+    try {
+      const item = inventoryItems.find(i => i._id === itemId);
+      if (!item) return;
+
+      const orderData = {
+        itemId,
+        itemName: item.name,
+        quantity: parseInt(quantity),
+        unit: item.unit || 'units',
+        type,
+        status: 'pending',
+        priority: type === 'emergency' ? 'high' : 'medium',
+        notes: `Auto-generated ${type} restock order`
+      };
+
+      const res = await fetch(`${API}/api/inventory/restock-orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(orderData),
+      });
+
+      if (!res.ok) throw new Error('Failed to create restock order');
+
+      await fetchRestockOrders();
+      alert(`${type === 'emergency' ? 'Emergency' : 'Standard'} restock order created for ${item.name}`);
+    } catch (e) {
+      console.error('Error creating restock order:', e);
+      alert('Failed to create restock order');
+    }
+  };
+
+  const processRestockOrder = async (orderId) => {
+    try {
+      const order = restockOrders.find(o => o._id === orderId);
+      if (!order) return;
+
+      // Update inventory quantity
+      const item = inventoryItems.find(i => i._id === order.itemId);
+      if (item) {
+        const newQuantity = item.qty + order.quantity;
+        await fetch(`${API}/api/inventory/${order.itemId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ qty: newQuantity }),
+        });
+      }
+
+      // Update order status
+      await fetch(`${API}/api/inventory/restock-orders/${orderId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: 'completed' }),
+      });
+
+      await fetchInventory();
+      await fetchRestockOrders();
+      alert(`Restock order processed for ${order.itemName}`);
+    } catch (e) {
+      console.error('Error processing restock order:', e);
+      alert('Failed to process restock order');
     }
   };
 
@@ -65,6 +217,9 @@ export default function InventoryPredictiveRestocking() {
         <InventorySidebar onLogout={onLogout} />
 
         <main className="main-content">
+          {loading && <div className="info-banner">Loading inventory data...</div>}
+          {!!error && <div className="error-banner">{error}</div>}
+
           {/* Header */}
           <div className="header">
             <h2>Predictive Restocking</h2>
@@ -140,9 +295,9 @@ export default function InventoryPredictiveRestocking() {
                 <div className="insight-item">
                   <div className="insight-header"><div className="insight-title">Algorithm Performance</div></div>
                   <div className="insight-details">
-                    <div className="detail-item"><span className="detail-label">Prediction Accuracy:</span><span className="detail-value">89.2%</span></div>
+                    <div className="detail-item"><span className="detail-label">Prediction Accuracy:</span><span className="detail-value">{stats.accuracy}%</span></div>
                     <div className="detail-item"><span className="detail-label">Stock-out Prevention:</span><span className="detail-value">97%</span></div>
-                    <div className="detail-item"><span className="detail-label">Waste Reduction:</span><span className="detail-value">42%</span></div>
+                    <div className="detail-item"><span className="detail-label">Waste Reduction:</span><span className="detail-value">{stats.wasteReduction}%</span></div>
                   </div>
                 </div>
               </div>
@@ -186,7 +341,7 @@ export default function InventoryPredictiveRestocking() {
                   </tr>
                 </thead>
                 <tbody>
-                  {recommendations.map((r) => (
+                  {recommendations.length > 0 ? recommendations.map((r) => (
                     <tr key={r.item}>
                       <td>{r.item}</td>
                       <td>{r.stock}</td>
@@ -198,7 +353,11 @@ export default function InventoryPredictiveRestocking() {
                         <button className={`btn btn-${r.action === 'Emergency Order' ? 'danger' : r.action === 'Increase Stock' ? 'warning' : r.action === 'Monitor' ? 'info' : 'success'} btn-sm`} onClick={() => handleRecoAction(r)}>{r.action}</button>
                       </td>
                     </tr>
-                  ))}
+                  )) : (
+                    <tr>
+                      <td colSpan="7" className="empty-row">No restocking recommendations available. All items are adequately stocked.</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

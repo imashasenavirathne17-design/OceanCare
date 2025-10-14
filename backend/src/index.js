@@ -48,7 +48,8 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/inventory', inventoryRoutes);
+app.use('/api/inventory/waste', inventoryWasteRoutes); // Mount waste routes FIRST
+app.use('/api/inventory', inventoryRoutes); // Mount inventory routes AFTER
 app.use('/api/emergency-alerts', emergencyAlertRoutes);
 app.use('/api/emergency-protocols', emergencyProtocolRoutes);
 app.use('/api/health/exams', examinationRoutes);
@@ -73,7 +74,6 @@ app.use('/api/health', healthRoutes);
 app.use('/api/audit/logs', auditLogRoutes);
 app.use('/api/compliance/frameworks', complianceFrameworkRoutes);
 app.use('/api/compliance/reports', regulatoryReportRoutes);
-app.use('/api/inventory/waste', inventoryWasteRoutes);
 
 const PORT = process.env.PORT || 5000;
 connectDB(process.env.MONGO_URI)

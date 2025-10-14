@@ -60,16 +60,58 @@
 .table-title { font-weight: 600; color: var(--primary); }
 .table-actions { display: flex; gap: 10px; }
 .expiry-table { width: 100%; border-collapse: collapse; }
-.expiry-table th, .expiry-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; }
-.expiry-table th { background-color: #f8f9fa; font-weight: 600; color: #555; }
+.expiry-table th,
+.expiry-table td {
+  padding: 15px 12px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+  vertical-align: middle;
+}
+.expiry-table th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  color: #555;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  white-space: nowrap;
+}
 .expiry-table tr:hover { background-color: #f8f9fa; }
-.expiry-status { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.expiry-status {
+  padding: 6px 12px;
+  border-radius: 15px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  display: inline-block;
+  min-width: 80px;
+}
 .status-expired { background-color: rgba(230,57,70,0.2); color: var(--danger); }
 .status-expiring { background-color: rgba(244,162,97,0.2); color: var(--warning); }
 .status-month { background-color: rgba(58,134,255,0.2); color: var(--info); }
 .status-safe { background-color: rgba(42,157,143,0.2); color: var(--success); }
-.expiry-actions { display: flex; gap: 5px; }
-.btn-sm { padding: 5px 10px; font-size: 13px; }
+.expiry-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 200px;
+}
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.btn-warning { background-color: var(--warning); color: #fff; }
+.btn-primary { background-color: var(--primary); color: #fff; }
+.btn-danger { background-color: var(--danger); color: #fff; }
+.btn-sm:hover { opacity: 0.9; transform: translateY(-1px); }
 
 /* Disposal Log */
 .disposal-log { background: #fff; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); padding: 25px; }
@@ -99,7 +141,11 @@
 .modal-footer { display: flex; justify-content: flex-end; gap: 10px; }
 
 /* Responsive */
-@media (max-width: 992px) { .dashboard-container { flex-direction: column; } .expiry-table { display: block; overflow-x: auto; } }
+@media (max-width: 992px) {
+  .dashboard-container { flex-direction: column; }
+  .expiry-table-container { overflow-x: auto; }
+  .expiry-table { min-width: 800px; }
+}
 @media (max-width: 768px) {
   .header { flex-direction: column; align-items: flex-start; }
   .user-info { margin-top: 15px; }
@@ -109,5 +155,13 @@
   .search-box { max-width: 100%; width: 100%; }
   .log-item { flex-direction: column; align-items: flex-start; }
   .log-actions { margin-top: 10px; width: 100%; justify-content: flex-start; }
+  .expiry-actions { flex-direction: column; align-items: flex-start; gap: 5px; }
+  .btn-sm { width: 100%; justify-content: center; }
 }
-@media (max-width: 480px) { .expiry-stats { grid-template-columns: 1fr; } .expiry-actions, .table-actions { flex-direction: column; } }
+@media (max-width: 480px) {
+  .expiry-stats { grid-template-columns: 1fr; }
+  .table-actions { flex-direction: column; gap: 5px; }
+  .table-actions .btn { width: 100%; }
+  .expiry-table th,
+  .expiry-table td { padding: 10px 8px; font-size: 14px; }
+}

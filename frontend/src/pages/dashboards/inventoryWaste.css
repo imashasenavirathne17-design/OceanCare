@@ -88,19 +88,19 @@
 .inventory-waste .disposal-method { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; background-color: #e3f2fd; color: var(--info); }
 
 /* Modal */
-.inventory-waste .modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background-color: rgba(0,0,0,0.5); z-index: 1000; }
-.inventory-waste .modal-content { background: #fff; border-radius: 10px; width: 90%; max-width: 600px; padding: 30px; box-shadow: 0 5px 25px rgba(0,0,0,0.2); }
-.inventory-waste .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.inventory-waste .modal-title { font-size: 20px; font-weight: 600; color: var(--primary); }
-.inventory-waste .close-modal { background: none; border: none; font-size: 24px; cursor: pointer; color: #777; }
-.inventory-waste .modal-body { margin-bottom: 25px; }
-.inventory-waste .form-group { margin-bottom: 20px; }
-.inventory-waste .form-label { display: block; margin-bottom: 8px; font-weight: 500; }
-.inventory-waste .form-row { display: flex; gap: 15px; }
-.inventory-waste .form-row .form-group { flex: 1; }
-.inventory-waste .checkbox-group { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 10px; }
-.inventory-waste .checkbox-item { display: flex; align-items: center; gap: 8px; }
-.inventory-waste .modal-footer { display: flex; justify-content: flex-end; gap: 10px; }
+.inventory-waste .modal, .inventory-waste-modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background-color: rgba(0,0,0,0.5); z-index: 1000; }
+.inventory-waste .modal-content, .inventory-waste-modal .modal-content { background: #fff; border-radius: 10px; width: 90%; max-width: 600px; padding: 30px; box-shadow: 0 5px 25px rgba(0,0,0,0.2); }
+.inventory-waste .modal-header, .inventory-waste-modal .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.inventory-waste .modal-title, .inventory-waste-modal .modal-title { font-size: 20px; font-weight: 600; color: var(--primary); }
+.inventory-waste .close-modal, .inventory-waste-modal .close-modal { background: none; border: none; font-size: 24px; cursor: pointer; color: #777; }
+.inventory-waste .modal-body, .inventory-waste-modal .modal-body { margin-bottom: 25px; }
+.inventory-waste .form-group, .inventory-waste-modal .form-group { margin-bottom: 20px; }
+.inventory-waste .form-label, .inventory-waste-modal .form-label { display: block; margin-bottom: 8px; font-weight: 500; }
+.inventory-waste .form-row, .inventory-waste-modal .form-row { display: flex; gap: 15px; }
+.inventory-waste .form-row .form-group, .inventory-waste-modal .form-row .form-group { flex: 1; }
+.inventory-waste .checkbox-group, .inventory-waste-modal .checkbox-group { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 10px; }
+.inventory-waste .checkbox-item, .inventory-waste-modal .checkbox-item { display: flex; align-items: center; gap: 8px; }
+.inventory-waste .modal-footer, .inventory-waste-modal .modal-footer { display: flex; justify-content: flex-end; gap: 10px; }
 
 /* Pagination */
 .inventory-waste .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
