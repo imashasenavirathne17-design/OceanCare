@@ -375,12 +375,6 @@ export default function AdminDashboard() {
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span className={`user-status ${statusClass}`}>{(u.status||'active').toLowerCase()}</span>
-                            {!u.crewId && (
-                              <button className="btn btn-sm" title="Auto-generate Crew ID" onClick={() => assignCrewIdInline(u)}>
-                                <i className="fas fa-magic"></i> Auto ID
-                              </button>
-                            )}
-                            <button className="btn btn-sm" onClick={() => openEdit(u)}><i className="fas fa-edit"></i> Edit</button>
                           </div>
                         </td>
                       </tr>
@@ -412,7 +406,7 @@ export default function AdminDashboard() {
             )}
             <div className="table-responsive">
               <table className="audit-table">
-                <thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Resource</th><th>IP Address</th><th>Status</th></tr></thead>
+                <thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Resource</th><th>Status</th></tr></thead>
                 <tbody>
                   {aLoading && (<tr><td colSpan={6}>Loading…</td></tr>)}
                   {!aLoading && aItems.length === 0 && (<tr><td colSpan={6}>No audit logs found</td></tr>)}
@@ -427,7 +421,6 @@ export default function AdminDashboard() {
                         <td>{userName}</td>
                         <td><span className={`audit-action ${actionClass}`}>{(row.action || '').charAt(0).toUpperCase() + (row.action || '').slice(1)}</span></td>
                         <td>{row.resource || '-'}</td>
-                        <td>{row.ipAddress || row.ip || '-'}</td>
                         <td>{ok.includes('success') || ok==='ok' || ok==='200' ? <i className="fas fa-check-circle" style={{ color: 'var(--success)' }}></i> : <i className="fas fa-times-circle" style={{ color: 'var(--danger)' }}></i>}</td>
                       </tr>
                     );
