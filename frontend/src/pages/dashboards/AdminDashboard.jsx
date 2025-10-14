@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { clearSession, getUser } from '../../lib/token';
 import './adminDashboard.css';
 import AdminSidebar from './AdminSidebar';
-import { listUsers } from '../../lib/users';
+import { listUsers, updateUser } from '../../lib/users';
 import { listAuditLogs } from '../../lib/auditLogApi';
 
 export default function AdminDashboard() {
@@ -30,6 +30,12 @@ export default function AdminDashboard() {
   const [total, setTotal] = useState(0);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
+  // Edit modal state
+  const [editing, setEditing] = useState(null); // user object
+  const [editRole, setEditRole] = useState('');
+  const [editStatus, setEditStatus] = useState('active');
+  const [editCrewId, setEditCrewId] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
   // Role-based metrics
   const [adminCount, setAdminCount] = useState(0);
   const [healthCount, setHealthCount] = useState(0);
@@ -56,6 +62,62 @@ export default function AdminDashboard() {
   useEffect(() => { fetchUsers(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [page]);
 
   const onLogout = () => { clearSession(); navigate('/login'); };
+
+  const openEdit = (user) => {
+    setEditing(user);
+    setEditRole(user.role || 'crew');
+    setEditStatus((user.status || 'active').toLowerCase());
+    setEditCrewId(String(user.crewId || ''));
+  };
+  const closeEdit = () => {
+    setEditing(null);
+    setEditRole('');
+    setEditStatus('active');
+    setEditCrewId('');
+    setSavingEdit(false);
+  };
+  const generateCrewId = () => {
+    if (!editing) return;
+    const base = (editing.fullName || 'CREW').replace(/[^A-Z]/gi, '').slice(0, 3).toUpperCase();
+    const rand = Math.random().toString(36).replace(/[^a-z0-9]/gi, '').slice(2, 8).toUpperCase();
+    setEditCrewId(`${base || 'CRW'}-${rand}`);
+  };
+  const generateCrewIdFor = (name = '') => {
+    const base = (name || 'CREW').replace(/[^A-Z]/gi, '').slice(0, 3).toUpperCase();
+    const rand = Math.random().toString(36).replace(/[^a-z0-9]/gi, '').slice(2, 8).toUpperCase();
+    return `${base || 'CRW'}-${rand}`;
+  };
+  const assignCrewIdInline = async (user) => {
+    const confirm = window.confirm(`Generate and assign a Crew ID for ${user.fullName}?`);
+    if (!confirm) return;
+    try {
+      const newId = generateCrewIdFor(user.fullName);
+      await updateUser(user._id, { crewId: newId });
+      await fetchUsers({ page });
+      alert(`Assigned Crew ID: ${newId}`);
+    } catch (e) {
+      alert(e?.response?.data?.message || e.message || 'Failed to assign Crew ID');
+    }
+  };
+  const saveEdit = async () => {
+    if (!editing) return;
+    try {
+      setSavingEdit(true);
+      const payload = { role: editRole, status: editStatus };
+      // Persist crewId if present; otherwise auto-generate if missing on user
+      let crewIdToSave = editCrewId;
+      if (!crewIdToSave && !editing.crewId) {
+        crewIdToSave = generateCrewIdFor(editing.fullName);
+      }
+      if (crewIdToSave) payload.crewId = crewIdToSave;
+      await updateUser(editing._id || editing.id, payload);
+      closeEdit();
+      await fetchUsers({ page });
+    } catch (e) {
+      setSavingEdit(false);
+      alert(e?.response?.data?.message || e.message || 'Failed to update user');
+    }
+  };
 
   // Fetch accurate counts by role
   const fetchRoleCounts = async () => {
@@ -128,6 +190,46 @@ export default function AdminDashboard() {
             <div className="stat-card"><div className="stat-icon"><i className="fas fa-id-badge"></i></div><div className="stat-value">{crewCount}</div><div className="stat-label">Crew Members</div></div>
           </div>
 
+          {/* Overview Cards: Recent Activity */}
+          <div className="overview-cards" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 20, marginTop: 16 }}>
+            {/* Recent Activity */}
+            <div className="card" style={{ background: '#fff', border: '1px solid #eee', borderRadius: 12, padding: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ fontWeight: 700 }}><i className="fas fa-stream" /> Recent Activity</div>
+                <button className="btn btn-sm" onClick={() => navigate('/dashboard/admin/compliance')}><i className="fas fa-external-link-alt" /> View All</button>
+              </div>
+              <div style={{ display: 'grid', gap: 10 }}>
+                {(aItems || []).slice(0, 5).map((row) => {
+                  const action = (row.action || '').toUpperCase();
+                  const time = row.timestamp ? new Date(row.timestamp).toLocaleString() : '';
+                  const userName = row.userName || row.user_name || row.user || 'System';
+                  return (
+                    <div key={row._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid #f0f0f0', borderRadius: 10, padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: 10, background: '#3a86ff', display: 'inline-block' }}></span>
+                        <div>
+                          <div style={{ fontWeight: 600 }}>{action} • {row.resource || '-'}</div>
+                          <small style={{ color: '#6c757d' }}>{userName} • {time}</small>
+                        </div>
+                      </div>
+                      <div>
+                        {((row.status || 'success') + '').toLowerCase().includes('success') ? (
+                          <i className="fas fa-check-circle" style={{ color: 'var(--success)' }}></i>
+                        ) : (
+                          <i className="fas fa-times-circle" style={{ color: 'var(--danger)' }}></i>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {(!aItems || aItems.length === 0) && (
+                  <div style={{ color: '#6c757d' }}>No recent activity.</div>
+                )}
+              </div>
+            </div>
+
+          </div>
+
           {/* User Metrics (Charts) */}
           {(() => {
             const roleTotal = Math.max(1, adminCount + healthCount + crewCount);
@@ -189,38 +291,48 @@ export default function AdminDashboard() {
           <div className="quick-actions">
             <div className="section-header">
               <div className="section-title">Quick Actions</div>
-              <button className="btn btn-primary" onClick={(e) => { if (window.confirm('Activate Emergency Mode? This will override some system restrictions.')) { e.currentTarget.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Emergency Active'; e.currentTarget.classList.remove('btn-primary'); e.currentTarget.classList.add('btn-danger'); alert('EMERGENCY MODE ACTIVATED! System restrictions lifted.'); } }}><i className="fas fa-bolt"></i> Emergency Mode</button>
             </div>
             <div className="actions-grid">
+              {/* Sidebar routes as quick actions (no logout) */}
+              <div className="action-card" onClick={() => navigate('/dashboard/admin')}>
+                <div className="action-icon"><i className="fas fa-tachometer-alt"></i></div>
+                <div className="action-title">Dashboard</div>
+                <div className="action-desc">Go to admin overview</div>
+              </div>
+              <div className="action-card" onClick={() => navigate('/dashboard/admin/users')}>
+                <div className="action-icon"><i className="fas fa-users-cog"></i></div>
+                <div className="action-title">User Management</div>
+                <div className="action-desc">Manage users & roles</div>
+              </div>
+              <div className="action-card" onClick={() => navigate('/dashboard/admin/permissions')}>
+                <div className="action-icon"><i className="fas fa-user-lock"></i></div>
+                <div className="action-title">Permissions</div>
+                <div className="action-desc">Role-based access policies</div>
+              </div>
+              <div className="action-card" onClick={() => navigate('/dashboard/admin/compliance')}>
+                <div className="action-icon"><i className="fas fa-clipboard-check"></i></div>
+                <div className="action-title">Compliance & Audit</div>
+                <div className="action-desc">Governance & audits</div>
+              </div>
+              <div className="action-card" onClick={() => navigate('/dashboard/admin/announcements')}>
+                <div className="action-icon"><i className="fas fa-bullhorn"></i></div>
+                <div className="action-title">Announcements</div>
+                <div className="action-desc">Broadcast updates</div>
+              </div>
+              <div className="action-card" onClick={() => navigate('/dashboard/admin/messaging')}>
+                <div className="action-icon"><i className="fas fa-comments"></i></div>
+                <div className="action-title">Messaging</div>
+                <div className="action-desc">Open admin messaging</div>
+              </div>
               <div className="action-card" onClick={() => navigate('/dashboard/admin/users')}>
                 <div className="action-icon"><i className="fas fa-user-plus"></i></div>
                 <div className="action-title">Create User</div>
                 <div className="action-desc">Add new crew member or staff</div>
               </div>
-              <div className="action-card" onClick={() => alert('Opening password reset tool...')}>
-                <div className="action-icon"><i className="fas fa-key"></i></div>
-                <div className="action-title">Reset Password</div>
-                <div className="action-desc">Force password reset for user</div>
-              </div>
               <div className="action-card" onClick={() => alert('Opening audit logs dashboard...')}>
                 <div className="action-icon"><i className="fas fa-history"></i></div>
                 <div className="action-title">Audit Logs</div>
                 <div className="action-desc">View system activity records</div>
-              </div>
-              <div className="action-card" onClick={(e) => { const el = e.currentTarget.querySelector('.action-title'); const t = el.textContent; el.textContent = 'Backing Up...'; setTimeout(() => { el.textContent = t; alert('System backup completed successfully!'); }, 2000); }}>
-                <div className="action-icon"><i className="fas fa-database"></i></div>
-                <div className="action-title">Backup System</div>
-                <div className="action-desc">Create system backup now</div>
-              </div>
-              <div className="action-card" onClick={() => alert('Opening system health dashboard...')}>
-                <div className="action-icon"><i className="fas fa-heartbeat"></i></div>
-                <div className="action-title">System Health</div>
-                <div className="action-desc">Check system status & metrics</div>
-              </div>
-              <div className="action-card" onClick={() => alert('Generating compliance report...')}>
-                <div className="action-icon"><i className="fas fa-file-contract"></i></div>
-                <div className="action-title">Compliance Report</div>
-                <div className="action-desc">Generate regulatory reports</div>
               </div>
             </div>
           </div>
@@ -260,7 +372,17 @@ export default function AdminDashboard() {
                           </div>
                         </td>
                         <td><span className={`user-role ${roleClass}`}>{u.role}</span></td>
-                        <td><span className={`user-status ${statusClass}`}>{(u.status||'active').toLowerCase()}</span></td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span className={`user-status ${statusClass}`}>{(u.status||'active').toLowerCase()}</span>
+                            {!u.crewId && (
+                              <button className="btn btn-sm" title="Auto-generate Crew ID" onClick={() => assignCrewIdInline(u)}>
+                                <i className="fas fa-magic"></i> Auto ID
+                              </button>
+                            )}
+                            <button className="btn btn-sm" onClick={() => openEdit(u)}><i className="fas fa-edit"></i> Edit</button>
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -326,7 +448,56 @@ export default function AdminDashboard() {
         </main>
       </div>
 
-      
+      {/* Edit User Modal */}
+      {editing && (
+        <div className="detail-modal" role="dialog" aria-modal="true">
+          <div className="detail-card" style={{ width: 'min(520px, 95vw)' }}>
+            <div className="detail-header">
+              <div className="detail-title">Edit User</div>
+              <button className="detail-close" onClick={closeEdit} aria-label="Close"><i className="fas fa-times"></i></button>
+            </div>
+            <div className="detail-body">
+              <div className="detail-row"><span>Name</span><span>{editing.fullName}</span></div>
+              <div className="detail-row"><span>Email</span><span>{editing.email}</span></div>
+              <div className="detail-row">
+                <span>Role</span>
+                <span>
+                  <select value={editRole} onChange={(e)=>setEditRole(e.target.value)}>
+                    <option value="admin">admin</option>
+                    <option value="health">health</option>
+                    <option value="inventory">inventory</option>
+                    <option value="emergency">emergency</option>
+                    <option value="crew">crew</option>
+                  </select>
+                </span>
+              </div>
+              <div className="detail-row">
+                <span>Status</span>
+                <span>
+                  <select value={editStatus} onChange={(e)=>setEditStatus(e.target.value)}>
+                    <option value="active">active</option>
+                    <option value="inactive">inactive</option>
+                    <option value="pending">pending</option>
+                  </select>
+                </span>
+              </div>
+              <div className="detail-row">
+                <span>Crew ID</span>
+                <span>
+                  <input type="text" value={editCrewId} onChange={(e)=>setEditCrewId(e.target.value)} placeholder={editing.crewId? String(editing.crewId):'Not set'} disabled={!!editing.crewId} />
+                  {!editing.crewId && (
+                    <button className="btn btn-sm" style={{ marginLeft: 8 }} onClick={generateCrewId}><i className="fas fa-magic"></i> Generate</button>
+                  )}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+                <button className="btn" onClick={closeEdit}>Cancel</button>
+                <button className="btn btn-primary" disabled={savingEdit} onClick={saveEdit}>{savingEdit ? 'Saving…' : 'Save Changes'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
