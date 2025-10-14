@@ -427,10 +427,18 @@ export default function HealthChronic() {
                             </span>
                           </td>
                           <td className="chronic-actions">
-                            <button className="btn btn-outline btn-sm" onClick={() => logReading(p._id || p.id)}>Log Reading</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => viewPatient(p._id || p.id)}>View</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => editPatient(p._id || p.id)}>Edit</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => deletePatient(p._id || p.id)}>Remove</button>
+                            <button className="btn btn-action btn-sm" onClick={() => logReading(p._id || p.id)}>
+                              <i className="fas fa-notes-medical"></i> Log Reading
+                            </button>
+                            <button className="btn btn-action btn-sm" onClick={() => viewPatient(p._id || p.id)}>
+                              <i className="fas fa-book"></i> View
+                            </button>
+                            <button className="btn btn-action btn-sm" onClick={() => editPatient(p._id || p.id)}>
+                              <i className="fas fa-pen"></i> Edit
+                            </button>
+                            <button className="btn btn-action btn-sm delete" onClick={() => deletePatient(p._id || p.id)}>
+                              <i className="fas fa-trash"></i> Remove
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -506,7 +514,9 @@ export default function HealthChronic() {
                           <td>1</td>
                           <td>0</td>
                           <td className="action-buttons">
-                            <button className="btn btn-outline btn-sm">View Details</button>
+                            <button className="btn btn-action btn-sm">
+                              <i className="fas fa-book"></i> View Details
+                            </button>
                           </td>
                         </tr>
                         <tr>
@@ -516,7 +526,9 @@ export default function HealthChronic() {
                           <td>2</td>
                           <td>0</td>
                           <td className="action-buttons">
-                            <button className="btn btn-outline btn-sm">View Details</button>
+                            <button className="btn btn-action btn-sm">
+                              <i className="fas fa-book"></i> View Details
+                            </button>
                           </td>
                         </tr>
                         <tr>
@@ -526,7 +538,9 @@ export default function HealthChronic() {
                           <td>0</td>
                           <td>0</td>
                           <td className="action-buttons">
-                            <button className="btn btn-outline btn-sm">View Details</button>
+                            <button className="btn btn-action btn-sm">
+                              <i className="fas fa-book"></i> View Details
+                            </button>
                           </td>
                         </tr>
                         <tr>
@@ -536,7 +550,9 @@ export default function HealthChronic() {
                           <td>1</td>
                           <td>0</td>
                           <td className="action-buttons">
-                            <button className="btn btn-outline btn-sm">View Details</button>
+                            <button className="btn btn-action btn-sm">
+                              <i className="fas fa-book"></i> View Details
+                            </button>
                           </td>
                         </tr>
                       </tbody>

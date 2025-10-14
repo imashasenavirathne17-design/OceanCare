@@ -1,4 +1,6 @@
 const CrewEmergencyAlert = require('../models/CrewEmergencyAlert');
+const EmergencyAlert = require('../models/EmergencyAlert');
+const mongoose = require('mongoose');
 
 const normalizeType = (value) => {
   if (!value) return undefined;
@@ -28,6 +30,42 @@ const getUserId = (req) => {
 
 const getUserName = (req) => req.user?.fullName || req.user?.name || req.user?.email || '';
 const getUserRole = (req) => (req.user?.role || '').toLowerCase();
+
+const severityFromUrgency = {
+  high: 'critical',
+  medium: 'warning',
+  low: 'info',
+};
+
+const iconFromSeverity = {
+  critical: 'fas fa-heartbeat',
+  warning: 'fas fa-exclamation-triangle',
+  info: 'fas fa-info-circle',
+};
+
+const buildEmergencyAlertPayload = (crewAlert, userName) => {
+  const severity = severityFromUrgency[crewAlert.urgency] || 'info';
+  const typeLabel = crewAlert.type ? crewAlert.type.charAt(0).toUpperCase() + crewAlert.type.slice(1) : 'Emergency';
+  const now = new Date();
+  const displayTime = now.toLocaleString();
+
+  return {
+    title: `${typeLabel} Emergency - ${userName || 'Crew Member'}`,
+    severity,
+    status: 'NEW',
+    incidentType: typeLabel,
+    notifyTeam: true,
+    description: crewAlert.description || '',
+    meta: {
+      user: userName || 'Crew Member',
+      location: crewAlert.location || 'Unknown Location',
+      triggered: displayTime,
+    },
+    vitals: [],
+    icon: iconFromSeverity[severity] || iconFromSeverity.info,
+    footerTime: `Reported: ${displayTime}`,
+  };
+};
 
 const canManageAlert = (req, alert) => {
   const role = getUserRole(req);
@@ -97,6 +135,8 @@ exports.getOne = async (req, res) => {
 };
 
 exports.create = async (req, res) => {
+  const session = await mongoose.startSession();
+
   try {
     const {
       type,
@@ -118,23 +158,38 @@ exports.create = async (req, res) => {
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
-    const doc = await CrewEmergencyAlert.create({
-      type: normalizedType,
-      location: location?.trim() || '',
-      description: description.trim(),
-      urgency: normalizedUrgency,
-      notes: notes?.trim() || '',
-      status: 'reported',
-      crewId: req.user?.crewId || '',
-      crewMemberId: String(userId),
-      crewName: getUserName(req),
-      reportedAt: new Date(),
-    });
+    const userName = getUserName(req);
 
-    res.status(201).json(doc);
+    await session.startTransaction();
+
+    const [crewAlert] = await CrewEmergencyAlert.create([
+      {
+        type: normalizedType,
+        location: location?.trim() || '',
+        description: description.trim(),
+        urgency: normalizedUrgency,
+        notes: notes?.trim() || '',
+        status: 'reported',
+        crewId: req.user?.crewId || '',
+        crewMemberId: String(userId),
+        crewName: userName,
+        reportedAt: new Date(),
+      },
+    ], { session });
+
+    await EmergencyAlert.create([
+      buildEmergencyAlertPayload(crewAlert, userName),
+    ], { session });
+
+    await session.commitTransaction();
+
+    res.status(201).json(crewAlert);
   } catch (err) {
+    await session.abortTransaction().catch(() => {});
     console.error('CrewEmergencyAlert create error:', err);
     res.status(500).json({ message: 'Failed to create alert' });
+  } finally {
+    session.endSession();
   }
 };
 

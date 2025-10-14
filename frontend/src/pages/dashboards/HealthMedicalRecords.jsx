@@ -1,19 +1,12 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { clearSession, getUser } from '../../lib/token';
+import React, { useState, useEffect } from 'react';
 import './healthOfficerDashboard.css';
-import HealthSidebar from './HealthSidebar';
+import HealthPageLayout from './HealthPageLayout';
+import HealthPageSection from './HealthPageSection';
 import { saveMedicalRecord, listMedicalRecords, updateMedicalRecord, deleteMedicalRecord, listCrewMembers } from '../../lib/healthApi';
 
 export default function HealthMedicalRecords() {
-  const navigate = useNavigate();
-  const user = getUser();
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api';
   const UPLOADS_BASE = API_BASE.replace(/\/api$/, '') + '/uploads/medical-records/';
-  const onLogout = () => {
-    clearSession();
-    navigate('/login');
-  };
 
   const typeLabel = (value) => {
     const map = {
@@ -186,141 +179,115 @@ export default function HealthMedicalRecords() {
   );
 
   return (
-    <div className="health-dashboard">
-      <div className="dashboard-container">
-        {/* Sidebar */}
-        <HealthSidebar onLogout={onLogout} />
-
-        {/* Main Content */}
-        <main className="main-content">
-          <div className="header">
-            <h2>Medical Records</h2>
-            <div className="user-info">
-              <img
-                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || 'Health Officer')}&background=2a9d8f&color=fff`}
-                alt="User"
-              />
-              <div>
-                <div>{user?.fullName}</div>
-                <small>Health Officer</small>
-              </div>
-              <div className="status-badge status-active">Active</div>
-            </div>
+    <HealthPageLayout
+      title="Medical Records"
+      description="Manage crew medical history, examinations, treatments, vaccinations, and chronic conditions."
+    >
+      <HealthPageSection
+        title="Crew Medical Records"
+        actions={(
+          <>
+            <button className="btn btn-outline">
+              <i className="fas fa-download"></i> Export
+            </button>
+            <button className="btn btn-primary" onClick={() => setAddOpen(true)}>
+              <i className="fas fa-plus"></i> Add New Record
+            </button>
+          </>
+        )}
+      >
+        <div className="search-filter" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="search-box" style={{ flex: 1, minWidth: 260, maxWidth: 420 }}>
+            <input
+              type="text"
+              placeholder="Search by crew name, ID, or condition..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
           </div>
-          <div className="page-content">
-            <div className="page-header">
-              <div className="page-title">Crew Medical Records</div>
-              <div className="page-actions">
-                <button className="btn btn-outline">
-                  <i className="fas fa-download"></i> Export
-                </button>
-                <button className="btn btn-primary" onClick={() => setAddOpen(true)}>
-                  <i className="fas fa-plus"></i> Add New Record
-                </button>
-              </div>
-            </div>
+          <select className="filter-select" value={type} onChange={(e) => setType(e.target.value)} style={{ width: 200 }}>
+            <option>All Records</option>
+            <option>Medical History</option>
+            <option>Examinations</option>
+            <option>Treatments</option>
+            <option>Vaccinations</option>
+            <option>Chronic Condition</option>
+          </select>
+          <select className="filter-select" value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 200 }}>
+            <option>All Status</option>
+            <option>Active</option>
+            <option>Resolved</option>
+            <option>Chronic</option>
+            <option>Completed</option>
+          </select>
+        </div>
 
-            <div className="search-filter" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'nowrap' }}>
-              <div className="search-box" style={{ flex: 1, minWidth: 260, maxWidth: 420, display: 'flex', alignItems: 'center' }}>
-                <input
-                  type="text"
-                  placeholder="Search by crew name, ID, or condition..."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-              </div>
-              <select className="filter-select" value={type} onChange={(e) => setType(e.target.value)} style={{ width: 180, flex: '0 0 auto' }}>
-                <option>All Records</option>
-                <option>Medical History</option>
-                <option>Examinations</option>
-                <option>Treatments</option>
-                <option>Vaccinations</option>
-                <option>Chronic Condition</option>
-              </select>
-              <select className="filter-select" value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: 180, flex: '0 0 auto' }}>
-                <option>All Status</option>
-                <option>Active</option>
-                <option>Resolved</option>
-                <option>Chronic</option>
-                <option>Completed</option>
-              </select>
-            </div>
+        <div className="table-responsive">
+          <table className="dashboard-table">
+            <thead>
+              <tr>
+                <th>Crew Member</th>
+                <th>Record Type</th>
+                <th>Condition</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((record) => (
+                <tr key={record._id}>
+                  <td>{record.crewName || '—'} ({record.crewId})</td>
+                  <td>{typeLabel(record.recordType)}</td>
+                  <td>{record.condition}</td>
+                  <td>{record.date}</td>
+                  <td><span className="status-badge">—</span></td>
+                  <td className="action-buttons">
+                    <button className="btn btn-action btn-sm" onClick={() => openView(record._id)}>
+                      <i className="fas fa-book"></i> View
+                    </button>
+                    <button
+                      className="btn btn-action btn-sm"
+                      onClick={() => {
+                        setEditingId(record._id);
+                        setForm({
+                          crewId: record.crewId || '',
+                          recordType: record.recordType || '',
+                          condition: record.condition || '',
+                          date: record.date || today,
+                          notes: record.notes || '',
+                        });
+                        setAddOpen(true);
+                      }}
+                    >
+                      <i className="fas fa-pen"></i> Edit
+                    </button>
+                    <button
+                      className="btn btn-action btn-sm delete"
+                      onClick={async () => {
+                        if (!window.confirm('Delete this record?')) return;
+                        try {
+                          await deleteMedicalRecord(record._id);
+                          await loadRecords();
+                        } catch (e) {
+                          alert('Failed to delete');
+                        }
+                      }}
+                    >
+                      <i className="fas fa-trash"></i> Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-            <div className="table-responsive">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Crew Member</th>
-                    <th>Record Type</th>
-                    <th>Condition</th>
-                    <th>Date</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((r) => (
-                    <tr key={r._id}>
-                      <td>
-                        {(r.crewName || '—')} ({r.crewId})
-                      </td>
-                      <td>{r.recordType}</td>
-                      <td>{r.condition}</td>
-                      <td>{r.date}</td>
-                      <td>
-                        <span className="status-badge">—</span>
-                      </td>
-                      <td className="action-buttons">
-                        <button className="btn btn-outline btn-sm" onClick={() => openView(r._id)}>
-                          View
-                        </button>
-                        <button
-                          className="btn btn-outline btn-sm"
-                          onClick={() => {
-                            setEditingId(r._id);
-                            setForm({
-                              crewId: r.crewId || '',
-                              recordType: r.recordType || '',
-                              condition: r.condition || '',
-                              date: r.date || today,
-                              notes: r.notes || '',
-                            });
-                            setAddOpen(true);
-                          }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="btn btn-outline btn-sm"
-                          onClick={async () => {
-                            if (!window.confirm('Delete this record?')) return;
-                            try {
-                              await deleteMedicalRecord(r._id);
-                              await loadRecords();
-                            } catch (e) {
-                              alert('Failed to delete');
-                            }
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 }}>
-              <div style={{ color: '#777', fontSize: 14 }}>Showing 1-{Math.min(5, filtered.length)} of {filtered.length} records</div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button className="btn btn-outline btn-sm">Previous</button>
-                <button className="btn btn-outline btn-sm">Next</button>
-              </div>
-            </div>
-          </div>
-        </main>
-      </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="btn btn-outline btn-sm">Previous</button>
+          <button className="btn btn-outline btn-sm">Next</button>
+        </div>
+      </HealthPageSection>
 
       {/* Add Medical Record Modal */}
       {addOpen && (
@@ -447,9 +414,14 @@ export default function HealthMedicalRecords() {
                 <small style={{ color: '#777' }}>You can upload lab results, scans, or other documents</small>
               </div>
 
-              <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-                <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => { setAddOpen(false); setEditingId(null); }}>
-                  Cancel
+              <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
+                <button
+                  type="button"
+                  className="btn btn-action btn-sm"
+                  onClick={() => { setAddOpen(false); setEditingId(null); }}
+                  style={{ flex: 1 }}
+                >
+                  <i className="fas fa-times"></i> Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
                   {editingId ? 'Update Record' : 'Save Record'}
@@ -474,6 +446,6 @@ export default function HealthMedicalRecords() {
           </div>
         </div>
       )}
-    </div>
+    </HealthPageLayout>
   );
 }

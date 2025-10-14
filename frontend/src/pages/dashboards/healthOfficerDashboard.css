@@ -69,9 +69,11 @@
 
 /* Page container styles for records page */
 .page-content { background: #fff; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); padding: 25px; margin-bottom: 30px; }
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; gap: 16px; }
+.page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 25px; gap: 16px; flex-wrap: wrap; }
+.page-header-titles { display: flex; flex-direction: column; gap: 6px; min-width: 200px; }
 .page-title { font-size: 22px; color: var(--primary); font-weight: 600; }
-.page-actions { display: flex; gap: 12px; align-items: center; }
+.page-subtitle { font-size: 14px; color: #6b7280; max-width: 640px; }
+.page-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 
 /* Search and filter */
 .search-filter { display: flex; gap: 15px; margin-bottom: 25px; flex-wrap: wrap; }
@@ -132,37 +134,104 @@
 .section-actions { display: flex; gap: 10px; }
 .form-title { font-size: 20px; margin-bottom: 20px; color: var(--primary); }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
-.form-group { margin-bottom: 15px; }
-.form-group label { display: block; margin-bottom: 8px; font-weight: 600; color: var(--dark); }
-.form-control { width: 100%; padding: 12px 15px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; transition: border-color .3s, box-shadow .3s; }
-.form-control:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(42,157,143,0.15); }
-
 /* Buttons (scoped to health dashboard) */
-.health-dashboard .btn { padding: 10px 20px; border-radius: 10px; font-weight: 600; transition: all .2s ease; display: inline-block; border: none; cursor: pointer; font-size: 14px; }
-.health-dashboard .btn-primary { background: var(--primary); color: #fff; }
-.health-dashboard .btn-primary:hover { background: #1e7d71; }
-.health-dashboard .btn-danger { background: var(--danger); color: #fff; }
-.health-dashboard .btn-danger:hover { background: #c1121f; }
-.health-dashboard .btn-success { background: var(--success); color: #fff; }
-.health-dashboard .btn-success:hover { background: #1e7d71; }
-.health-dashboard .btn-outline { background: #fff; border: 1.5px solid var(--primary); color: var(--primary); border-radius: 10px; }
-.health-dashboard .btn-outline:hover { background: var(--primary); color: #fff; box-shadow: 0 2px 8px rgba(42,157,143,0.25); }
-/* Mental health primary button */
-/* Vaccination primary button (reuse primary) */
-.health-dashboard .btn-vaccination { background: var(--primary); color: #fff; border-radius: 10px; }
-.health-dashboard .btn-vaccination:hover { background: #1e7d71; }
-/* Reports primary button (reuse primary) */
-.health-dashboard .btn-reports { background: var(--primary); color: #fff; border-radius: 10px; }
-.health-dashboard .btn-reports:hover { background: #1e7d71; }
-/* Inventory primary button (reuse primary) */
-.health-dashboard .btn-inventory { background: var(--primary); color: #fff; border-radius: 10px; }
-.health-dashboard .btn-inventory:hover { background: #1e7d71; }
-/* Inventory alert button (reuse primary for brand consistency) */
-.health-dashboard .btn-alert { background: var(--primary); color: #fff; border-radius: 10px; }
-.health-dashboard .btn-alert:hover { background: #1e7d71; }
+.health-dashboard .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1.5px solid transparent;
+  background: #fff;
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  transition: transform .2s ease, box-shadow .2s ease, background-color .2s ease, color .2s ease, border-color .2s ease;
+  box-shadow: 0 2px 6px rgba(16,24,40,0.05);
+}
+.health-dashboard .btn i { font-size: 14px; }
+.health-dashboard .btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16,24,40,0.08);
+}
+.health-dashboard .btn:disabled,
+.health-dashboard .btn[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+.health-dashboard .btn-primary,
+.health-dashboard .btn-vaccination,
+.health-dashboard .btn-reports,
+.health-dashboard .btn-inventory,
+.health-dashboard .btn-alert,
+.health-dashboard .btn-education {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.health-dashboard .btn-primary:hover,
+.health-dashboard .btn-vaccination:hover,
+.health-dashboard .btn-reports:hover,
+.health-dashboard .btn-inventory:hover,
+.health-dashboard .btn-alert:hover,
+.health-dashboard .btn-education:hover {
+  background: #1e7d71;
+  border-color: #1e7d71;
+}
+.health-dashboard .btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+.health-dashboard .btn-danger:hover { background: #c1121f; border-color: #c1121f; }
+.health-dashboard .btn-success {
+  background: var(--success);
+  color: #fff;
+  border-color: var(--success);
+}
+.health-dashboard .btn-success:hover { background: #1e7d71; border-color: #1e7d71; }
+.health-dashboard .btn-outline {
+  background: #fff;
+  color: var(--primary);
+  border-color: rgba(42,157,143,0.55);
+}
+.health-dashboard .btn-outline:hover {
+  background: rgba(42,157,143,0.08);
+  color: var(--primary);
+  border-color: var(--primary);
+  box-shadow: 0 4px 12px rgba(42,157,143,0.18);
+}
+.health-dashboard .btn-action {
+  background: #f8fffe;
+  border-color: rgba(42,157,143,0.35);
+  color: var(--primary);
+  min-width: 110px;
+}
+.health-dashboard .btn-action i {
+  font-size: 16px;
+}
+.health-dashboard .btn-action:hover {
+  background: rgba(42,157,143,0.15);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.health-dashboard .btn-action.delete {
+  color: #d22c2c;
+  border-color: rgba(210,44,44,0.35);
+}
+.health-dashboard .btn-action.delete:hover {
+  background: rgba(210,44,44,0.12);
+  border-color: #d22c2c;
+  color: #d22c2c;
+}
+.health-dashboard .btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 8px; }
 
 /* Tables */
-.table-responsive { overflow-x: auto; }
 table { width: 100%; border-collapse: separate; border-spacing: 0; }
 th, td { padding: 14px 16px; text-align: left; border-bottom: 1px solid #eef2f7; }
 thead th { background-color: #f3efff; color: #334155; font-weight: 700; }

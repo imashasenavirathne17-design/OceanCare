@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const HealthEmergency = require('../models/HealthEmergency');
+const EmergencyAlert = require('../models/EmergencyAlert');
 
 const { Types } = mongoose;
 const VALID_STATUS = ['reported', 'acknowledged', 'in_progress', 'resolved', 'closed'];
@@ -25,6 +26,24 @@ const parseDate = (value) => {
   if (!value) return null;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const mapSeverityToAlert = (severity) => {
+  const normalized = String(severity || '').toLowerCase();
+  if (normalized === 'critical' || normalized === 'high') return 'critical';
+  if (normalized === 'moderate') return 'warning';
+  return 'info';
+};
+
+const mapSeverityToIcon = (alertSeverity) => {
+  switch (alertSeverity) {
+    case 'critical':
+      return 'fas fa-heartbeat';
+    case 'warning':
+      return 'fas fa-exclamation-triangle';
+    default:
+      return 'fas fa-info-circle';
+  }
 };
 
 const buildFilter = (query = {}) => {
@@ -215,6 +234,33 @@ exports.createEmergency = async (req, res) => {
     };
 
     const doc = await HealthEmergency.create(payload);
+
+    const alertSeverity = mapSeverityToAlert(payload.severity);
+    const reportedTime = payload.reportedAt instanceof Date
+      ? payload.reportedAt
+      : new Date(payload.reportedAt || Date.now());
+
+    try {
+      await EmergencyAlert.create({
+        title: `${payload.emergencyType || 'Medical'} Emergency - ${patientName}`,
+        severity: alertSeverity,
+        status: 'NEW',
+        incidentType: payload.emergencyType || 'Medical',
+        notifyTeam: payload.notifyEmergencyTeam !== false,
+        description: payload.description || '',
+        meta: {
+          user: crewId ? `${patientName} (ID: ${crewId})` : patientName,
+          location,
+          triggered: reportedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+        vitals: [],
+        footerTime: `Created: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} | Source: Health`,
+        icon: mapSeverityToIcon(alertSeverity),
+      });
+    } catch (alertError) {
+      console.error('Failed to mirror health emergency to alert feed', alertError);
+    }
+
     return res.status(201).json(doc);
   } catch (error) {
     console.error('Create health emergency error:', error);

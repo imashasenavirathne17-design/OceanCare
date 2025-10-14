@@ -883,6 +883,7 @@ export default function MessagingShell({
     setActionError('');
   };
 
+
   const cancelEditMessage = () => {
     setEditingMessageId('');
     setEditDraft('');
@@ -1089,6 +1090,7 @@ export default function MessagingShell({
   const handleSend = async () => {
     const content = input.trim();
     if (!content || !activeContact || sending) return;
+
     setActionError('');
     const tempId = `temp-${Date.now()}`;
     const optimistic = {
@@ -1117,6 +1119,16 @@ export default function MessagingShell({
     } finally {
       setSending(false);
     }
+  };
+
+  const handleCall = () => {
+    if (!activeContact) return;
+    window.alert(`Calling ${activeContact.name}… (feature coming soon)`);
+  };
+
+  const handleVideo = () => {
+    if (!activeContact) return;
+    window.alert(`Starting video call with ${activeContact.name}… (feature coming soon)`);
   };
 
   return (
@@ -1206,8 +1218,8 @@ export default function MessagingShell({
                     </div>
                   </div>
                   <div className="chat-actions">
-                    <button className="btn btn-primary"><i className="fas fa-phone" /> Call</button>
-                    <button className="btn"><i className="fas fa-video" /> Video</button>
+                    <button className="btn btn-primary" onClick={handleCall}><i className="fas fa-phone" /> Call</button>
+                    <button className="btn" onClick={handleVideo}><i className="fas fa-video" /> Video</button>
                   </div>
                 </div>
 

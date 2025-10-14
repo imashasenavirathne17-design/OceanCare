@@ -35,16 +35,6 @@ export default function HealthSidebar({ onLogout }) {
           </NavLink>
         </li>
         <li>
-          <NavLink to="/dashboard/health/reminders" className={({ isActive }) => (isActive ? 'active' : '')}>
-            <i className="fas fa-bell"></i> Reminders
-          </NavLink>
-        </li>
-        <li>
-          <NavLink to="/dashboard/health/messaging" className={({ isActive }) => (isActive ? 'active' : '')}>
-            <i className="fas fa-comments"></i> Messaging
-          </NavLink>
-        </li>
-        <li>
           <NavLink to="/dashboard/health/mental-health" className={({ isActive }) => (isActive ? 'active' : '')}>
             <i className="fas fa-brain"></i> Mental Health
           </NavLink>
@@ -52,6 +42,16 @@ export default function HealthSidebar({ onLogout }) {
         <li>
           <NavLink to="/dashboard/health/vaccination" className={({ isActive }) => (isActive ? 'active' : '')}>
             <i className="fas fa-syringe"></i> Vaccinations
+          </NavLink>
+        </li>
+        <li>
+          <NavLink to="/dashboard/health/reminders" className={({ isActive }) => (isActive ? 'active' : '')}>
+            <i className="fas fa-bell"></i> Reminders
+          </NavLink>
+        </li>
+        <li>
+          <NavLink to="/dashboard/health/messaging" className={({ isActive }) => (isActive ? 'active' : '')}>
+            <i className="fas fa-comments"></i> Messaging
           </NavLink>
         </li>
         <li>

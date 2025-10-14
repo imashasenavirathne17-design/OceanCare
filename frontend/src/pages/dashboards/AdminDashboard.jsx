@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { clearSession, getUser } from '../../lib/token';
 import './adminDashboard.css';
 import AdminSidebar from './AdminSidebar';
+import { listUsers } from '../../lib/users';
+import { listAuditLogs } from '../../lib/auditLogApi';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -17,15 +19,87 @@ export default function AdminDashboard() {
     return () => { clearTimeout(timer); window.removeEventListener('mousemove', reset); window.removeEventListener('keydown', reset); };
   }, [navigate]);
 
-  // Modal & tabs
-  const [createUserOpen, setCreateUserOpen] = useState(false);
+  // Tabs
   const [activeTab, setActiveTab] = useState('alerts');
 
-  // Users state (for demo table actions)
-  const [audit, setAudit] = useState([]);
+  // Users state for read-only list
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [query, setQuery] = useState('');
+  const [error, setError] = useState('');
+  // Role-based metrics
+  const [adminCount, setAdminCount] = useState(0);
+  const [healthCount, setHealthCount] = useState(0);
+  const [crewCount, setCrewCount] = useState(0);
+
+  const fetchUsers = async (opts = {}) => {
+    try {
+      setLoading(true);
+      const params = { page, limit: 5, q: query, ...opts };
+      const data = await listUsers(params);
+      setItems(data.items || []);
+      setPages(data.pages || 1);
+      setTotal(data.total || (data.items ? data.items.length : 0));
+      if (data.page) setPage(data.page);
+      setError('');
+    } catch (e) {
+      console.error(e);
+      setError(e?.response?.data?.message || e.message || 'Failed to load users');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchUsers(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [page]);
 
   const onLogout = () => { clearSession(); navigate('/login'); };
-  const addAudit = (action, payload) => setAudit((a) => [{ ts: new Date().toISOString(), user: user?.fullName || 'Admin', action, payload }, ...a]);
+
+  // Fetch accurate counts by role
+  const fetchRoleCounts = async () => {
+    try {
+      const [admins, health, crew] = await Promise.all([
+        listUsers({ role: 'admin', limit: 1 }),
+        listUsers({ role: 'health', limit: 1 }),
+        listUsers({ role: 'crew', limit: 1 }),
+      ]);
+      setAdminCount(admins?.total || (admins?.items?.length || 0));
+      setHealthCount(health?.total || (health?.items?.length || 0));
+      setCrewCount(crew?.total || (crew?.items?.length || 0));
+    } catch (e) {
+      console.error('Failed to fetch role counts', e);
+    }
+  };
+  useEffect(() => { fetchRoleCounts(); }, []);
+
+  // Recent Audit Logs (read-only)
+  const [aPage, setAPage] = useState(1);
+  const [aPages, setAPages] = useState(1);
+  const [aTotal, setATotal] = useState(0);
+  const [aLoading, setALoading] = useState(false);
+  const [aItems, setAItems] = useState([]);
+  const [aError, setAError] = useState('');
+
+  const fetchAudit = async (p = 1) => {
+    try {
+      setALoading(true);
+      const res = await listAuditLogs({ page: p, limit: 5 });
+      setAItems(res.items || res.logs || []);
+      setAPages(res.pages || 1);
+      setATotal(res.total || (res.items ? res.items.length : 0));
+      setAPage(res.page || p);
+      setAError('');
+    } catch (e) {
+      console.error(e);
+      setAError(e.message || 'Failed to load audit logs');
+    } finally {
+      setALoading(false);
+    }
+  };
+
+  useEffect(() => { fetchAudit(1); }, []);
 
   return (
     <div className="admin-dashboard">
@@ -48,11 +122,68 @@ export default function AdminDashboard() {
 
           {/* Admin Stats */}
           <div className="admin-stats">
-            <div className="stat-card"><div className="stat-icon"><i className="fas fa-users"></i></div><div className="stat-value">142</div><div className="stat-label">Total Users</div></div>
-            <div className="stat-card"><div className="stat-icon"><i className="fas fa-user-shield"></i></div><div className="stat-value">8</div><div className="stat-label">Administrators</div></div>
-            <div className="stat-card"><div className="stat-icon"><i className="fas fa-stethoscope"></i></div><div className="stat-value">24</div><div className="stat-label">Medical Officers</div></div>
-            <div className="stat-card"><div className="stat-icon"><i className="fas fa-clipboard-list"></i></div><div className="stat-value">7</div><div className="stat-label">Pending Actions</div></div>
+            <div className="stat-card"><div className="stat-icon"><i className="fas fa-users"></i></div><div className="stat-value">{total}</div><div className="stat-label">Total Users</div></div>
+            <div className="stat-card"><div className="stat-icon"><i className="fas fa-user-shield"></i></div><div className="stat-value">{adminCount}</div><div className="stat-label">Administrators</div></div>
+            <div className="stat-card"><div className="stat-icon"><i className="fas fa-stethoscope"></i></div><div className="stat-value">{healthCount}</div><div className="stat-label">Medical Officers</div></div>
+            <div className="stat-card"><div className="stat-icon"><i className="fas fa-id-badge"></i></div><div className="stat-value">{crewCount}</div><div className="stat-label">Crew Members</div></div>
           </div>
+
+          {/* User Metrics (Charts) */}
+          {(() => {
+            const roleTotal = Math.max(1, adminCount + healthCount + crewCount);
+            const pAdmin = Math.round((adminCount / roleTotal) * 100);
+            const pHealth = Math.round((healthCount / roleTotal) * 100);
+            const pCrew = 100 - pAdmin - pHealth;
+            const a = pAdmin;
+            const b = pAdmin + pHealth;
+            const pieBg = `conic-gradient(#8338ec 0 ${a}%, #2a9d8f ${a}% ${b}%, #3a86ff ${b}% 100%)`;
+            const barBase = { height: 12, borderRadius: 999, background: '#eef2ff' };
+            const barFill = (color, pct) => ({ width: `${pct}%`, height: '100%', borderRadius: 999, background: color });
+            return (
+              <div className="user-metrics" style={{ marginTop: 20 }}>
+                <div className="section-header">
+                  <div className="section-title">User Metrics</div>
+                </div>
+                <div className="metrics-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(240px, 320px) 1fr', gap: 20 }}>
+                  {/* Pie */}
+                  <div className="pie-card" style={{ background: '#fff', border: '1px solid #eee', borderRadius: 12, padding: 18 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ width: 140, height: 140, borderRadius: '50%', background: pieBg, boxShadow: 'inset 0 0 0 10px #fff' }} />
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#8338ec', display: 'inline-block' }}></span><span>Admins: {adminCount} ({pAdmin}%)</span></div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#2a9d8f', display: 'inline-block' }}></span><span>Health: {healthCount} ({pHealth}%)</span></div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#3a86ff', display: 'inline-block' }}></span><span>Crew: {crewCount} ({pCrew}%)</span></div>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Bars */}
+                  <div className="bars-card" style={{ background: '#fff', border: '1px solid #eee', borderRadius: 12, padding: 18 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 10 }}>Users by Role</div>
+                    <div style={{ display: 'grid', gap: 14 }}>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <span>Administrators</span><span>{adminCount}</span>
+                        </div>
+                        <div style={barBase}><div style={barFill('#8338ec', pAdmin)} /></div>
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <span>Medical Officers</span><span>{healthCount}</span>
+                        </div>
+                        <div style={barBase}><div style={barFill('#2a9d8f', pHealth)} /></div>
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <span>Crew Members</span><span>{crewCount}</span>
+                        </div>
+                        <div style={barBase}><div style={barFill('#3a86ff', pCrew)} /></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Quick Actions */}
           <div className="quick-actions">
@@ -61,7 +192,7 @@ export default function AdminDashboard() {
               <button className="btn btn-primary" onClick={(e) => { if (window.confirm('Activate Emergency Mode? This will override some system restrictions.')) { e.currentTarget.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Emergency Active'; e.currentTarget.classList.remove('btn-primary'); e.currentTarget.classList.add('btn-danger'); alert('EMERGENCY MODE ACTIVATED! System restrictions lifted.'); } }}><i className="fas fa-bolt"></i> Emergency Mode</button>
             </div>
             <div className="actions-grid">
-              <div className="action-card" onClick={() => setCreateUserOpen(true)}>
+              <div className="action-card" onClick={() => navigate('/dashboard/admin/users')}>
                 <div className="action-icon"><i className="fas fa-user-plus"></i></div>
                 <div className="action-title">Create User</div>
                 <div className="action-desc">Add new crew member or staff</div>
@@ -94,225 +225,108 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* User Management */}
+          {/* User Management (Read-Only) */}
           <div className="user-management" id="users">
             <div className="management-header">
               <div className="section-title">User Management</div>
               <div className="search-box">
-                <input type="text" className="search-input" placeholder="Search users..." />
-                <button className="btn btn-primary"><i className="fas fa-search"></i> Search</button>
-                <button className="btn btn-success" onClick={() => setCreateUserOpen(true)}><i className="fas fa-plus"></i> Add User</button>
+                <input type="text" className="search-input" placeholder="Search users..." value={query} onChange={(e)=>setQuery(e.target.value)} onKeyDown={(e)=>{ if(e.key==='Enter'){ setPage(1); fetchUsers({ page: 1 }); } }} />
+                <button className="btn btn-primary" onClick={()=>{ setPage(1); fetchUsers({ page: 1 }); }}><i className="fas fa-search"></i> Search</button>
               </div>
             </div>
+            {error && (
+              <div style={{background:'#ffe5e5', color:'#b00020', padding: '10px 12px', borderRadius: 8, marginBottom: 12}}>
+                <strong>Error:</strong> {error}
+              </div>
+            )}
             <div className="table-responsive">
               <table className="users-table">
                 <thead>
-                  <tr><th>User</th><th>Role</th><th>Last Login</th><th>Status</th><th>MFA</th><th>Actions</th></tr>
+                  <tr><th>User</th><th>Role</th><th>Status</th></tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center' }}>
-                        <img src="https://ui-avatars.com/api/?name=Dr+Michael+Chen&background=3a86ff&color=fff" alt="User" style={{ width: 32, height: 32, borderRadius: '50%', marginRight: 10 }} />
-                        <div><div>Dr. Michael Chen</div><small>michael.chen@oceancare.com</small></div>
-                      </div>
-                    </td>
-                    <td><span className="user-role role-medical">Medical Officer</span></td>
-                    <td>Today, 14:25</td>
-                    <td><span className="user-status status-active">Active</span></td>
-                    <td><i className="fas fa-check-circle" style={{ color: 'var(--success)' }}></i></td>
-                    <td>
-                      <button className="btn btn-primary btn-sm" onClick={() => alert('Editing user: Dr. Michael Chen')}><i className="fas fa-edit"></i></button>
-                      <button className="btn btn-info btn-sm" onClick={() => { if (window.confirm('Reset password for Dr. Michael Chen?')) alert('Password reset initiated.'); }}><i className="fas fa-key"></i></button>
-                      <button className="btn btn-danger btn-sm" onClick={() => { if (window.confirm('Permanently delete user Dr. Michael Chen?')) alert('User scheduled for deletion.'); }}><i className="fas fa-trash"></i></button>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center' }}>
-                        <img src="https://ui-avatars.com/api/?name=Alex+Johnson&background=8338ec&color=fff" alt="User" style={{ width: 32, height: 32, borderRadius: '50%', marginRight: 10 }} />
-                        <div><div>Alex Johnson</div><small>alex.johnson@oceancare.com</small></div>
-                      </div>
-                    </td>
-                    <td><span className="user-role role-inventory">Inventory Manager</span></td>
-                    <td>Yesterday, 16:40</td>
-                    <td><span className="user-status status-active">Active</span></td>
-                    <td><i className="fas fa-times-circle" style={{ color: 'var(--danger)' }}></i></td>
-                    <td>
-                      <button className="btn btn-primary btn-sm" onClick={() => alert('Editing user: Alex Johnson')}><i className="fas fa-edit"></i></button>
-                      <button className="btn btn-info btn-sm" onClick={() => { if (window.confirm('Reset password for Alex Johnson?')) alert('Password reset initiated.'); }}><i className="fas fa-key"></i></button>
-                      <button className="btn btn-danger btn-sm" onClick={() => { if (window.confirm('Permanently delete user Alex Johnson?')) alert('User scheduled for deletion.'); }}><i className="fas fa-trash"></i></button>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center' }}>
-                        <img src="https://ui-avatars.com/api/?name=Maria+Garcia&background=38b000&color=fff" alt="User" style={{ width: 32, height: 32, borderRadius: '50%', marginRight: 10 }} />
-                        <div><div>Maria Garcia</div><small>maria.garcia@oceancare.com</small></div>
-                      </div>
-                    </td>
-                    <td><span className="user-role role-admin">Administrator</span></td>
-                    <td>Today, 09:15</td>
-                    <td><span className="user-status status-active">Active</span></td>
-                    <td><i className="fas fa-check-circle" style={{ color: 'var(--success)' }}></i></td>
-                    <td>
-                      <button className="btn btn-primary btn-sm" onClick={() => alert('Editing user: Maria Garcia')}><i className="fas fa-edit"></i></button>
-                      <button className="btn btn-info btn-sm" onClick={() => { if (window.confirm('Reset password for Maria Garcia?')) alert('Password reset initiated.'); }}><i className="fas fa-key"></i></button>
-                      <button className="btn btn-danger btn-sm" onClick={() => { if (window.confirm('Permanently delete user Maria Garcia?')) alert('User scheduled for deletion.'); }}><i className="fas fa-trash"></i></button>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center' }}>
-                        <img src="https://ui-avatars.com/api/?name=Robert+Smith&background=ff9e00&color=fff" alt="User" style={{ width: 32, height: 32, borderRadius: '50%', marginRight: 10 }} />
-                        <div><div>Robert Smith</div><small>robert.smith@oceancare.com</small></div>
-                      </div>
-                    </td>
-                    <td><span className="user-role role-crew">Crew Member</span></td>
-                    <td>Oct 24, 2023</td>
-                    <td><span className="user-status status-inactive">Inactive</span></td>
-                    <td><i className="fas fa-times-circle" style={{ color: 'var(--danger)' }}></i></td>
-                    <td>
-                      <button className="btn btn-primary btn-sm" onClick={() => alert('Editing user: Robert Smith')}><i className="fas fa-edit"></i></button>
-                      <button className="btn btn-info btn-sm" onClick={() => { if (window.confirm('Reset password for Robert Smith?')) alert('Password reset initiated.'); }}><i className="fas fa-key"></i></button>
-                      <button className="btn btn-danger btn-sm" onClick={() => { if (window.confirm('Permanently delete user Robert Smith?')) alert('User scheduled for deletion.'); }}><i className="fas fa-trash"></i></button>
-                    </td>
-                  </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div className="pagination">
-                <div className="pagination-info">Showing 1-4 of 142 users</div>
-                <div className="pagination-controls">
-                  {[1,2,3,4,5].map(p => (
-                    <button key={p} className={`page-btn ${p===1?'active':''}`} onClick={() => alert(`Loading page ${p}...`)}>{p}</button>
-                  ))}
-                  <button className="page-btn" onClick={() => alert('Loading next page...')}>Next</button>
-                </div>
-              </div>
-          </div>
-
-          {/* System Configuration */}
-          <div className="system-config">
-            <div className="section-header">
-              <div className="section-title">System Configuration</div>
-              <button className="btn btn-primary" onClick={(e) => { const el = e.currentTarget; const t = el.innerHTML; el.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...'; setTimeout(() => { el.innerHTML = t; alert('System configuration saved successfully!'); }, 1500); }}><i className="fas fa-save"></i> Save Changes</button>
-            </div>
-            <div className="config-tabs">
-              <div className={`config-tab ${activeTab==='alerts'?'active':''}`} onClick={() => setActiveTab('alerts')} data-tab="alerts">Health Alerts</div>
-              <div className={`config-tab ${activeTab==='backup'?'active':''}`} onClick={() => setActiveTab('backup')} data-tab="backup">Backup Settings</div>
-              <div className={`config-tab ${activeTab==='security'?'active':''}`} onClick={() => setActiveTab('security')} data-tab="security">Security Policies</div>
-              <div className={`config-tab ${activeTab==='integrations'?'active':''}`} onClick={() => setActiveTab('integrations')} data-tab="integrations">Integrations</div>
-            </div>
-            <div className={`config-content ${activeTab==='alerts'?'active':''}`} id="alerts-content">
-              <div className="config-section">
-                <div className="config-title">Health Monitoring Thresholds</div>
-                <div className="config-grid">
-                  <div className="config-card">
-                    <div className="config-header"><div className="config-name">Heart Rate Alert</div><label className="toggle-switch"><input type="checkbox" defaultChecked /><span className="slider"></span></label></div>
-                    <div className="config-details">
-                      <div className="detail-item"><span className="detail-label">Threshold:</span><span className="detail-value">&gt; 120 BPM for 10 min</span></div>
-                      <div className="detail-item"><span className="detail-label">Action:</span><span className="detail-value">Trigger SOS Alert</span></div>
-                      <div className="detail-item"><span className="detail-label">Notification:</span><span className="detail-value">SMS & Email</span></div>
-                    </div>
-                    <div className="config-actions"><button className="btn btn-sm" onClick={() => alert('Edit Heart Rate Alert')}><i className="fas fa-edit"></i> Edit</button><button className="btn btn-sm" onClick={() => alert('Test Heart Rate Alert')}><i className="fas fa-bell"></i> Test</button></div>
-                  </div>
-                  <div className="config-card">
-                    <div className="config-header"><div className="config-name">Blood Pressure Alert</div><label className="toggle-switch"><input type="checkbox" defaultChecked /><span className="slider"></span></label></div>
-                    <div className="config-details">
-                      <div className="detail-item"><span className="detail-label">Systolic Threshold:</span><span className="detail-value">&gt; 180 mmHg</span></div>
-                      <div className="detail-item"><span className="detail-label">Diastolic Threshold:</span><span className="detail-value">&gt; 120 mmHg</span></div>
-                      <div className="detail-item"><span className="detail-label">Notification:</span><span className="detail-value">Email & On-screen</span></div>
-                    </div>
-                    <div className="config-actions"><button className="btn btn-sm" onClick={() => alert('Edit BP Alert')}><i className="fas fa-edit"></i> Edit</button><button className="btn btn-sm" onClick={() => alert('Test BP Alert')}><i className="fas fa-bell"></i> Test</button></div>
-                  </div>
-                  <div className="config-card">
-                    <div className="config-header"><div className="config-name">Temperature Alert</div><label className="toggle-switch"><input type="checkbox" defaultChecked /><span className="slider"></span></label></div>
-                    <div className="config-details">
-                      <div className="detail-item"><span className="detail-label">Threshold:</span><span className="detail-value">&gt; 39°C (102.2°F)</span></div>
-                      <div className="detail-item"><span className="detail-label">Duration:</span><span className="detail-value">30 minutes</span></div>
-                      <div className="detail-item"><span className="detail-label">Notification:</span><span className="detail-value">Email Only</span></div>
-                    </div>
-                    <div className="config-actions"><button className="btn btn-sm" onClick={() => alert('Edit Temperature Alert')}><i className="fas fa-edit"></i> Edit</button><button className="btn btn-sm" onClick={() => alert('Test Temperature Alert')}><i className="fas fa-bell"></i> Test</button></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Compliance & Audit */}
-          <div className="compliance-audit">
-            <div className="section-header"><div className="section-title">Recent Audit Logs</div><button className="btn btn-primary" onClick={() => { alert('Exporting audit logs...'); setTimeout(() => alert('Audit logs exported successfully!'), 1000); }}><i className="fas fa-file-export"></i> Export Logs</button></div>
-            <div className="table-responsive">
-              <table className="audit-table">
-                <thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Resource</th><th>IP Address</th><th>Status</th></tr></thead>
-                <tbody>
-                  <tr><td>2023-10-26 14:25:32</td><td>Dr. Michael Chen</td><td><span className="audit-action action-update">Updated</span></td><td>Patient Record #MC-2310</td><td>192.168.1.45</td><td><i className="fas fa-check-circle" style={{ color: 'var(--success)' }}></i></td></tr>
-                  <tr><td>2023-10-26 13:40:15</td><td>Alex Johnson</td><td><span className="audit-action action-create">Created</span></td><td>Inventory Item #INV-2042</td><td>192.168.1.67</td><td><i className="fas fa-check-circle" style={{ color: 'var(--success)' }}></i></td></tr>
-                  <tr><td>2023-10-26 12:15:08</td><td>Maria Garcia</td><td><span className="audit-action action-login">Login</span></td><td>System Access</td><td>192.168.1.12</td><td><i className="fas fa-check-circle" style={{ color: 'var(--success)' }}></i></td></tr>
-                  <tr><td>2023-10-26 11:30:45</td><td>Robert Smith</td><td><span className="audit-action action-delete">Deleted</span></td><td>User Account #USR-087</td><td>192.168.1.89</td><td><i className="fas fa-check-circle" style={{ color: 'var(--success)' }}></i></td></tr>
-                  <tr><td>2023-10-26 10:20:33</td><td>Sarah Johnson</td><td><span className="audit-action action-update">Modified</span></td><td>System Configuration</td><td>192.168.1.01</td><td><i className="fas fa-check-circle" style={{ color: 'var(--success)' }}></i></td></tr>
+                  {loading && (<tr><td colSpan={3}>Loading…</td></tr>)}
+                  {!loading && items.length === 0 && (<tr><td colSpan={3}>No users found</td></tr>)}
+                  {!loading && items.map((u) => {
+                    const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(u.fullName || 'User')}&background=3a86ff&color=fff`;
+                    const roleClass = u.role==='admin'?'role-admin':u.role==='health'?'role-medical':u.role==='inventory'?'role-inventory':u.role==='crew'?'role-crew':u.role==='emergency'?'role-emergency':'';// eslint-disable-next-line no-lone-blocks
+                    const statusClass = (u.status||'active').toLowerCase()==='active'?'status-active':(u.status||'active').toLowerCase()==='inactive'?'status-inactive':'status-pending';
+                    return (
+                      <tr key={u._id}>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <img src={avatar} alt="User" style={{ width: 32, height: 32, borderRadius: '50%', marginRight: 10 }} />
+                            <div><div>{u.fullName}</div><small>{u.email}</small></div>
+                          </div>
+                        </td>
+                        <td><span className={`user-role ${roleClass}`}>{u.role}</span></td>
+                        <td><span className={`user-status ${statusClass}`}>{(u.status||'active').toLowerCase()}</span></td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
             <div className="pagination">
-              <div className="pagination-info">Showing 1-5 of 2487 audit entries</div>
+              <div className="pagination-info">Page {page} of {pages} • {total} users</div>
               <div className="pagination-controls">
-                {[1,2,3,4,5].map(p => (
-                  <button key={p} className={`page-btn ${p===1?'active':''}`} onClick={() => alert(`Loading page ${p}...`)}>{p}</button>
+                  {Array.from({ length: Math.min(5, pages) }, (_, i) => i + 1).map(p => (
+                    <button key={p} className={`page-btn ${p===page?'active':''}`} onClick={() => setPage(p)}>{p}</button>
+                  ))}
+                  <button className="page-btn" onClick={() => setPage((p)=> Math.min(p+1, pages))}>Next</button>
+              </div>
+            </div>
+          </div>
+
+          
+
+          {/* Compliance & Audit (Read-Only from backend) */}
+          <div className="compliance-audit">
+            <div className="section-header"><div className="section-title">Recent Audit Logs</div></div>
+            {aError && (
+              <div style={{background:'#ffe5e5', color:'#b00020', padding: '10px 12px', borderRadius: 8, marginBottom: 12}}>
+                <strong>Error:</strong> {aError}
+              </div>
+            )}
+            <div className="table-responsive">
+              <table className="audit-table">
+                <thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>Resource</th><th>IP Address</th><th>Status</th></tr></thead>
+                <tbody>
+                  {aLoading && (<tr><td colSpan={6}>Loading…</td></tr>)}
+                  {!aLoading && aItems.length === 0 && (<tr><td colSpan={6}>No audit logs found</td></tr>)}
+                  {!aLoading && aItems.map((row) => {
+                    const action = (row.action || '').toLowerCase();
+                    const actionClass = action === 'create' ? 'action-create' : action === 'update' ? 'action-update' : action === 'delete' ? 'action-delete' : action === 'login' || action === 'access' ? 'action-login' : 'action-other';
+                    const ok = (row.status || 'success').toString().toLowerCase();
+                    const userName = row.userName || row.user_name || row.user || 'System';
+                    return (
+                      <tr key={row._id}>
+                        <td>{row.timestamp ? new Date(row.timestamp).toLocaleString() : ''}</td>
+                        <td>{userName}</td>
+                        <td><span className={`audit-action ${actionClass}`}>{(row.action || '').charAt(0).toUpperCase() + (row.action || '').slice(1)}</span></td>
+                        <td>{row.resource || '-'}</td>
+                        <td>{row.ipAddress || row.ip || '-'}</td>
+                        <td>{ok.includes('success') || ok==='ok' || ok==='200' ? <i className="fas fa-check-circle" style={{ color: 'var(--success)' }}></i> : <i className="fas fa-times-circle" style={{ color: 'var(--danger)' }}></i>}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="pagination">
+              <div className="pagination-info">Page {aPage} of {aPages} • {aTotal} audit entries</div>
+              <div className="pagination-controls">
+                {Array.from({ length: Math.min(5, aPages) }, (_, i) => i + 1).map(p => (
+                  <button key={p} className={`page-btn ${p===aPage?'active':''}`} onClick={() => fetchAudit(p)}>{p}</button>
                 ))}
-                <button className="page-btn" onClick={() => alert('Loading next page...')}>Next</button>
+                <button className="page-btn" onClick={() => fetchAudit(Math.min(aPage + 1, aPages))}>Next</button>
               </div>
             </div>
           </div>
         </main>
       </div>
 
-      {/* Create User Modal */}
-      {createUserOpen && (
-        <div className="modal" onClick={(e) => { if (e.target.classList.contains('modal')) setCreateUserOpen(false); }}>
-          <div className="modal-content">
-            <div className="modal-header">
-              <div className="modal-title">Create New User Account</div>
-              <button className="close-modal" onClick={() => setCreateUserOpen(false)}>&times;</button>
-            </div>
-            <div className="modal-body">
-              <div className="form-row">
-                <div className="form-group"><label className="form-label">First Name</label><input type="text" className="form-control" placeholder="Enter first name" /></div>
-                <div className="form-group"><label className="form-label">Last Name</label><input type="text" className="form-control" placeholder="Enter last name" /></div>
-              </div>
-              <div className="form-group"><label className="form-label">Email Address</label><input type="email" className="form-control" placeholder="Enter email address" /></div>
-              <div className="form-row">
-                <div className="form-group"><label className="form-label">User Role</label>
-                  <select className="form-control"><option>Select Role</option><option>Administrator</option><option>Medical Officer</option><option>Inventory Manager</option><option>Crew Member</option><option>Read-Only User</option></select>
-                </div>
-                <div className="form-group"><label className="form-label">Vessel Assignment</label>
-                  <select className="form-control"><option>MV Ocean Explorer</option><option>MV Pacific Star</option><option>MV Coral Princess</option><option>MV Deep Blue</option><option>All Vessels</option></select>
-                </div>
-              </div>
-              <div className="form-group"><label className="form-label">Permissions</label>
-                <div className="checkbox-group">
-                  <label className="checkbox-item"><input type="checkbox" defaultChecked /> Read Access</label>
-                  <label className="checkbox-item"><input type="checkbox" defaultChecked /> Write Access</label>
-                  <label className="checkbox-item"><input type="checkbox" /> Delete Access</label>
-                  <label className="checkbox-item"><input type="checkbox" /> Admin Privileges</label>
-                </div>
-              </div>
-              <div className="form-group"><label className="form-label">Security Settings</label>
-                <div className="checkbox-group">
-                  <label className="checkbox-item"><input type="checkbox" /> Enable Multi-Factor Authentication</label>
-                  <label className="checkbox-item"><input type="checkbox" defaultChecked /> Password Expiry (90 days)</label>
-                  <label className="checkbox-item"><input type="checkbox" defaultChecked /> Session Timeout (30 min)</label>
-                </div>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn" onClick={() => setCreateUserOpen(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={() => { alert('User account created successfully!'); setCreateUserOpen(false); setTimeout(() => alert('Welcome email sent and account activated.'), 1000); }}><i className="fas fa-user-plus"></i> Create User</button>
-            </div>
-          </div>
-        </div>
-      )}
+      
     </div>
   );
 }

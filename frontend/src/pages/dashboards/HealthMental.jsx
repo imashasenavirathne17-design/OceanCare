@@ -677,9 +677,15 @@ function HealthMental() {
                           <td><span className={`status-badge ${riskBadgeClass(obs.riskLevel)}`}>{riskLabels[obs.riskLevel] || obs.riskLevel}</span></td>
                           <td><span className={`status-badge ${statusBadgeClass(obs.status)}`}>{statusLabels[obs.status] || obs.status}</span></td>
                           <td className="action-buttons">
-                            <button className="btn btn-outline btn-sm" onClick={() => handleViewObservation(obs)}>View</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => handleEditObservation(obs)}>Edit</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => handleDeleteObservation(obs)}>Delete</button>
+                            <button className="btn btn-action btn-sm" onClick={() => handleViewObservation(obs)}>
+                              <i className="fas fa-book"></i> View
+                            </button>
+                            <button className="btn btn-action btn-sm" onClick={() => handleEditObservation(obs)}>
+                              <i className="fas fa-pen"></i> Edit
+                            </button>
+                            <button className="btn btn-action btn-sm delete" onClick={() => handleDeleteObservation(obs)}>
+                              <i className="fas fa-trash"></i> Delete
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -745,9 +751,15 @@ function HealthMental() {
                           <td>{Array.isArray(session.focusAreas) ? session.focusAreas.join(', ') : session.focusAreas || '—'}</td>
                           <td><span className={`status-badge ${riskBadgeClass(session.riskAssessment)}`}>{riskLabels[session.riskAssessment] || session.riskAssessment}</span></td>
                           <td className="action-buttons">
-                            <button className="btn btn-outline btn-sm" onClick={() => handleViewSession(session)}>View</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => handleEditSession(session)}>Edit</button>
-                            <button className="btn btn-outline btn-sm" onClick={() => handleDeleteSession(session)}>Delete</button>
+                            <button className="btn btn-action btn-sm" onClick={() => handleViewSession(session)}>
+                              <i className="fas fa-book"></i> View
+                            </button>
+                            <button className="btn btn-action btn-sm" onClick={() => handleEditSession(session)}>
+                              <i className="fas fa-pen"></i> Edit
+                            </button>
+                            <button className="btn btn-action btn-sm delete" onClick={() => handleDeleteSession(session)}>
+                              <i className="fas fa-trash"></i> Delete
+                            </button>
                           </td>
                         </tr>
                       ))}

@@ -1,33 +1,205 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { clearSession, getUser } from '../../lib/token';
 import './healthOfficerDashboard.css';
-import HealthSidebar from './HealthSidebar';
+import HealthPageLayout from './HealthPageLayout';
+import {
+  listExaminations,
+  listVaccinations,
+  listInventoryAlerts,
+  listMedicalRecords,
+  listHealthEmergencies,
+} from '../../lib/healthApi';
+
+const FALLBACK_EXAMS = [
+  { crewName: 'John Doe', crewId: 'CD12345', examType: 'Annual Physical', scheduledFor: '2025-10-25T10:00:00Z', status: 'Scheduled' },
+  { crewName: 'Jane Smith', crewId: 'CD12346', examType: 'Follow-up', scheduledFor: '2025-10-27T11:00:00Z', status: 'Scheduled' },
+  { crewName: 'Robert Brown', crewId: 'CD12347', examType: 'Post-Incident Check', scheduledFor: '2025-10-30T09:30:00Z', status: 'Pending' },
+  { crewName: 'Lisa Chen', crewId: 'CD12348', examType: 'Pre-Voyage Assessment', scheduledFor: '2025-11-02T13:45:00Z', status: 'Scheduled' },
+];
+
+const FALLBACK_VACCINES = [
+  { vaccine: 'Influenza', dueCount: 12, overdue: 3 },
+  { vaccine: 'Tetanus', dueCount: 8, overdue: 2 },
+  { vaccine: 'Hepatitis A & B', dueCount: 5, overdue: 0 },
+  { vaccine: 'COVID-19 Booster', dueCount: 15, overdue: 5 },
+];
+
+const FALLBACK_ACTIVITIES = [
+  { icon: 'fas fa-stethoscope', title: 'Medical Examination Completed', desc: 'John Doe - Routine check-up', time: '2025-10-24T10:30:00Z' },
+  { icon: 'fas fa-vial', title: 'Lab Results Added', desc: 'Maria Rodriguez - Diabetes panel', time: '2025-10-23T15:15:00Z' },
+  { icon: 'fas fa-syringe', title: 'Vaccination Administered', desc: 'Influenza vaccine - 5 crew members', time: '2025-10-22T09:45:00Z' },
+  { icon: 'fas fa-pills', title: 'Inventory Alert Sent', desc: 'Low stock: Insulin (3 doses remaining)', time: '2025-10-21T14:30:00Z' },
+];
+
+const FALLBACK_SCHEDULE = [
+  { time: '2025-10-24T10:00:00Z', title: 'James Wilson - Hypertension Review', desc: 'Chronic condition follow-up', status: 'High Priority' },
+  { time: '2025-10-24T11:30:00Z', title: 'Vaccination Clinic', desc: 'Influenza vaccines for deck crew', status: 'Scheduled' },
+  { time: '2025-10-24T14:00:00Z', title: 'Mental Health Session', desc: 'Group therapy - Stress management', status: 'Scheduled' },
+  { time: '2025-10-24T15:30:00Z', title: 'Health Education Workshop', desc: 'Hand hygiene best practices', status: 'Scheduled' },
+];
+
+const FALLBACK_ALERTS = [
+  { crewName: 'James Wilson', crewId: 'CD12347', summary: 'Hypertension - Elevated readings', updatedAt: '2025-10-18T00:00:00Z', priority: 'High' },
+  { crewName: 'Michael Brown', crewId: 'CD12349', summary: 'Respiratory infection - No improvement', updatedAt: '2025-10-20T00:00:00Z', priority: 'Medium' },
+  { crewName: 'Anna Kowalski', crewId: 'CD12350', summary: 'Mental health - Anxiety symptoms', updatedAt: '2025-10-15T00:00:00Z', priority: 'Medium' },
+];
+
+const formatDateTime = (iso) => {
+  if (!iso) return '—';
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return iso;
+  return dt.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const shortDate = (iso) => {
+  if (!iso) return '—';
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return iso;
+  return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+};
 
 export default function HealthDashboard() {
   const navigate = useNavigate();
-  const user = getUser();
 
-  // Stats for top grid (match sample numbers)
-  const stats = useMemo(() => ([
-    { icon: 'fas fa-exclamation-circle', value: 3, label: 'Pending Examinations', tone: 'danger' },
-    { icon: 'fas fa-heartbeat', value: 5, label: 'Chronic Patients', tone: 'warning' },
-    { icon: 'fas fa-syringe', value: 8, label: 'Vaccination Alerts', tone: 'primary' },
-    { icon: 'fas fa-pills', value: 2, label: 'Low Stock Items', tone: 'info' },
-  ]), []);
+  const [loading, setLoading] = useState(false);
+  const [stats, setStats] = useState([
+    { icon: 'fas fa-exclamation-circle', value: 0, label: 'Pending Examinations', tone: 'danger' },
+    { icon: 'fas fa-heartbeat', value: 0, label: 'Chronic Patients', tone: 'warning' },
+    { icon: 'fas fa-syringe', value: 0, label: 'Vaccination Alerts', tone: 'primary' },
+    { icon: 'fas fa-pills', value: 0, label: 'Low Stock Items', tone: 'info' },
+  ]);
+  const [activities, setActivities] = useState(FALLBACK_ACTIVITIES);
+  const [schedule, setSchedule] = useState(FALLBACK_SCHEDULE);
+  const [upcomingExams, setUpcomingExams] = useState(FALLBACK_EXAMS);
+  const [vaccinationSummary, setVaccinationSummary] = useState(FALLBACK_VACCINES);
+  const [criticalAlerts, setCriticalAlerts] = useState(FALLBACK_ALERTS);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchDashboard = async () => {
+      setLoading(true);
+      try {
+        const [examData, vaccineData, emergencyData, recordData, inventoryAlerts] = await Promise.all([
+          listExaminations('upcoming').catch(() => FALLBACK_EXAMS),
+          listVaccinations({ status: 'due' }).catch(() => FALLBACK_VACCINES),
+          listHealthEmergencies({ status: 'open' }).catch(() => []),
+          listMedicalRecords({ limit: 5 }).catch(() => []),
+          listInventoryAlerts({ severity: 'critical' }).catch(() => []),
+        ]);
+
+        if (!mounted) return;
+
+        const normalizedExams = Array.isArray(examData) && examData.length ? examData.slice(0, 4).map((exam) => ({
+          crewName: exam.crewName || exam.crew?.fullName || '—',
+          crewId: exam.crewId || exam.crew?.crewId || '—',
+          examType: exam.examType || exam.type || 'General',
+          scheduledFor: exam.scheduledFor || exam.date || exam.performedAt,
+          status: exam.status || 'Scheduled',
+        })) : FALLBACK_EXAMS;
+
+        const normalizedVaccines = Array.isArray(vaccineData) && vaccineData.length ? vaccineData.slice(0, 4).map((v) => ({
+          vaccine: v.vaccine || v.name || 'Vaccine',
+          dueCount: v.dueCount ?? v.dueSoon ?? 0,
+          overdue: v.overdue ?? v.overdueCount ?? 0,
+        })) : FALLBACK_VACCINES;
+
+        const normalizedAlerts = Array.isArray(emergencyData) && emergencyData.length ? emergencyData.slice(0, 3).map((alert) => ({
+          crewName: alert.crewName || alert.subject || '—',
+          crewId: alert.crewId || alert.referenceId || '—',
+          summary: alert.summary || alert.description || 'Critical issue',
+          updatedAt: alert.updatedAt || alert.createdAt,
+          priority: (alert.severity || alert.priority || 'Medium').toString(),
+        })) : FALLBACK_ALERTS;
+
+        setUpcomingExams(normalizedExams);
+        setVaccinationSummary(normalizedVaccines);
+        setCriticalAlerts(normalizedAlerts);
+
+        const pendingExams = normalizedExams.filter((e) => (e.status || '').toLowerCase().includes('pending') || (e.status || '').toLowerCase().includes('schedule')).length;
+        const chronicPatients = Array.isArray(recordData) ? recordData.filter((r) => (r.chronicConditions || []).length).length : 0;
+        const vaccinationAlerts = normalizedVaccines.reduce((sum, v) => sum + (Number(v.overdue) || 0), 0);
+        const lowStockItems = Array.isArray(inventoryAlerts) ? inventoryAlerts.length : 0;
+
+        setStats([
+          { icon: 'fas fa-exclamation-circle', value: pendingExams, label: 'Pending Examinations', tone: 'danger' },
+          { icon: 'fas fa-heartbeat', value: chronicPatients, label: 'Chronic Patients', tone: 'warning' },
+          { icon: 'fas fa-syringe', value: vaccinationAlerts, label: 'Vaccination Alerts', tone: 'primary' },
+          { icon: 'fas fa-pills', value: lowStockItems, label: 'Low Stock Items', tone: 'info' },
+        ]);
+
+        if (Array.isArray(recordData) && recordData.length) {
+          const normalizedActivity = recordData.slice(0, 4).map((record) => ({
+            icon: 'fas fa-file-medical',
+            title: record.title || record.recordType || 'Medical Record Update',
+            desc: record.notes || record.summary || record.condition || 'Record updated.',
+            time: record.updatedAt || record.createdAt,
+          }));
+          setActivities(normalizedActivity);
+        } else {
+          setActivities(FALLBACK_ACTIVITIES);
+        }
+
+        if (Array.isArray(examData) && examData.length) {
+          const normalizedSchedule = examData.slice(0, 4).map((exam) => ({
+            time: exam.scheduledFor || exam.date || exam.performedAt,
+            title: `${exam.crewName || exam.crew?.fullName || 'Crew Member'} - ${exam.examType || exam.type || 'Examination'}`,
+            desc: exam.notes || exam.summary || 'Scheduled medical activity',
+            status: exam.status || 'Scheduled',
+          }));
+          setSchedule(normalizedSchedule);
+        } else {
+          setSchedule(FALLBACK_SCHEDULE);
+        }
+      } catch (err) {
+        console.warn('Failed to load dashboard data, using fallbacks', err);
+        if (!mounted) return;
+        setUpcomingExams(FALLBACK_EXAMS);
+        setVaccinationSummary(FALLBACK_VACCINES);
+        setCriticalAlerts(FALLBACK_ALERTS);
+        setActivities(FALLBACK_ACTIVITIES);
+        setSchedule(FALLBACK_SCHEDULE);
+        setStats([
+          { icon: 'fas fa-exclamation-circle', value: FALLBACK_EXAMS.length, label: 'Pending Examinations', tone: 'danger' },
+          { icon: 'fas fa-heartbeat', value: 5, label: 'Chronic Patients', tone: 'warning' },
+          { icon: 'fas fa-syringe', value: FALLBACK_VACCINES.reduce((sum, v) => sum + v.overdue, 0), label: 'Vaccination Alerts', tone: 'primary' },
+          { icon: 'fas fa-pills', value: FALLBACK_ALERTS.length, label: 'Low Stock Items', tone: 'info' },
+        ]);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    fetchDashboard();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Simple modal controls for quick actions
   const [modals, setModals] = useState({ record: false, exam: false, vaccine: false, reminder: false, report: false, education: false, emergency: false });
   const open = (k) => setModals((m) => ({ ...m, [k]: true }));
   const close = (k) => setModals((m) => ({ ...m, [k]: false }));
 
-  // Quick sample data
+  const modalTitles = useMemo(() => ({
+    record: 'Add Medical Record',
+    exam: 'Record Examination',
+    vaccine: 'Log Vaccination',
+    reminder: 'Set Reminder',
+    report: 'Generate Report',
+    education: 'Publish Content',
+  }), []);
+
   const quickStats = useMemo(() => ([
-    { label: 'Pending Exams', value: 6, icon: 'fas fa-clipboard-check', color: 'var(--info)' },
-    { label: 'Chronic Patients', value: 18, icon: 'fas fa-heartbeat', color: 'var(--warning)' },
-    { label: 'Vaccination Alerts', value: 5, icon: 'fas fa-syringe', color: 'var(--danger)' },
-    { label: 'Upcoming Follow-ups', value: 9, icon: 'fas fa-bell', color: 'var(--success)' },
-  ]), []);
+    { label: 'Pending Exams', value: stats[0]?.value ?? 0, icon: 'fas fa-clipboard-check', color: 'var(--info)' },
+    { label: 'Chronic Patients', value: stats[1]?.value ?? 0, icon: 'fas fa-heartbeat', color: 'var(--warning)' },
+    { label: 'Vaccination Alerts', value: stats[2]?.value ?? 0, icon: 'fas fa-syringe', color: 'var(--danger)' },
+    { label: 'Low Stock Alerts', value: stats[3]?.value ?? 0, icon: 'fas fa-pills', color: 'var(--primary)' },
+  ]), [stats]);
 
   // Medical Records form state
   const [recordForm, setRecordForm] = useState({
@@ -81,57 +253,24 @@ export default function HealthDashboard() {
     }
   };
 
-  // Reminders
-  const [reminders, setReminders] = useState([
-    { title: 'Insulin - John D', schedule: 'Daily 08:00', status: 'pending' },
-    { title: 'Follow-up - Jane S', schedule: '2025-09-25 10:00', status: 'scheduled' },
-  ]);
-
-  // Vaccinations
-  const [vaccineFilter, setVaccineFilter] = useState('all');
-  const vaccinationRows = useMemo(() => ([
-    { crewId: 'CR-1001', name: 'John Doe', vaccine: 'Tetanus', due: '2025-10-10', status: 'overdue' },
-    { crewId: 'CR-1002', name: 'Jane Smith', vaccine: 'Influenza', due: '2025-10-25', status: 'upcoming' },
-    { crewId: 'CR-1003', name: 'Sam Lee', vaccine: 'Hepatitis B', due: '2025-11-02', status: 'complete' },
-  ]), []);
-
   // Reports
   const [reportRange, setReportRange] = useState({ from: '', to: '' });
 
   // Simple inactivity logout (demo): 30 minutes
-  const onLogout = () => {
-    clearSession();
-    navigate('/login');
-  };
-
-  const scrollToId = (id) => {
-    const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
-  };
-
   return (
-    <div className="health-dashboard">
-      <div className="dashboard-container">
-        <HealthSidebar onLogout={onLogout} />
+    <HealthPageLayout
+      title="Health Officer Dashboard"
+      description="Overview of medical operations aboard MV Ocean Explorer"
+    >
+      {loading && (
+        <div className="alert alert-info" style={{ marginBottom: 16 }}>
+          <i className="fas fa-spinner fa-spin" style={{ marginRight: 8 }}></i>
+          Syncing latest health data…
+        </div>
+      )}
 
-        <main className="main-content">
-          {/* Header */}
-          <div className="header">
-            <h2>Health Officer Dashboard</h2>
-            <div className="user-info">
-              <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.fullName || 'Health Officer')}&background=2a9d8f&color=fff`} alt="User" />
-              <div>
-                <div>{user?.fullName || 'Dr. Sarah Johnson'}</div>
-                <small>Health Officer | MV Ocean Explorer</small>
-              </div>
-              <div className="status-badge status-active">Active</div>
-            </div>
-          </div>
-
-          {/* Alert Banner removed as requested */}
-
-          {/* Dashboard Stats (match reference) */}
-          <div className="stats-container">
+      {/* Dashboard Stats */}
+      <div className="stats-container">
             {stats.map((s, i) => (
               <div key={i} className="stat-card">
                 <div className={`stat-icon ${s.tone}`}>
@@ -145,12 +284,12 @@ export default function HealthDashboard() {
             ))}
           </div>
 
-          {/* Quick Actions */}
-          <section className="dashboard-section">
-            <div className="section-header">
-              <div className="section-title">Quick Actions</div>
-            </div>
-            <div className="quick-actions">
+      {/* Quick Actions */}
+      <section className="dashboard-section">
+        <div className="section-header">
+          <div className="section-title">Quick Actions</div>
+        </div>
+        <div className="quick-actions">
               {[
                 { to: '/dashboard/health/examinations', icon: 'fas fa-stethoscope', title: 'New Examination', desc: 'Record medical examination' },
                 { to: '/dashboard/health/medical-records', icon: 'fas fa-file-medical', title: 'Medical Records', desc: 'Update patient records' },
@@ -165,194 +304,199 @@ export default function HealthDashboard() {
                   <div className="action-desc">{a.desc}</div>
                 </div>
               ))}
-            </div>
-          </section>
+        </div>
+      </section>
 
-          {/* Recent Activity + Upcoming Schedule */}
-          <div className="two-col-grid">
-            {/* Recent Activity */}
-            <div className="activity-container">
-              <div className="section-header">
-                <div className="section-title">Recent Activity</div>
-                <button className="btn btn-outline btn-sm" onClick={() => navigate('/dashboard/health/reports')}>View All</button>
-              </div>
-              <ul className="activity-list">
-                {[
-                  { icon: 'fas fa-stethoscope', title: 'Medical Examination Completed', desc: 'John Doe - Routine check-up', time: '10:30 AM • Today' },
-                  { icon: 'fas fa-vial', title: 'Blood Test Results Added', desc: 'Maria Rodriguez - Diabetes monitoring', time: 'Yesterday • 3:15 PM' },
-                  { icon: 'fas fa-syringe', title: 'Vaccination Administered', desc: 'Influenza vaccine - 5 crew members', time: 'Oct 24 • 9:45 AM' },
-                  { icon: 'fas fa-pills', title: 'Inventory Alert Sent', desc: 'Low stock: Insulin (3 doses remaining)', time: 'Oct 23 • 2:30 PM' },
-                  { icon: 'fas fa-file-medical', title: 'Health Report Generated', desc: 'Monthly health summary - October 2023', time: 'Oct 22 • 11:20 AM' },
-                ].map((a, i) => (
-                  <li key={i} className="activity-item">
+      {/* Recent Activity + Upcoming Schedule */}
+      <div className="two-col-grid">
+        {/* Recent Activity */}
+        <div className="activity-container">
+          <div className="section-header">
+            <div className="section-title">Recent Activity</div>
+            <button className="btn btn-outline btn-sm" onClick={() => navigate('/dashboard/health/reports')}>View All</button>
+          </div>
+          <ul className="activity-list">
+                {activities.map((a, i) => (
+                  <li key={`${a.title}-${i}`} className="activity-item">
                     <div className="activity-icon"><i className={a.icon}></i></div>
                     <div className="activity-content">
                       <div className="activity-title">{a.title}</div>
                       <div className="activity-desc">{a.desc}</div>
-                      <div className="activity-time">{a.time}</div>
+                      <div className="activity-time">{formatDateTime(a.time)}</div>
                     </div>
                   </li>
                 ))}
-              </ul>
-            </div>
+          </ul>
+        </div>
 
-            {/* Upcoming Schedule */}
-            <div className="schedule-container">
-              <div className="section-header">
-                <div className="section-title">Upcoming Schedule</div>
-                <button className="btn btn-outline btn-sm" onClick={() => navigate('/dashboard/health/reminders')}>View Calendar</button>
-              </div>
-              <ul className="schedule-list">
-                {[
-                  { time: '10:00 AM', title: 'James Wilson - Hypertension Review', desc: 'Chronic condition follow-up', status: 'High Priority', cls: 'status-urgent' },
-                  { time: '11:30 AM', title: 'Vaccination Clinic', desc: 'Influenza vaccines for deck crew', status: 'Scheduled', cls: 'status-upcoming' },
-                  { time: '02:00 PM', title: 'Mental Health Session', desc: 'Group therapy - Stress management', status: 'Scheduled', cls: 'status-upcoming' },
-                  { time: '03:30 PM', title: 'Health Education Workshop', desc: 'Hand hygiene best practices', status: 'Scheduled', cls: 'status-upcoming' },
-                  { time: '04:45 PM', title: 'Medical Supplies Check', desc: 'Weekly inventory review', status: 'Scheduled', cls: 'status-upcoming' },
-                ].map((s, i) => (
-                  <li key={i} className="schedule-item">
-                    <div className="schedule-time">{s.time}</div>
-                    <div className="schedule-content">
-                      <div className="schedule-title">{s.title}</div>
-                      <div className="schedule-desc">{s.desc}</div>
-                    </div>
-                    <div className={`schedule-status ${s.cls}`}>{s.status}</div>
-                  </li>
-                ))}
-              </ul>
-            </div>
+        {/* Upcoming Schedule */}
+        <div className="schedule-container">
+          <div className="section-header">
+            <div className="section-title">Upcoming Schedule</div>
+            <button className="btn btn-outline btn-sm" onClick={() => navigate('/dashboard/health/reminders')}>View Calendar</button>
           </div>
+          <ul className="schedule-list">
+                {schedule.map((s, i) => {
+                  const statusLower = (s.status || '').toLowerCase();
+                  const statusClass = statusLower.includes('high') ? 'status-urgent' : 'status-upcoming';
+                  return (
+                    <li key={`${s.title}-${i}`} className="schedule-item">
+                      <div className="schedule-time">{formatDateTime(s.time)}</div>
+                      <div className="schedule-content">
+                        <div className="schedule-title">{s.title}</div>
+                        <div className="schedule-desc">{s.desc}</div>
+                      </div>
+                      <div className={`schedule-status ${statusClass}`}>{s.status}</div>
+                    </li>
+                  );
+                })}
+          </ul>
+        </div>
+      </div>
 
-          {/* Upcoming Examinations */}
-          <div className="dashboard-section">
-            <div className="section-header">
-              <div className="section-title">Upcoming Examinations</div>
-              <div className="section-actions"><button className="btn btn-primary">View All</button></div>
-            </div>
-            <div className="table-responsive">
-              <table>
+      {/* Upcoming Examinations */}
+      <div className="dashboard-section">
+        <div className="section-header">
+          <div className="section-title">Upcoming Examinations</div>
+          <div className="section-actions"><button className="btn btn-primary" onClick={() => navigate('/dashboard/health/examinations')}>View All</button></div>
+        </div>
+        <div className="table-responsive">
+          <table>
                 <thead>
                   <tr><th>Crew Member</th><th>Exam Type</th><th>Date</th><th>Status</th></tr>
                 </thead>
                 <tbody>
-                  <tr><td>John Doe (CD12345)</td><td>Annual Physical</td><td>Oct 25, 2025</td><td><span className="status-indicator status-pending"></span> Scheduled</td></tr>
-                  <tr><td>Jane Smith (CD12346)</td><td>Follow-up</td><td>Oct 27, 2025</td><td><span className="status-indicator status-pending"></span> Scheduled</td></tr>
-                  <tr><td>Robert Brown (CD12347)</td><td>Post-Incident Check</td><td>Oct 30, 2025</td><td><span className="status-indicator status-warning"></span> Pending</td></tr>
-                  <tr><td>Lisa Chen (CD12348)</td><td>Pre-Voyage Assessment</td><td>Nov 2, 2025</td><td><span className="status-indicator status-pending"></span> Scheduled</td></tr>
+                  {upcomingExams.map((exam, i) => {
+                    const statusLower = (exam.status || '').toLowerCase();
+                    const cls = statusLower.includes('pending') || statusLower.includes('schedule') ? 'status-pending' : 'status-warning';
+                    return (
+                      <tr key={`${exam.crewId}-${i}`}>
+                        <td>{`${exam.crewName || '—'} (${exam.crewId || '—'})`}</td>
+                        <td>{exam.examType}</td>
+                        <td>{shortDate(exam.scheduledFor)}</td>
+                        <td><span className={`status-indicator ${cls}`}></span> {exam.status}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
-              </table>
-            </div>
-          </div>
+          </table>
+        </div>
+      </div>
 
-            {/* Vaccination Status */}
-            <div className="dashboard-section">
-              <div className="section-header">
-                <div className="section-title">Vaccination Status</div>
-                <div className="section-actions"><button className="btn btn-primary">Manage</button></div>
-              </div>
-              <div className="table-responsive">
-                <table>
+        {/* Vaccination Status */}
+        <div className="dashboard-section">
+          <div className="section-header">
+            <div className="section-title">Vaccination Status</div>
+            <div className="section-actions"><button className="btn btn-primary" onClick={() => navigate('/dashboard/health/vaccination')}>Manage</button></div>
+          </div>
+          <div className="table-responsive">
+            <table>
                   <thead>
                     <tr><th>Vaccine</th><th>Due Count</th><th>Overdue</th><th>Action</th></tr>
                   </thead>
                   <tbody>
-                    <tr><td>Influenza</td><td>12</td><td>3</td><td><button className="btn btn-outline">Schedule</button></td></tr>
-                    <tr><td>Tetanus</td><td>8</td><td>2</td><td><button className="btn btn-outline">Schedule</button></td></tr>
-                    <tr><td>Hepatitis A & B</td><td>5</td><td>0</td><td><button className="btn btn-outline">Schedule</button></td></tr>
-                    <tr><td>COVID-19 Booster</td><td>15</td><td>5</td><td><button className="btn btn-outline">Schedule</button></td></tr>
+                    {vaccinationSummary.map((row, i) => (
+                      <tr key={`${row.vaccine}-${i}`}>
+                        <td>{row.vaccine}</td>
+                        <td>{row.dueCount}</td>
+                        <td>{row.overdue}</td>
+                        <td><button className="btn btn-action btn-sm" onClick={() => navigate('/dashboard/health/vaccination')}><i className="fas fa-calendar-plus"></i> Schedule</button></td>
+                      </tr>
+                    ))}
                   </tbody>
-                </table>
-              </div>
-            </div>
+            </table>
+          </div>
+        </div>
 
-          {/* Health Metrics Charts */}
-          <div className="dashboard-section">
-            <div className="section-header"><div className="section-title">Health Metrics Overview</div></div>
-            <div className="charts-container">
-              <div className="chart">
-                <div className="chart-title">Crew Health Status Distribution</div>
-                <div style={{ display: 'flex', height: 160, alignItems: 'flex-end', justifyContent: 'space-around' }}>
-                  <div style={{ background: 'var(--success)', width: '20%', height: '80%', borderRadius: '4px 4px 0 0' }} title="Good: 65%"></div>
-                  <div style={{ background: 'var(--warning)', width: '20%', height: '50%', borderRadius: '4px 4px 0 0' }} title="Needs Attention: 25%"></div>
-                  <div style={{ background: 'var(--danger)', width: '20%', height: '30%', borderRadius: '4px 4px 0 0' }} title="Critical: 10%"></div>
-                </div>
-              </div>
-              <div className="chart">
-                <div className="chart-title">Monthly Consultations</div>
-                <div style={{ display: 'flex', height: 160, alignItems: 'flex-end', justifyContent: 'space-around' }}>
-                  {[
-                    { h: 40, m: 'Jul: 12' },
-                    { h: 60, m: 'Aug: 18' },
-                    { h: 55, m: 'Sep: 16' },
-                    { h: 80, m: 'Oct: 24' },
-                  ].map((b, i) => (
-                    <div key={i} style={{ background: 'var(--primary)', width: '15%', height: `${b.h}%`, borderRadius: '4px 4px 0 0' }} title={b.m}></div>
-                  ))}
-                </div>
-              </div>
+      {/* Health Metrics Charts */}
+      <div className="dashboard-section">
+        <div className="section-header"><div className="section-title">Health Metrics Overview</div></div>
+        <div className="charts-container">
+          <div className="chart">
+            <div className="chart-title">Crew Health Status Distribution</div>
+            <div style={{ display: 'flex', height: 160, alignItems: 'flex-end', justifyContent: 'space-around' }}>
+              <div style={{ background: 'var(--success)', width: '20%', height: '80%', borderRadius: '4px 4px 0 0' }} title="Good: 65%"></div>
+              <div style={{ background: 'var(--warning)', width: '20%', height: '50%', borderRadius: '4px 4px 0 0' }} title="Needs Attention: 25%"></div>
+              <div style={{ background: 'var(--danger)', width: '20%', height: '30%', borderRadius: '4px 4px 0 0' }} title="Critical: 10%"></div>
             </div>
           </div>
-
-          {/* Critical Cases */}
-          <div className="dashboard-section">
-            <div className="section-header">
-              <div className="section-title">Cases Requiring Attention</div>
-              <div className="section-actions"><button className="btn btn-primary" onClick={() => open('emergency')}>Alert Emergency Officer</button></div>
+          <div className="chart">
+            <div className="chart-title">Monthly Consultations</div>
+            <div style={{ display: 'flex', height: 160, alignItems: 'flex-end', justifyContent: 'space-around' }}>
+              {[
+                { h: 40, m: 'Jul: 12' },
+                { h: 60, m: 'Aug: 18' },
+                { h: 55, m: 'Sep: 16' },
+                { h: 80, m: 'Oct: 24' },
+              ].map((b, i) => (
+                <div key={i} style={{ background: 'var(--primary)', width: '15%', height: `${b.h}%`, borderRadius: '4px 4px 0 0' }} title={b.m}></div>
+              ))}
             </div>
-            <div className="table-responsive">
-              <table>
+          </div>
+        </div>
+      </div>
+
+      {/* Critical Cases */}
+      <div className="dashboard-section">
+        <div className="section-header">
+          <div className="section-title">Cases Requiring Attention</div>
+          <div className="section-actions"><button className="btn btn-primary" onClick={() => open('emergency')}>Alert Emergency Officer</button></div>
+        </div>
+        <div className="table-responsive">
+          <table>
                 <thead>
                   <tr><th>Crew Member</th><th>Condition</th><th>Last Update</th><th>Priority</th><th>Action</th></tr>
                 </thead>
                 <tbody>
-                  <tr><td>James Wilson (CD12347)</td><td>Hypertension - Elevated readings</td><td>Oct 18, 2025</td><td><span style={{ color: 'var(--danger)', fontWeight: 600 }}>High</span></td><td><button className="btn btn-outline">Review</button></td></tr>
-                  <tr><td>Michael Brown (CD12349)</td><td>Respiratory infection - No improvement</td><td>Oct 20, 2025</td><td><span style={{ color: 'var(--warning)', fontWeight: 600 }}>Medium</span></td><td><button className="btn btn-outline">Review</button></td></tr>
-                  <tr><td>Anna Kowalski (CD12350)</td><td>Mental health - Anxiety symptoms</td><td>Oct 15, 2025</td><td><span style={{ color: 'var(--warning)', fontWeight: 600 }}>Medium</span></td><td><button className="btn btn-outline">Review</button></td></tr>
+                  {criticalAlerts.map((alert, i) => (
+                    <tr key={`${alert.crewId}-${i}`}>
+                      <td>{`${alert.crewName || '—'} (${alert.crewId || '—'})`}</td>
+                      <td>{alert.summary}</td>
+                      <td>{shortDate(alert.updatedAt)}</td>
+                      <td><span style={{ color: alert.priority?.toLowerCase() === 'high' ? 'var(--danger)' : 'var(--warning)', fontWeight: 600 }}>{alert.priority}</span></td>
+                      <td><button className="btn btn-action btn-sm" onClick={() => navigate('/dashboard/health/emergency')}><i className="fas fa-eye"></i> Review</button></td>
+                    </tr>
+                  ))}
                 </tbody>
-              </table>
+          </table>
+        </div>
+      </div>
+
+      {/* Modals */}
+      {Object.entries(modals).map(([k, v]) => (
+        k !== 'emergency' && v ? (
+          <div key={k} className="modal" style={{ display: 'flex' }} onClick={(e) => e.target.classList.contains('modal') && close(k)}>
+            <div className="modal-content">
+              <div className="modal-header">
+                <h3 className="modal-title">{modalTitles[k] || 'Action'}</h3>
+                <button className="close-modal" onClick={() => close(k)}>&times;</button>
+              </div>
+              <p>Form goes here (mock).</p>
+              <button className="btn btn-primary" onClick={() => close(k)} style={{ width: '100%' }}>OK</button>
             </div>
           </div>
+        ) : null
+      ))}
 
-          {/* Modals */}
-          {Object.entries(modals).map(([k, v]) => (
-            k !== 'emergency' && v ? (
-              <div key={k} className="modal" style={{ display: 'flex' }} onClick={(e) => e.target.classList.contains('modal') && close(k)}>
-                <div className="modal-content">
-                  <div className="modal-header">
-                    <h3 className="modal-title">{({
-                      record: 'Add Medical Record', exam: 'Record Examination', vaccine: 'Log Vaccination', reminder: 'Set Reminder', report: 'Generate Report', education: 'Publish Content'
-                    })[k]}</h3>
-                    <button className="close-modal" onClick={() => close(k)}>&times;</button>
-                  </div>
-                  <p>Form goes here (mock).</p>
-                  <button className="btn btn-primary" onClick={() => close(k)} style={{ width: '100%' }}>OK</button>
-                </div>
-              </div>
-            ) : null
-          ))}
-
-          {modals.emergency && (
-            <div className="modal" style={{ display: 'flex' }} onClick={(e) => e.target.classList.contains('modal') && close('emergency')}>
-              <div className="modal-content">
-                <div className="modal-header">
-                  <h3 className="modal-title">Alert Emergency Officer</h3>
-                  <button className="close-modal" onClick={() => close('emergency')}>&times;</button>
-                </div>
-                <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                  <div style={{ fontSize: 50, color: 'var(--danger)', marginBottom: 15 }}><i className="fas fa-exclamation-triangle"></i></div>
-                  <p>Emergency Officer will be notified immediately.</p>
-                  <p><strong>Are you sure you want to proceed?</strong></p>
-                </div>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button className="btn btn-outline" onClick={() => close('emergency')} style={{ flex: 1 }}>Cancel</button>
-                  <button className="btn btn-danger" onClick={() => { alert('Emergency Officer has been notified!'); close('emergency'); }} style={{ flex: 1 }}>Confirm Alert</button>
-                </div>
-              </div>
+      {modals.emergency && (
+        <div className="modal" style={{ display: 'flex' }} onClick={(e) => e.target.classList.contains('modal') && close('emergency')}>
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3 className="modal-title">Alert Emergency Officer</h3>
+              <button className="close-modal" onClick={() => close('emergency')}>&times;</button>
             </div>
-          )}
-
-        </main>
-      </div>
-    </div>
+            <div style={{ textAlign: 'center', padding: '20px 0' }}>
+              <div style={{ fontSize: 50, color: 'var(--danger)', marginBottom: 15 }}><i className="fas fa-exclamation-triangle"></i></div>
+              <p>Emergency Officer will be notified immediately.</p>
+              <p><strong>Are you sure you want to proceed?</strong></p>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn btn-outline" onClick={() => close('emergency')} style={{ flex: 1 }}>Cancel</button>
+              <button className="btn btn-danger" onClick={() => { alert('Emergency Officer has been notified!'); close('emergency'); }} style={{ flex: 1 }}>Confirm Alert</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </HealthPageLayout>
   );
 }
