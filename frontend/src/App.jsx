@@ -36,6 +36,7 @@ import AdminMessaging from './pages/dashboards/AdminMessaging';
 import EmergencyIncidentLog from './pages/dashboards/EmergencyIncidentLog';
 import EmergencyReports from './pages/dashboards/EmergencyReports';
 import InventoryDashboard from './pages/dashboards/InventoryDashboard';
+import InventoryAlerts from './pages/dashboards/InventoryAlerts';
 import InventoryItems from './pages/dashboards/InventoryItems';
 import InventoryStockManagement from './pages/dashboards/InventoryStockManagement';
 import InventoryExpiryTracking from './pages/dashboards/InventoryExpiryTracking';
@@ -137,6 +138,7 @@ function App() {
 
         <Route element={<RequireAuth roles={["inventory"]} />}>
           <Route path="/dashboard/inventory" element={<InventoryDashboard />} />
+          <Route path="/dashboard/inventory/alerts" element={<InventoryAlerts />} />
           <Route path="/dashboard/inventory/items" element={<InventoryItems />} />
           <Route path="/dashboard/inventory/stock" element={<InventoryStockManagement />} />
           <Route path="/dashboard/inventory/expiry" element={<InventoryExpiryTracking />} />
