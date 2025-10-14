@@ -5,7 +5,7 @@ const ctrl = require('../controllers/inventoryWasteController');
 const router = express.Router();
 
 router.use(authenticate);
-router.use(requireRole('inventory', 'admin'));
+// router.use(requireRole('inventory', 'admin'));
 
 router.get('/', ctrl.list);
 router.post('/', ctrl.create);
