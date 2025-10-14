@@ -79,12 +79,13 @@ export default function HealthMessaging() {
     <MessagingShell
       SidebarComponent={HealthSidebar}
       pageTitle="Health Officer Messaging"
-      contactFilter={['health', 'crew']}
+      contactFilter={['admin', 'health', 'crew']}
       placeholder="Search medical staff or crew"
       statusBadge="Clinic Duty"
       templates={HEALTH_TEMPLATES}
       emptyMessage="Select a health team member or crew profile to begin medical coordination."
       theme={HEALTH_THEME}
+      selfInboxWhenContactIsAdmin
     />
   );
 }
