@@ -27,6 +27,13 @@ function Register() {
   const [form, setForm] = useState({ fullName: '', registerEmail: '', registerPassword: '', confirmPassword: '', vesselName: '', crewId: '', role: '' });
   const [strengthClass, setStrengthClass] = useState('');
 
+  const generateCrewId = () => {
+    const y = new Date().getFullYear().toString().slice(-2);
+    const rand = Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+    const num = Math.floor(1000 + Math.random() * 9000);
+    return `OC-${y}-${rand}-${num}`;
+  };
+
   const onChange = (e) => setForm((f) => ({ ...f, [e.target.id]: e.target.value }));
 
   const onSelectRole = (role) => setForm((f) => ({ ...f, role }));
@@ -68,14 +75,15 @@ function Register() {
       return;
     }
     try {
+      const crewId = form.crewId || (role === 'crew' ? generateCrewId() : undefined);
       await registerUser({
         fullName,
         email: registerEmail,
         password: registerPassword,
         role,
-        crewId: form.crewId || undefined,
+        crewId,
       });
-      alert('Registration successful! Please login to continue.');
+      alert(`Registration successful!${crewId ? `\nYour Crew ID: ${crewId}` : ''} Please login to continue.`);
       navigate('/login');
     } catch (err) {
       const msg = err?.response?.data?.message || 'Registration failed';

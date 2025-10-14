@@ -33,6 +33,14 @@ export default function AdminUserManagement() {
   const [stats, setStats] = useState({ total: 0, active: 0, suspended: 0 });
   const [error, setError] = useState('');
 
+  // Generate a Crew ID when missing (e.g., users who self-register)
+  const generateCrewId = () => {
+    const y = new Date().getFullYear().toString().slice(-2);
+    const rand = Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+    const num = Math.floor(1000 + Math.random() * 9000);
+    return `OC-${y}-${rand}-${num}`;
+  };
+
   const fetchUsers = async (opts = {}) => {
     try {
       setLoading(true);
@@ -171,7 +179,7 @@ export default function AdminUserManagement() {
                         </div>
                       </td>
                       <td><span className={`user-role ${u.role==='admin'?'role-admin':u.role==='inventory'?'role-inventory':u.role==='health'?'role-medical':u.role==='crew'?'role-crew':u.role==='emergency'?'role-emergency':''}`}>{u.role}</span></td>
-                      <td>{u.crewId || '-'}</td>
+                      <td>{u.crewId || u.crewID || u.crew_id || '-'}</td>
                       <td><span className={`user-status ${(u.status||'active').toLowerCase()==='active'?'status-active':(u.status||'active').toLowerCase()==='inactive'?'status-inactive':'status-pending'}`}>{(u.status||'active').toLowerCase()}</span></td>
                       <td>
                         <div className="action-buttons">
@@ -418,7 +426,7 @@ export default function AdminUserManagement() {
                 if (editForm.bloodGroup && !['A+','A-','B+','B-','AB+','AB-','O+','O-'].includes(editForm.bloodGroup)) { alert('Invalid blood group'); return; }
                 if (!phoneOk) { alert('Invalid phone number'); return; }
                 try {
-                  await updateUser(editUser._id, {
+                  const payload = {
                     fullName: editForm.fullName,
                     email: editForm.email,
                     role: editForm.role,
@@ -437,8 +445,13 @@ export default function AdminUserManagement() {
                       postalCode: editForm.addressPostalCode || '',
                       country: editForm.addressCountry || ''
                     }
-                  });
-                  alert('User updated successfully');
+                  };
+                  // Auto-generate crewId if missing and role is crew (or switching to crew)
+                  if (!editUser.crewId && (editForm.role === 'crew' || editUser.role === 'crew')) {
+                    payload.crewId = generateCrewId();
+                  }
+                  await updateUser(editUser._id, payload);
+                  alert(`User updated successfully${payload.crewId ? `\nCrew ID: ${payload.crewId}` : ''}`);
                   setEditOpen(false);
                   setEditUser(null);
                   fetchUsers();
@@ -466,7 +479,7 @@ export default function AdminUserManagement() {
                 <div><strong>Name:</strong> {viewUser.fullName}</div>
                 <div><strong>Email:</strong> {viewUser.email}</div>
                 <div><strong>Role:</strong> {viewUser.role}</div>
-                <div><strong>Crew ID:</strong> {viewUser.crewId || '-'}</div>
+                <div><strong>Crew ID:</strong> {viewUser.crewId || viewUser.crewID || viewUser.crew_id || '-'}</div>
                 <div><strong>Status:</strong> {viewUser.status}</div>
                 <div><strong>DOB:</strong> {viewUser.dob ? new Date(viewUser.dob).toLocaleDateString() : '-'}</div>
                 <div><strong>Gender:</strong> {viewUser.gender || '-'}</div>

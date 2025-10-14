@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import AdminSidebar from './AdminSidebar';
 import { clearSession, getUser } from '../../lib/token';
 import './adminReports.css';
+import { listAuditLogs } from '../../lib/auditLogApi';
+import { listUsers } from '../../lib/users';
 
 export default function AdminReports() {
   const navigate = useNavigate();
@@ -21,6 +23,146 @@ export default function AdminReports() {
 
   // pagination active page (fake)
   const [activePage, setActivePage] = useState(1);
+  const [logs, setLogs] = useState([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [totalPages, setTotalPages] = useState(1);
+  const [users, setUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+
+  // html2pdf helpers for colorful PDF export
+  const ensureHtml2Pdf = async () => {
+    if (window.html2pdf) return;
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+      s.crossOrigin = 'anonymous';
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('Failed to load html2pdf.js'));
+      document.head.appendChild(s);
+    });
+  };
+
+  const downloadPdfFromHtml = async (html, filename) => {
+    await ensureHtml2Pdf();
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open();
+    doc.write(html);
+    doc.close();
+    await new Promise((r) => setTimeout(r, 200));
+    await window.html2pdf().from(doc.body).set({ margin: 10, filename, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).save();
+    document.body.removeChild(iframe);
+  };
+
+  const fetchUsers = async () => {
+    setUsersLoading(true);
+    try {
+      const res = await listUsers({ page: 1, limit: 200 });
+      const items = res.items || res.users || [];
+      setUsers(items);
+    } catch (e) {
+      console.error('Failed to load users', e);
+      setUsers([]);
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  const fetchLogs = async (page = 1) => {
+    setLogsLoading(true);
+    try {
+      const res = await listAuditLogs({ page, limit: 10, sort: '-timestamp' });
+      setLogs(res.logs || []);
+      setTotalPages(res.pagination?.pages || 1);
+    } catch (e) {
+      console.error('Failed to load audit logs', e);
+      setLogs([]);
+      setTotalPages(1);
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+    fetchLogs(1);
+  }, []);
+
+  const exportAllReports = async () => {
+    // Read current filter values from the DOM (keeps UI unchanged)
+    const root = document.querySelector('.report-filters');
+    const getVal = (sel, fallback='') => root?.querySelector(sel)?.value || fallback;
+    const dateRange = getVal('select:nth-of-type(1)', '');
+    const reportType = getVal('select:nth-of-type(2)', '');
+    const userRole = getVal('select:nth-of-type(3)', '');
+    const startDate = getVal('input[type="date"]:nth-of-type(1)', '');
+    const endDate = getVal('input[type="date"]:nth-of-type(2)', '');
+    const sensitivity = getVal('select:nth-of-type(4)', '');
+
+    const title = 'OceanCare Reports Summary';
+    const generatedAt = new Date().toLocaleString();
+    const rows = (logs || []).map((row, idx) => `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${row.timestamp ? new Date(row.timestamp).toLocaleString() : ''}</td>
+        <td>${row.userName || 'System'}</td>
+        <td><span class="pill pill-${(row.action||'other').toLowerCase()}">${(row.action||'other')}</span></td>
+        <td>${row.resource || '—'}</td>
+        <td>${(row.details || '—').toString().slice(0,120)}</td>
+      </tr>
+    `).join('');
+
+    const html = `<!doctype html><html><head><meta charset="utf-8" /><title>${title}</title>
+    <style>
+    :root{--bg:#0f172a;--card:#111827;--text:#e5e7eb;--muted:#9ca3af;--grad1:#8b5cf6;--grad2:#22d3ee;--stripe:rgba(255,255,255,.03)}
+    body{background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;margin:0;padding:28px}
+    .card{background:linear-gradient(180deg,rgba(139,92,246,.12),rgba(34,211,238,.08)),var(--card);border-radius:16px;padding:22px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+    h1{margin:0 0 6px;font-size:22px}
+    .meta{color:var(--muted);font-size:12px;margin-bottom:12px}
+    .filters{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+    .f{background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.25);padding:8px 10px;border-radius:10px;font-size:12px}
+    table{width:100%;border-collapse:collapse;overflow:hidden;border-radius:12px}
+    thead th{text-align:left;font-size:12px;color:var(--muted);background:rgba(139,92,246,.15);padding:10px 12px}
+    tbody td{padding:10px 12px;border-top:1px solid rgba(148,163,184,.12);font-size:12.5px}
+    tbody tr:nth-child(odd){background:var(--stripe)}
+    .pill{padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700}
+    .pill-create{background:rgba(16,185,129,.18);color:#a7f3d0}
+    .pill-update{background:rgba(59,130,246,.18);color:#bfdbfe}
+    .pill-delete{background:rgba(244,63,94,.18);color:#fecdd3}
+    .pill-access{background:rgba(245,158,11,.18);color:#fde68a}
+    .pill-export{background:rgba(99,102,241,.18);color:#c7d2fe}
+    .pill-other{background:rgba(148,163,184,.18);color:#e5e7eb}
+    .footer{margin-top:12px;color:var(--muted);font-size:11px}
+    @media print{body{background:#fff}.card{box-shadow:none}}
+    </style></head><body>
+    <div class="card">
+      <h1>${title}</h1>
+      <div class="meta">Generated at ${generatedAt} • Current page size: ${(logs||[]).length}</div>
+      <div class="filters">
+        <div class="f"><strong>Date Range:</strong> ${dateRange || '—'}</div>
+        <div class="f"><strong>Report Type:</strong> ${reportType || '—'}</div>
+        <div class="f"><strong>User Role:</strong> ${userRole || '—'}</div>
+        <div class="f"><strong>Start Date:</strong> ${startDate || '—'}</div>
+        <div class="f"><strong>End Date:</strong> ${endDate || '—'}</div>
+        <div class="f"><strong>Sensitivity:</strong> ${sensitivity || '—'}</div>
+      </div>
+      <table>
+        <thead><tr><th>#</th><th>Timestamp</th><th>User</th><th>Action</th><th>Resource</th><th>Details</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="footer">OceanCare • Reports Export</div>
+    </div>
+    </body></html>`;
+
+    await downloadPdfFromHtml(html, 'oceanCare-reports-export.pdf');
+  };
 
   return (
     <div className="admin-dashboard admin-reports">
@@ -154,33 +296,9 @@ export default function AdminReports() {
             </div>
           </div>
 
-          {/* Report Charts */}
-          <div className="report-charts">
-            <div className="section-header">
-              <div className="section-title">Analytics Overview</div>
-              <button className="btn btn-primary" onClick={() => { alert('Exporting charts...'); setTimeout(()=>alert('Charts exported!'), 1200); }}>
-                <i className="fas fa-download"></i> Export Charts
-              </button>
-            </div>
-
-            <div className="chart-container">
-              <div className="chart-title">User Activity Over Time</div>
-              <div className="chart-placeholder">
-                <i className="fas fa-chart-bar" style={{fontSize: 48, marginRight: 15}}></i>
-                User Activity Chart Visualization
-              </div>
-            </div>
-
-            <div className="chart-container">
-              <div className="chart-title">System Health Metrics</div>
-              <div className="chart-placeholder">
-                <i className="fas fa-chart-line" style={{fontSize: 48, marginRight: 15}}></i>
-                System Health Metrics Visualization
-              </div>
-            </div>
-          </div>
-
+          
           {/* Audit Logs */}
+          
           <div className="audit-logs">
             <div className="section-header">
               <div className="section-title">Recent Activity Logs</div>
@@ -202,65 +320,40 @@ export default function AdminReports() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td>2023-10-15 14:32:18</td>
-                    <td>Dr. Michael Chen</td>
-                    <td><span className="user-role role-medical">Medical Officer</span></td>
-                    <td><span className="action-type action-update">Updated</span></td>
-                    <td>Health Record #4821</td>
-                    <td>Modified patient vitals</td>
-                  </tr>
-                  <tr>
-                    <td>2023-10-15 13:45:02</td>
-                    <td>Sarah Johnson</td>
-                    <td><span className="user-role role-admin">Administrator</span></td>
-                    <td><span className="action-type action-create">Created</span></td>
-                    <td>User Account</td>
-                    <td>New crew member account</td>
-                  </tr>
-                  <tr>
-                    <td>2023-10-15 12:18:37</td>
-                    <td>Robert Williams</td>
-                    <td><span className="user-role role-inventory">Inventory Manager</span></td>
-                    <td><span className="action-type action-update">Updated</span></td>
-                    <td>Inventory Item #872</td>
-                    <td>Adjusted stock levels</td>
-                  </tr>
-                  <tr>
-                    <td>2023-10-15 11:05:55</td>
-                    <td>Dr. Elena Rodriguez</td>
-                    <td><span className="user-role role-medical">Medical Officer</span></td>
-                    <td><span className="action-type action-access">Accessed</span></td>
-                    <td>Medical Database</td>
-                    <td>Viewed patient records</td>
-                  </tr>
-                  <tr>
-                    <td>2023-10-15 09:42:11</td>
-                    <td>James Wilson</td>
-                    <td><span className="user-role role-crew">Crew Member</span></td>
-                    <td><span className="action-type action-update">Updated</span></td>
-                    <td>Personal Information</td>
-                    <td>Changed contact details</td>
-                  </tr>
-                  <tr>
-                    <td>2023-10-14 16:28:44</td>
-                    <td>Sarah Johnson</td>
-                    <td><span className="user-role role-admin">Administrator</span></td>
-                    <td><span className="action-type action-delete">Deleted</span></td>
-                    <td>User Account #129</td>
-                    <td>Deactivated former crew</td>
-                  </tr>
+                  {logsLoading && (
+                    <tr><td colSpan={6}>Loading…</td></tr>
+                  )}
+                  {!logsLoading && logs.length === 0 && (
+                    <tr><td colSpan={6}>No activity found.</td></tr>
+                  )}
+                  {!logsLoading && logs.map((row) => {
+                    const u = users.find(u => (u._id || u.id) === (row.userId || row.user_id));
+                    const role = u?.role || u?.userType || u?.type || '';
+                    const roleClass = role?.toString().toLowerCase().includes('admin') ? 'role-admin' : role?.toString().toLowerCase().includes('medical') ? 'role-medical' : role?.toString().toLowerCase().includes('inventory') ? 'role-inventory' : role ? 'role-crew' : '';
+                    const action = (row.action || '').toLowerCase();
+                    const actionClass = action === 'create' ? 'action-create' : action === 'update' ? 'action-update' : action === 'delete' ? 'action-delete' : action === 'access' ? 'action-access' : 'action-other';
+                    return (
+                      <tr key={row._id}>
+                        <td>{row.timestamp ? new Date(row.timestamp).toLocaleString() : ''}</td>
+                        <td>{row.userName || u?.fullName || u?.name || u?.email || 'System'}</td>
+                        <td>{role ? (<span className={`user-role ${roleClass}`}>{role}</span>) : '—'}</td>
+                        <td><span className={`action-type ${actionClass}`}>{(row.action || '').charAt(0).toUpperCase() + (row.action || '').slice(1)}</span></td>
+                        <td>{row.resource || '—'}</td>
+                        <td>{row.details || '—'}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
             <div className="pagination">
-              <div className="pagination-info">Showing 1-6 of 128 activities</div>
+              <div className="pagination-info">Page {activePage} of {totalPages}</div>
               <div className="pagination-controls">
-                {[1,2,3].map(p => (
-                  <button key={p} className={`page-btn ${activePage===p ? 'active' : ''}`} onClick={() => { setActivePage(p); alert(`Loading page ${p}...`); }}>{p}</button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => i + 1).map(p => (
+                  <button key={p} className={`page-btn ${activePage===p ? 'active' : ''}`} onClick={() => { setActivePage(p); fetchLogs(p); }}>{p}</button>
                 ))}
-                <button className="page-btn" onClick={() => { setActivePage(p => Math.min(p+1, 3)); alert('Loading next page...'); }}>Next</button>
+                <button className="page-btn" onClick={() => { const next = Math.min(activePage + 1, totalPages); setActivePage(next); fetchLogs(next); }}>Next</button>
               </div>
             </div>
           </div>

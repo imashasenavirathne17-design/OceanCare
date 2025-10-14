@@ -29,6 +29,9 @@ const emergencyMessagingRoutes = require('./routes/emergencyMessagingRoutes');
 const emergencyIncidentRoutes = require('./routes/emergencyIncidentRoutes');
 const emergencyReportRoutes = require('./routes/emergencyReportRoutes');
 const crewEmergencyAlertRoutes = require('./routes/crewEmergencyAlertRoutes');
+const auditLogRoutes = require('./routes/auditLogRoutes');
+const complianceFrameworkRoutes = require('./routes/complianceFrameworkRoutes');
+const regulatoryReportRoutes = require('./routes/regulatoryReportRoutes');
 
 const app = express();
 
@@ -66,6 +69,9 @@ app.use('/api/emergency/incidents', emergencyIncidentRoutes);
 app.use('/api/emergency/reports', emergencyReportRoutes);
 app.use('/api/crew/emergency-alerts', crewEmergencyAlertRoutes);
 app.use('/api/health', healthRoutes);
+app.use('/api/audit/logs', auditLogRoutes);
+app.use('/api/compliance/frameworks', complianceFrameworkRoutes);
+app.use('/api/compliance/reports', regulatoryReportRoutes);
 
 const PORT = process.env.PORT || 5000;
 connectDB(process.env.MONGO_URI)
