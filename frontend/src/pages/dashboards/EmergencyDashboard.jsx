@@ -1,48 +1,17 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import EmergencySidebar from './EmergencySidebar';
 import { getUser, clearSession } from '../../lib/token';
+import { listCrewEmergencyAlerts } from '../../lib/crewEmergencyAlertApi';
 
 export default function EmergencyDashboard() {
   const user = getUser();
   const navigate = useNavigate();
-  // Stats and alerts state to match the provided template exactly
-  const [activeAlerts, setActiveAlerts] = useState(3);
-  const [alerts, setAlerts] = useState([
-    {
-      type: 'danger',
-      icon: 'fas fa-heartbeat',
-      person: 'John Davis - Cardiac Emergency',
-      location: 'Engine Room • Heart Rate: 145 bpm',
-      time: 'Triggered: 10:24 AM | Last reading: 10:28 AM',
-      actions: [
-        { cls: 'btn btn-primary', icon: 'fas fa-eye', label: 'Details' },
-        { cls: 'btn btn-danger', icon: 'fas fa-play', label: 'Protocol' },
-      ],
-    },
-    {
-      type: 'warning',
-      icon: 'fas fa-lungs',
-      person: 'Maria Rodriguez - Respiratory Distress',
-      location: 'Medical Bay • SpO2: 88%',
-      time: 'Triggered: 09:45 AM | Last reading: 10:15 AM',
-      actions: [
-        { cls: 'btn btn-primary', icon: 'fas fa-eye', label: 'Details' },
-        { cls: 'btn btn-warning', icon: 'fas fa-play', label: 'Protocol' },
-      ],
-    },
-    {
-      type: 'info',
-      icon: 'fas fa-thermometer-full',
-      person: 'Robert Chen - Elevated Temperature',
-      location: 'Crew Quarters B • Temperature: 39.2°C',
-      time: 'Triggered: 08:15 AM | Status: Monitoring',
-      actions: [
-        { cls: 'btn btn-primary', icon: 'fas fa-eye', label: 'Details' },
-        { cls: 'btn btn-primary', icon: 'fas fa-check', label: 'Ack' },
-      ],
-    },
-  ]);
+  // Live alerts from backend
+  const [activeAlerts, setActiveAlerts] = useState(0);
+  const [alerts, setAlerts] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   // Inactivity timer refs
   const inactivityTimerRef = useRef(null);
@@ -67,27 +36,69 @@ export default function EmergencyDashboard() {
     };
   }, []);
 
-  // Simulate real-time alert update (adds the 4th alert after 10s)
+  // Fetch crew emergency alerts and poll periodically
   useEffect(() => {
-    const t = setTimeout(() => {
-      setAlerts((prev) => [
-        ...prev,
-        {
-          type: 'warning',
-          icon: 'fas fa-head-side-virus',
-          person: 'Sarah Johnson - Neurological Symptoms',
-          location: 'Bridge • Dizziness and confusion reported',
-          time: 'Triggered: Just now | Status: Evaluating',
-          actions: [
-            { cls: 'btn btn-primary', icon: 'fas fa-eye', label: 'Details' },
-            { cls: 'btn btn-warning', icon: 'fas fa-play', label: 'Protocol' },
-          ],
-        },
-      ]);
-      setActiveAlerts(4);
-      alert('New health alert: Sarah Johnson - Neurological Symptoms');
-    }, 10000);
-    return () => clearTimeout(t);
+    let mounted = true;
+    let intervalId;
+
+    const urgencyToType = (urgency) => {
+      const u = String(urgency || 'high').toLowerCase();
+      if (u === 'high') return 'danger';
+      if (u === 'medium') return 'warning';
+      return 'info';
+    };
+
+    const typeToIcon = (t) => {
+      const v = String(t || '').toLowerCase();
+      if (v === 'medical' || v === 'symptoms') return 'fas fa-heartbeat';
+      if (v === 'accident') return 'fas fa-user-injured';
+      if (v === 'safety') return 'fas fa-exclamation-triangle';
+      return 'fas fa-thermometer-half';
+    };
+
+    const fmtTime = (dt) => {
+      try {
+        const d = new Date(dt);
+        return `Triggered: ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} | ${d.toLocaleDateString()}`;
+      } catch {
+        return 'Triggered: —';
+      }
+    };
+
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError('');
+        const data = await listCrewEmergencyAlerts({ limit: 100 });
+        if (!mounted) return;
+        const items = (data || []).map((a) => ({
+          id: a._id || a.id,
+          type: urgencyToType(a.urgency),
+          icon: typeToIcon(a.type),
+          person: `${a.crewName || 'Crew Member'} - ${String(a.type || 'Emergency').charAt(0).toUpperCase() + String(a.type || 'Emergency').slice(1)}`,
+          location: a.location ? `${a.location}` : 'Location: —',
+          time: fmtTime(a.reportedAt || a.createdAt),
+          status: a.status || 'reported',
+        }));
+        setAlerts(items);
+        const active = (data || []).filter((a) => ['reported', 'acknowledged'].includes(String(a.status || '').toLowerCase())).length;
+        setActiveAlerts(active);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to load crew emergency alerts', err);
+        if (mounted) setError('Failed to load alerts. Please ensure you are logged in and the API is reachable.');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    load();
+    intervalId = setInterval(load, 10000); // poll every 10s
+
+    return () => {
+      mounted = false;
+      if (intervalId) clearInterval(intervalId);
+    };
   }, []);
 
   const navigateTo = (page) => {
@@ -98,6 +109,33 @@ export default function EmergencyDashboard() {
     };
     if (map[page]) return navigate(map[page]);
     alert(`Navigating to ${page} page...`);
+  };
+
+  const handleManualRefresh = async () => {
+    // Small helper to trigger an immediate refresh
+    try {
+      setLoading(true);
+      setError('');
+      const data = await listCrewEmergencyAlerts({ limit: 100 });
+      const items = (data || []).map((a) => ({
+        id: a._id || a.id,
+        type: String(a.urgency || 'high').toLowerCase() === 'high' ? 'danger' : (String(a.urgency || 'low').toLowerCase() === 'medium' ? 'warning' : 'info'),
+        icon: 'fas fa-exclamation-circle',
+        person: `${a.crewName || 'Crew Member'} - ${String(a.type || 'Emergency').charAt(0).toUpperCase() + String(a.type || 'Emergency').slice(1)}`,
+        location: a.location ? `${a.location}` : 'Location: —',
+        time: (a.reportedAt || a.createdAt) ? `Triggered: ${new Date(a.reportedAt || a.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Triggered: —',
+        status: a.status || 'reported',
+      }));
+      setAlerts(items);
+      const active = (data || []).filter((a) => ['reported', 'acknowledged'].includes(String(a.status || '').toLowerCase())).length;
+      setActiveAlerts(active);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Manual refresh failed', err);
+      setError('Refresh failed. Check your connection or login.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -272,23 +310,49 @@ export default function EmergencyDashboard() {
         <div className="emergency-alerts">
           <div className="section-header">
             <div className="section-title">Active Emergency Alerts</div>
-            <a href="#" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: 14 }}>View All Alerts</a>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <button className="btn btn-primary" onClick={handleManualRefresh} disabled={loading}>
+                <i className="fas fa-sync-alt"></i> {loading ? 'Refreshing…' : 'Refresh'}
+              </button>
+              <a href="#" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: 14 }}>View All Alerts</a>
+            </div>
           </div>
 
+          {error && (
+            <div style={{ background: 'rgba(230,57,70,.1)', color: '#b3202c', padding: 12, borderRadius: 8, marginBottom: 12 }}>
+              {error}
+            </div>
+          )}
+
+          {loading && alerts.length === 0 && (
+            <div className="alert-item info">
+              <div className="alert-details" style={{ width: '100%' }}>
+                Loading alerts…
+              </div>
+            </div>
+          )}
+
+          {!loading && alerts.length === 0 && !error && (
+            <div className="alert-item info">
+              <div className="alert-details" style={{ width: '100%' }}>
+                No active alerts yet.
+              </div>
+            </div>
+          )}
+
           {alerts.map((a, idx) => (
-            <div key={idx} className={`alert-item ${a.type === 'warning' ? 'warning' : a.type === 'info' ? 'info' : ''}`}>
+            <div key={a.id || idx} className={`alert-item ${a.type === 'warning' ? 'warning' : a.type === 'info' ? 'info' : ''}`}>
               <div className={`alert-icon ${a.type}`}>
                 <i className={a.icon}></i>
               </div>
               <div className="alert-details">
                 <div className="alert-person">{a.person}</div>
                 <div className="alert-location">{a.location}</div>
-                <div className="alert-time">{a.time}</div>
+                <div className="alert-time">{a.time} {a.status ? `| Status: ${a.status}` : ''}</div>
               </div>
               <div className="alert-actions">
-                {a.actions.map((b, i) => (
-                  <button key={i} className={b.cls}><i className={b.icon}></i> {b.label}</button>
-                ))}
+                <button className="btn btn-primary"><i className="fas fa-eye"></i> Details</button>
+                <button className="btn btn-danger"><i className="fas fa-play"></i> Protocol</button>
               </div>
             </div>
           ))}
