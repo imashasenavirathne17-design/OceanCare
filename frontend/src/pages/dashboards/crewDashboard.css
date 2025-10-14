@@ -396,10 +396,39 @@
   box-shadow: 0 2px 8px rgba(58, 134, 255, 0.2);
 }
 
-.btn.btn-sm {
-  padding: 6px 12px;
-  font-size: 0.85rem;
-  border-radius: 6px;
+.crew-dashboard .btn.btn-sm {
+  padding: 8px 14px;
+  font-size: 0.95rem;
+  border-radius: 8px;
+}
+
+/* Export buttons (CSV/PDF) */
+.crew-dashboard .btn-csv {
+  background: #f3f4f6; /* neutral gray */
+  color: #111827;
+  border: 1px solid #e5e7eb;
+}
+.crew-dashboard .btn-csv:hover {
+  background: #e5e7eb;
+}
+.crew-dashboard .btn-pdf {
+  background: rgba(230, 57, 70, 0.08);
+  color: #b91c1c; /* red-700 */
+  border: 1px solid rgba(230, 57, 70, 0.25);
+}
+.crew-dashboard .btn-pdf:hover {
+  background: rgba(230, 57, 70, 0.14);
+}
+.crew-dashboard .btn-csv i,
+.crew-dashboard .btn-pdf i {
+  margin-right: 6px;
+  font-size: 0.95em;
+}
+
+.crew-dashboard .chip {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 /* Health Records */
@@ -421,10 +450,13 @@
 .crew-dashboard thead th { position: sticky; top: 0; z-index: 1; box-shadow: 0 1px 0 #eee; }
 
 /* Chips and badges */
-.crew-dashboard .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.crew-dashboard .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .crew-dashboard .chip-success { background: rgba(42,157,143,.1); color: var(--success); }
 .crew-dashboard .chip-warning { background: rgba(244,162,97,.15); color: #b15a12; }
 .crew-dashboard .chip-info { background: rgba(58,134,255,.12); color: var(--info); }
+/* Active primary chip (used for quick tabs) */
+.crew-dashboard .chip-primary { background: var(--primary); color: #fff; box-shadow: 0 2px 6px rgba(58,134,255,.28); }
+.crew-dashboard .chip:hover { filter: brightness(0.98); box-shadow: 0 1px 4px rgba(0,0,0,.06); }
 
 /* Pagination */
 .crew-dashboard .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
@@ -434,6 +466,25 @@
 .crew-dashboard .empty { text-align: center; color: #777; padding: 30px 10px; }
 .crew-dashboard .empty .title { font-weight: 700; color: #333; }
 .crew-dashboard .empty .desc { margin-top: 6px; }
+
+/* Records filter bar tweaks */
+.crew-dashboard .records-filter .filter-group label { font-size: 12px; color: #6b7280; margin-bottom: 6px; display: block; }
+.crew-dashboard .records-filter .form-control { height: 40px; }
+
+/* Compact list look inside small cards (category panels) */
+.crew-dashboard .card ul { margin: 0; padding-left: 0; }
+.crew-dashboard .card ul li { list-style: none; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+.crew-dashboard .card ul li:last-child { border-bottom: none; }
+.crew-dashboard .card ul li div:first-child { font-weight: 600; color: #111827; }
+.crew-dashboard .card ul li div:nth-child(2) { font-size: 12px; color: #6b7280; margin-top: 2px; }
+
+/* Subtle card style for category panels */
+.crew-dashboard .card { border: 1px solid #eef2f7; }
+.crew-dashboard .card .btn.btn-sm { border: 1px solid #e5e7eb; background: #fff; color: #374151; }
+.crew-dashboard .card .btn.btn-sm:hover { background: #f3f4f6; }
+
+/* Section subtitle spacing to reduce empty white lines */
+.crew-dashboard .section-subtitle { margin-top: 4px; }
 
 /* Reminders */
 .crew-dashboard .reminders {

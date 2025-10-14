@@ -18,18 +18,27 @@ export default function EmergencyCrewLocator() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [activeCrewId, setActiveCrewId] = useState('');
+  const [deck, setDeck] = useState('Main Deck');
+  const [departments, setDepartments] = useState(['All Departments']);
+  const STATUS_LABEL_TO_VALUE = useMemo(() => ({
+    'All Statuses': 'all',
+    'Critical Only': 'critical',
+    'Warning Only': 'warning',
+    'Stable Only': 'stable',
+    'Offline Only': 'offline',
+  }), []);
+  const STATUS_VALUE_TO_LABEL = useMemo(() => ({
+    critical: 'Critical Only',
+    warning: 'Warning Only',
+    stable: 'Stable Only',
+    online: 'Stable Only',
+    offline: 'Offline Only',
+  }), []);
+  const [statusOptions, setStatusOptions] = useState(Object.keys(STATUS_LABEL_TO_VALUE));
 
   const mapRef = useRef(null);
 
-  const statusOptionToValue = (value) => {
-    const map = {
-      'Critical Only': 'critical',
-      'Warning Only': 'warning',
-      'Stable Only': 'stable',
-      'Offline Only': 'offline',
-    };
-    return map[value] || 'all';
-  };
+  const statusOptionToValue = (value) => STATUS_LABEL_TO_VALUE[value] || 'all';
 
   const clampPercent = (num) => {
     if (typeof num !== 'number' || Number.isNaN(num)) return 50;
@@ -58,30 +67,65 @@ export default function EmergencyCrewLocator() {
     }
   };
 
+  const markStaleStatus = (status, lastSeenAt) => {
+    if (!lastSeenAt) return 'offline';
+    const diffMinutes = (Date.now() - lastSeenAt.getTime()) / (1000 * 60);
+    if (diffMinutes <= 5) return status || 'stable';
+    if (diffMinutes <= 15) return status === 'critical' ? 'critical' : 'warning';
+    return 'offline';
+  };
+
   const fetchLocations = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
       const data = await listCrewLocations();
-      const enriched = (data || []).map((loc) => ({
-        id: loc.crewId || loc.crewName,
-        code: loc.code || loc.crewId || loc.crewName,
-        name: loc.crewName,
-        dept: loc.department || 'General',
-        role: loc.role || 'Crew Member',
-        status: loc.status || 'offline',
-        avatarBg: getAvatarColor(loc.crewId || loc.crewName),
-        location: loc.location || 'Unknown',
-        deck: loc.deck || 'Main Deck',
-        time: formatTime(loc.lastSeenAt),
-        lastSeenAt: loc.lastSeenAt ? new Date(loc.lastSeenAt) : null,
-        pos: {
-          top: `${clampPercent(loc.position?.top)}%`,
-          left: `${clampPercent(loc.position?.left)}%`,
-        },
-        notes: loc.notes || '',
-      }));
+      const enriched = (data || []).map((loc) => {
+        const lastSeen = loc.lastSeenAt ? new Date(loc.lastSeenAt) : null;
+        const status = markStaleStatus(loc.status || 'offline', lastSeen);
+        let freshnessLabel = '';
+        if (!lastSeen) {
+          freshnessLabel = 'No recent updates';
+        } else {
+          const diffMinutes = Math.round((Date.now() - lastSeen.getTime()) / (1000 * 60));
+          if (diffMinutes > 15) {
+            freshnessLabel = `${diffMinutes} min stale`;
+          } else if (diffMinutes > 5) {
+            freshnessLabel = `${diffMinutes} min delay`;
+          }
+        }
+        return ({
+          id: loc.crewId || loc.crewName,
+          code: loc.code || loc.crewId || loc.crewName,
+          name: loc.crewName,
+          dept: loc.department || 'General',
+          role: loc.role || 'Crew Member',
+          status,
+          avatarBg: getAvatarColor(loc.crewId || loc.crewName),
+          location: loc.location || 'Unknown',
+          deck: loc.deck || 'Main Deck',
+          time: formatTime(loc.lastSeenAt),
+          lastSeenAt: lastSeen,
+          freshnessLabel,
+          pos: {
+            top: `${clampPercent(loc.position?.top)}%`,
+            left: `${clampPercent(loc.position?.left)}%`,
+          },
+          notes: loc.notes || '',
+        });
+      });
       setLocations(enriched);
+
+      const deptSet = new Set(['All Departments']);
+      enriched.forEach((item) => deptSet.add(item.dept || 'General'));
+      setDepartments(Array.from(deptSet));
+
+      const statusLabelSet = new Set(['All Statuses']);
+      enriched.forEach((item) => {
+        const label = STATUS_VALUE_TO_LABEL[item.status] || 'Stable Only';
+        statusLabelSet.add(label);
+      });
+      setStatusOptions(Array.from(statusLabelSet));
       if (enriched.length && !enriched.find((c) => c.id === activeCrewId)) {
         setActiveCrewId(enriched[0].id);
       }
@@ -105,17 +149,26 @@ export default function EmergencyCrewLocator() {
 
   const crewList = useMemo(() => locations, [locations]);
 
+  const availableDecks = useMemo(() => {
+    const set = new Set(['Main Deck']);
+    locations.forEach((loc) => {
+      if (loc.deck) set.add(loc.deck);
+    });
+    return Array.from(set);
+  }, [locations]);
+
   const filtered = useMemo(() => {
     const statusFilter = statusOptionToValue(filters.status);
     const deptFilter = filters.dept;
     const query = filters.q.trim().toLowerCase();
     return crewList.filter((c) => {
+      if (deck && c.deck !== deck) return false;
       if (statusFilter !== 'all' && c.status !== statusFilter) return false;
       if (deptFilter !== 'All Departments' && c.dept !== deptFilter) return false;
       if (query && !(c.name + c.role + c.code).toLowerCase().includes(query)) return false;
       return true;
     });
-  }, [crewList, filters]);
+  }, [crewList, filters, deck]);
 
   const historyItems = useMemo(() => {
     const items = [...crewList]
@@ -169,7 +222,11 @@ export default function EmergencyCrewLocator() {
         .deck-btn{ padding:6px 12px; background:#fff; border:1px solid #ddd; border-radius:4px; cursor:pointer; font-size:14px; }
         .deck-btn.active{ background:#e63946; color:#fff; border-color:#e63946; }
         .ship-map{ height:500px; background:#e9ecef; position:relative; overflow:hidden; }
-        .deck-layout{ width:100%; height:100%; background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23a0d2e8"/><path d="M10,10 L90,10 L80,90 L20,90 Z" fill="%2379b4d6" stroke="%235a8bad" stroke-width="2"/><rect x="30" y="20" width="40" height="20" fill="%23ffffff" stroke="%235a8bad" stroke-width="1"/><rect x="35" y="50" width="30" height="30" fill="%23ffffff" stroke="%235a8bad" stroke-width="1"/><circle cx="25" cy="65" r="5" fill="%23ffffff" stroke="%235a8bad" stroke-width="1"/><circle cx="75" cy="65" r="5" fill="%23ffffff" stroke="%235a8bad" stroke-width="1"/></svg>'); background-size:cover; position:relative; }
+        .deck-layout{ width:100%; height:100%; background-size:cover; position:relative; transition:background-image .3s ease; }
+        .ship-map.deck-upper-deck .deck-layout{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23d4f1f4"/><path d="M15,15 L85,15 L75,85 L25,85 Z" fill="%2390d6e2" stroke="%235aa0ad" stroke-width="2"/><rect x="28" y="22" width="44" height="18" fill="%23ffffff" stroke="%235aa0ad" stroke-width="1"/><rect x="32" y="48" width="36" height="26" fill="%23ffffff" stroke="%235aa0ad" stroke-width="1"/></svg>'); }
+        .ship-map.deck-main-deck .deck-layout{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23a0d2e8"/><path d="M10,10 L90,10 L80,90 L20,90 Z" fill="%2379b4d6" stroke="%235a8bad" stroke-width="2"/><rect x="30" y="20" width="40" height="20" fill="%23ffffff" stroke="%235a8bad" stroke-width="1"/><rect x="35" y="50" width="30" height="30" fill="%23ffffff" stroke="%235a8bad" stroke-width="1"/><circle cx="25" cy="65" r="5" fill="%23ffffff" stroke="%235a8bad" stroke-width="1"/><circle cx="75" cy="65" r="5" fill="%23ffffff" stroke="%235a8bad" stroke-width="1"/></svg>'); }
+        .ship-map.deck-lower-deck .deck-layout{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%238bc6d9"/><path d="M12,12 L88,12 L78,88 L22,88 Z" fill="%2369a8bd" stroke="%234a7d8a" stroke-width="2"/><rect x="28" y="24" width="44" height="16" fill="%23ffffff" stroke="%234a7d8a" stroke-width="1"/><rect x="36" y="48" width="28" height="34" fill="%23ffffff" stroke="%234a7d8a" stroke-width="1"/></svg>'); }
+        .ship-map.deck-engine-room .deck-layout{ background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%236b9ca1"/><path d="M18,18 L82,18 L74,82 L26,82 Z" fill="%234f7b80" stroke="%2338595c" stroke-width="2"/><rect x="30" y="28" width="40" height="18" fill="%23d9d9d9" stroke="%2338595c" stroke-width="1"/><rect x="34" y="52" width="32" height="26" fill="%23d9d9d9" stroke="%2338595c" stroke-width="1"/></svg>'); }
 
         .crew-marker{ position:absolute; width:14px; height:14px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 5px rgba(0,0,0,.3); cursor:pointer; transition:all .3s; }
         .crew-marker.critical{ background:#e63946; animation:pulse 1.5s infinite; }
@@ -256,21 +313,17 @@ export default function EmergencyCrewLocator() {
           <div className="filter-group">
             <label className="filter-label">Status Filter</label>
             <select className="filter-select" value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}>
-              <option>All Statuses</option>
-              <option>Critical Only</option>
-              <option>Warning Only</option>
-              <option>Stable Only</option>
-              <option>Offline Only</option>
+              {statusOptions.map((option) => (
+                <option key={option}>{option}</option>
+              ))}
             </select>
           </div>
           <div className="filter-group">
             <label className="filter-label">Department</label>
             <select className="filter-select" value={filters.dept} onChange={(e) => setFilters((f) => ({ ...f, dept: e.target.value }))}>
-              <option>All Departments</option>
-              <option>Engineering</option>
-              <option>Deck</option>
-              <option>Medical</option>
-              <option>Catering</option>
+              {departments.map((deptOption) => (
+                <option key={deptOption}>{deptOption}</option>
+              ))}
             </select>
           </div>
           <div className="search-box">
@@ -287,15 +340,20 @@ export default function EmergencyCrewLocator() {
         <div className="map-container">
           <div className="ship-map-section">
             <div className="map-header">
-              <div className="map-title">MV Ocean Explorer - Main Deck</div>
+              <div className="map-title">MV Ocean Explorer - {deck}</div>
               <div className="deck-selector">
-                <button className="deck-btn">Upper Deck</button>
-                <button className="deck-btn active">Main Deck</button>
-                <button className="deck-btn">Lower Deck</button>
-                <button className="deck-btn">Engine Room</button>
+                {availableDecks.map((deckName) => (
+                  <button
+                    key={deckName}
+                    className={`deck-btn ${deckName === deck ? 'active' : ''}`}
+                    onClick={() => setDeck(deckName)}
+                  >
+                    {deckName}
+                  </button>
+                ))}
               </div>
             </div>
-            <div className="ship-map" ref={mapRef}>
+            <div className={`ship-map deck-${deck.replace(/\s+/g, '-').toLowerCase()}`} ref={mapRef}>
               <div className="deck-layout">
                 {filtered.map((c) => (
                   <div
@@ -342,7 +400,7 @@ export default function EmergencyCrewLocator() {
                     <div className="crew-details">
                       <div className="crew-name">{c.name}</div>
                       <div className="crew-location">{c.location}</div>
-                      <div className="crew-time">Last update: {c.time}</div>
+                      <div className={`crew-time ${c.status}`}>Last update: {c.time}{c.freshnessLabel ? ` • ${c.freshnessLabel}` : ''}</div>
                     </div>
                     <div className={`crew-status status-${c.status}`}>{c.status.toUpperCase()}</div>
                   </div>

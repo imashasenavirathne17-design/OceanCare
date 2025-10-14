@@ -53,6 +53,7 @@ export default function CrewProfile() {
     notifications: new Set(['email']),
     language: 'en',
   });
+  const [settingsErrors, setSettingsErrors] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [successOpen, setSuccessOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState('Your changes have been saved successfully.');
   const [addContactOpen, setAddContactOpen] = useState(false);
@@ -181,10 +182,18 @@ export default function CrewProfile() {
 
   const onSettingsSubmit = async (e) => {
     e.preventDefault();
-    if (settings.newPassword && settings.newPassword !== settings.confirmPassword) {
-      alert('New passwords do not match.');
-      return;
+    // Client-side validation for password change UX
+    const errs = { currentPassword: '', newPassword: '', confirmPassword: '' };
+    const wantsPasswordChange = !!settings.newPassword || !!settings.currentPassword || !!settings.confirmPassword;
+    if (wantsPasswordChange) {
+      if (!settings.currentPassword) errs.currentPassword = 'Enter your current password.';
+      if (!settings.newPassword) errs.newPassword = 'Enter a new password.';
+      if (settings.newPassword && settings.newPassword.length < 8) errs.newPassword = 'New password must be at least 8 characters.';
+      if (!settings.confirmPassword) errs.confirmPassword = 'Confirm your new password.';
+      if (settings.newPassword && settings.confirmPassword && settings.newPassword !== settings.confirmPassword) errs.confirmPassword = 'Passwords do not match.';
     }
+    setSettingsErrors(errs);
+    if (Object.values(errs).some(Boolean)) return;
     setError('');
     setSaving(true);
     try {
@@ -194,11 +203,40 @@ export default function CrewProfile() {
           language: settings.language,
         },
       };
+      // Include password change at top-level if provided (backend expects top-level keys)
+      if (wantsPasswordChange) {
+        payload.currentPassword = settings.currentPassword;
+        payload.newPassword = settings.newPassword;
+      }
       const updated = await updateCrewProfile(payload);
       hydrateProfile(updated);
-      showSuccess('Account settings updated successfully.');
+      if (wantsPasswordChange && (updated?.passwordUpdated === true)) {
+        showSuccess('Password updated successfully. You will be logged out to re-authenticate.');
+        // Force re-login so the user starts a new session with the new credentials
+        setTimeout(() => {
+          clearSession();
+          navigate('/login');
+        }, 1200);
+      } else if (wantsPasswordChange && updated?.passwordUpdated === false) {
+        // Backend responded but did not update password (e.g., same as old); show generic message
+        setError('Password was not updated. Ensure it is different from the current password and meets requirements.');
+      } else {
+        showSuccess('Account settings updated successfully.');
+      }
+      // Clear password fields after successful update
+      setSettings((s) => ({ ...s, currentPassword: '', newPassword: '', confirmPassword: '' }));
+      setSettingsErrors({ currentPassword: '', newPassword: '', confirmPassword: '' });
     } catch (err) {
-      setError('Failed to update settings.');
+      const apiMsg = err && err.response && err.response.data && err.response.data.message;
+      // Map common backend messages to inline field errors
+      if (apiMsg === 'Current password is incorrect') {
+        setSettingsErrors((er) => ({ ...er, currentPassword: 'Current password is incorrect.' }));
+      } else if (apiMsg === 'New password must be at least 8 characters') {
+        setSettingsErrors((er) => ({ ...er, newPassword: 'New password must be at least 8 characters.' }));
+      } else if (apiMsg === 'New password must be different from current password') {
+        setSettingsErrors((er) => ({ ...er, newPassword: 'New password must be different from current password.' }));
+      }
+      setError(apiMsg || 'Failed to update settings.');
     } finally {
       setSaving(false);
     }
@@ -479,15 +517,39 @@ export default function CrewProfile() {
                 <form onSubmit={onSettingsSubmit}>
                   <div className="form-group">
                     <label>Current Password</label>
-                    <input type="password" className="form-control" value={settings.currentPassword} onChange={(e) => setSettings((s) => ({ ...s, currentPassword: e.target.value }))} placeholder="Enter current password" />
+                    <input
+                      type="password"
+                      className="form-control"
+                      value={settings.currentPassword}
+                      onChange={(e) => { setSettings((s) => ({ ...s, currentPassword: e.target.value })); if (settingsErrors.currentPassword) setSettingsErrors((er) => ({ ...er, currentPassword: '' })); }}
+                      placeholder="Enter current password"
+                    />
+                    {settingsErrors.currentPassword && (<div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 6 }}>{settingsErrors.currentPassword}</div>)}
                   </div>
                   <div className="form-group">
                     <label>New Password</label>
-                    <input type="password" className="form-control" value={settings.newPassword} onChange={(e) => setSettings((s) => ({ ...s, newPassword: e.target.value }))} placeholder="Enter new password" />
+                    <input
+                      type="password"
+                      className="form-control"
+                      value={settings.newPassword}
+                      onChange={(e) => { setSettings((s) => ({ ...s, newPassword: e.target.value })); if (settingsErrors.newPassword) setSettingsErrors((er) => ({ ...er, newPassword: '' })); }}
+                      placeholder="Enter new password"
+                      disabled={!settings.currentPassword}
+                      minLength={8}
+                    />
+                    {settingsErrors.newPassword && (<div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 6 }}>{settingsErrors.newPassword}</div>)}
                   </div>
                   <div className="form-group">
                     <label>Confirm New Password</label>
-                    <input type="password" className="form-control" value={settings.confirmPassword} onChange={(e) => setSettings((s) => ({ ...s, confirmPassword: e.target.value }))} placeholder="Confirm new password" />
+                    <input
+                      type="password"
+                      className="form-control"
+                      value={settings.confirmPassword}
+                      onChange={(e) => { setSettings((s) => ({ ...s, confirmPassword: e.target.value })); if (settingsErrors.confirmPassword) setSettingsErrors((er) => ({ ...er, confirmPassword: '' })); }}
+                      placeholder="Confirm new password"
+                      disabled={!settings.currentPassword || !settings.newPassword}
+                    />
+                    {settingsErrors.confirmPassword && (<div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 6 }}>{settingsErrors.confirmPassword}</div>)}
                   </div>
                   <div className="form-group">
                     <label>Notification Preferences</label>
