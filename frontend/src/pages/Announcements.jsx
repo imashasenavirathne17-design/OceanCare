@@ -21,14 +21,16 @@ function Announcements() {
       setLoading(true);
       setError('');
       try {
-        const res = await listAdminAnnouncements({ status: 'published', sort: '-publishAt', limit: 50 });
-        const now = Date.now();
-        const visible = (res.announcements || []).filter((a) => {
-          const publishAt = a.publishAt ? new Date(a.publishAt).getTime() : 0;
-          const expiresAt = a.expiresAt ? new Date(a.expiresAt).getTime() : Infinity;
-          return publishAt <= now && now < expiresAt;
-        });
-        if (mounted) setItems(visible);
+        // Primary fetch: ask API for published
+        let res = await listAdminAnnouncements({ status: 'published', sort: '-publishAt', limit: 50 });
+        let list = Array.isArray(res.announcements) ? res.announcements : [];
+        // Fallback: if empty, fetch all and filter client-side by status
+        if (list.length === 0) {
+          const resAll = await listAdminAnnouncements({ sort: '-publishAt', limit: 50 });
+          list = (resAll.announcements || []).filter((a) => a.status === 'published');
+        }
+        // Do not strictly filter by time window to avoid TZ mismatches; just show published
+        if (mounted) setItems(list);
       } catch (e) {
         console.error('Failed to fetch announcements, showing demo items.', e);
         if (mounted) {
