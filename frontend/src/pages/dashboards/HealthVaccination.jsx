@@ -145,6 +145,13 @@ const toDateInputValue = (value) => {
 export default function HealthVaccination() {
   const navigate = useNavigate();
   const user = getUser();
+  const todayStr = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10); })();
+  const isPastDate = (value) => {
+    if (!value) return false;
+    const d = new Date(value); if (Number.isNaN(d.getTime())) return false;
+    const t = new Date(); d.setHours(0,0,0,0); t.setHours(0,0,0,0);
+    return d.getTime() < t.getTime();
+  };
 
   const [activeTab, setActiveTab] = useState('records');
   const [newVaccinationOpen, setNewVaccinationOpen] = useState(false);
@@ -320,6 +327,16 @@ export default function HealthVaccination() {
       validUntil: String(vaccinationForm.validUntil || '').trim() || undefined,
       notes: String(vaccinationForm.notes || '').trim() || undefined,
     };
+
+    // Validate future-only dates for upcoming/validity fields
+    if (payload.nextDoseAt && isPastDate(payload.nextDoseAt)) {
+      setError('Next dose date cannot be in the past. Please select today or a future date.');
+      return;
+    }
+    if (payload.validUntil && isPastDate(payload.validUntil)) {
+      setError('Valid until date cannot be in the past. Please select today or a future date.');
+      return;
+    }
 
     if (vaccinationForm.generateCertificate) {
       payload.certificate = {
@@ -807,6 +824,7 @@ export default function HealthVaccination() {
                     value={vaccinationForm.administeredAt}
                     onChange={(e) => handleFormChange('administeredAt', e.target.value)}
                   />
+                  {/* Administered date can be in the past (recording past vaccination). */}
                 </div>
                 <div className="form-group">
                   <label htmlFor="batchNumber">Batch Number *</label>
@@ -848,6 +866,7 @@ export default function HealthVaccination() {
                     className="form-control"
                     value={vaccinationForm.nextDoseAt}
                     onChange={(e) => handleFormChange('nextDoseAt', e.target.value)}
+                    min={todayStr}
                   />
                 </div>
                 <div className="form-group">
@@ -859,6 +878,7 @@ export default function HealthVaccination() {
                     className="form-control"
                     value={vaccinationForm.validUntil}
                     onChange={(e) => handleFormChange('validUntil', e.target.value)}
+                    min={todayStr}
                   />
                 </div>
                 <div className="form-group">

@@ -19,6 +19,13 @@ import { listCrewMembers } from '../../lib/healthApi';
 export default function HealthReminders() {
   const navigate = useNavigate();
   const user = getUser();
+  const todayStr = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10); })();
+  const isPastDate = (value) => {
+    if (!value) return false;
+    const d = new Date(value); if (Number.isNaN(d.getTime())) return false;
+    const t = new Date(); d.setHours(0,0,0,0); t.setHours(0,0,0,0);
+    return d.getTime() < t.getTime();
+  };
 
   const [activeTab, setActiveTab] = useState('medication');
   const [newReminderOpen, setNewReminderOpen] = useState(false);
@@ -223,6 +230,11 @@ export default function HealthReminders() {
 
       const form = new FormData(e.target);
       const payload = buildReminderPayload(form, newReminderData);
+      // prevent past dates for medication or follow-up
+      if (payload.scheduledDate && isPastDate(payload.scheduledDate)) {
+        alert('Scheduled date cannot be in the past. Please select today or a future date.');
+        return;
+      }
       await createReminder(payload);
       setNewReminderOpen(false);
       setReminderType('');
@@ -241,6 +253,10 @@ export default function HealthReminders() {
     try {
       const form = new FormData(e.target);
       const payload = buildReminderPayload(form, editingReminder, true);
+      if (payload.scheduledDate && isPastDate(payload.scheduledDate)) {
+        alert('Scheduled date cannot be in the past. Please select today or a future date.');
+        return;
+      }
       await updateReminder(editingReminder.id, payload);
       setEditReminderOpen(false);
       setEditingReminder(null);
@@ -743,7 +759,7 @@ export default function HealthReminders() {
                   <div className="form-grid">
                     <div className="form-group">
                       <label htmlFor="medicationDate">Scheduled Date *</label>
-                      <input type="date" id="medicationDate" name="medicationDate" className="form-control" required />
+                      <input type="date" id="medicationDate" name="medicationDate" className="form-control" required min={todayStr} />
                     </div>
                     <div className="form-group">
                       <label htmlFor="medicationFrequency">Frequency *</label>
@@ -773,7 +789,7 @@ export default function HealthReminders() {
                     </div>
                     <div className="form-group">
                       <label htmlFor="followupDate">Date *</label>
-                      <input type="date" id="followupDate" name="followupDate" className="form-control" required />
+                      <input type="date" id="followupDate" name="followupDate" className="form-control" required min={todayStr} />
                     </div>
                   </div>
                   <div className="form-group">
@@ -858,7 +874,7 @@ export default function HealthReminders() {
                   <div className="form-grid">
                     <div className="form-group">
                       <label htmlFor="editMedicationDate">Scheduled Date *</label>
-                      <input type="date" id="editMedicationDate" name="editMedicationDate" className="form-control" defaultValue={editingReminder?.scheduledDate ? new Date(editingReminder.scheduledDate).toISOString().slice(0, 10) : ''} required />
+                      <input type="date" id="editMedicationDate" name="editMedicationDate" className="form-control" defaultValue={editingReminder?.scheduledDate ? new Date(editingReminder.scheduledDate).toISOString().slice(0, 10) : ''} required min={todayStr} />
                     </div>
                     <div className="form-group">
                       <label htmlFor="editMedicationFrequency">Frequency *</label>
@@ -888,7 +904,7 @@ export default function HealthReminders() {
                     </div>
                     <div className="form-group">
                       <label htmlFor="editFollowupDate">Date *</label>
-                      <input type="date" id="editFollowupDate" name="editFollowupDate" className="form-control" defaultValue={editingReminder?.followup?.nextDueDate ? new Date(editingReminder.followup.nextDueDate).toISOString().slice(0, 10) : editingReminder?.scheduledDate ? new Date(editingReminder.scheduledDate).toISOString().slice(0, 10) : ''} required />
+                      <input type="date" id="editFollowupDate" name="editFollowupDate" className="form-control" defaultValue={editingReminder?.followup?.nextDueDate ? new Date(editingReminder.followup.nextDueDate).toISOString().slice(0, 10) : editingReminder?.scheduledDate ? new Date(editingReminder.scheduledDate).toISOString().slice(0, 10) : ''} required min={todayStr} />
                     </div>
                   </div>
                   <div className="form-group">

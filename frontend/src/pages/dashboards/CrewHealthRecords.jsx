@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearSession, getUser } from '../../lib/token';
 import CrewSidebar from './CrewSidebar';
@@ -10,6 +10,9 @@ import {
   updateMyMedicalRecord,
   deleteMyMedicalRecord,
 } from '../../lib/crewMedicalRecordsApi';
+import { listMyExaminations, listVaccinations } from '../../lib/healthApi';
+import { listChronicReadings } from '../../lib/chronicApi';
+import { listMentalObservations } from '../../lib/mentalHealthApi';
 
 const TYPE_OPTIONS = [
   { value: 'medical-history', label: 'Medical History' },
@@ -200,6 +203,16 @@ const today = () => {
   return d.toISOString().slice(0, 10);
 };
 
+const isPastDate = (dateStr) => {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return false;
+  const t = new Date();
+  d.setHours(0, 0, 0, 0);
+  t.setHours(0, 0, 0, 0);
+  return d.getTime() < t.getTime();
+};
+
 const fileUrl = (file) => {
   if (!file) return null;
   const name = file.filename || (file.path ? file.path.split(/[\\/]/).pop() : '');
@@ -218,6 +231,13 @@ export default function CrewHealthRecords() {
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState({ recordType: 'all', dateFrom: '', dateTo: '', status: 'all' });
   const [revision, setRevision] = useState(0);
+
+  // Category-specific state for showing existing things on the page
+  const [exams, setExams] = useState([]);
+  const [vaccs, setVaccs] = useState([]);
+  const [chronicReadings, setChronicReadings] = useState([]);
+  const [mentalObservations, setMentalObservations] = useState([]);
+  const [auxLoading, setAuxLoading] = useState(false);
 
   const [viewOpen, setViewOpen] = useState(false);
   const [viewRecord, setViewRecord] = useState(null);
@@ -272,6 +292,82 @@ export default function CrewHealthRecords() {
     run();
     return () => { ignore = true; };
   }, [filters.recordType, filters.status, filters.dateFrom, filters.dateTo, query, revision, useMocks]);
+
+  // Load category-specific datasets to show existing content panels
+  const vaccLoadOnceRef = useRef(false);
+
+  useEffect(() => {
+    let ignore = false;
+    const load = async () => {
+      if (useMocks) {
+        // Derive category data from MOCK_RECORDS for display
+        const all = MOCK_RECORDS;
+        setExams(all.filter(r => r.recordType === 'examination').slice(0, 5));
+        setVaccs(all.filter(r => r.recordType === 'vaccination').slice(0, 5));
+        setChronicReadings(all.filter(r => r.recordType === 'chronic').slice(0, 5));
+        setMentalObservations(all.filter(r => r.recordType === 'mental-health').slice(0, 5));
+        return;
+      }
+      try {
+        setAuxLoading(true);
+        // Prevent duplicate vaccination calls in StrictMode double-mount/dev reloads
+        const fetchVaccs = async () => {
+          // Crew role typically cannot access /health/vaccinations; skip to avoid 403 noise.
+          if (String(user?.role).toLowerCase() === 'crew') return [];
+          if (vaccLoadOnceRef.current) return [];
+          vaccLoadOnceRef.current = true;
+          try {
+            return await listVaccinations({ mine: true });
+          } catch (e) {
+            return [];
+          }
+        };
+        const [ex, va] = await Promise.all([
+          listMyExaminations(user?.crewId),
+          fetchVaccs()
+        ]);
+        if (!ignore) {
+          setExams(Array.isArray(ex) ? ex : []);
+          setVaccs(Array.isArray(va) ? va : []);
+        }
+      } catch (e) {
+        console.warn('aux load exams/vaccs failed, continuing with empty', e);
+        if (!ignore) {
+          setExams([]);
+          setVaccs([]);
+        }
+      } finally {
+        if (!ignore) setAuxLoading(false);
+      }
+    };
+    load();
+    return () => { ignore = true; };
+  }, [user?.crewId, revision, useMocks]);
+
+  useEffect(() => {
+    let ignore = false;
+    const load = async () => {
+      if (useMocks) return; // already handled above from MOCK_RECORDS
+      try {
+        const [cr, mo] = await Promise.all([
+          listChronicReadings({ mine: true, limit: 5 }),
+          listMentalObservations({ mine: true, limit: 5 }),
+        ]);
+        if (!ignore) {
+          setChronicReadings(Array.isArray(cr) ? cr : []);
+          setMentalObservations(Array.isArray(mo) ? mo : []);
+        }
+      } catch (e) {
+        console.warn('aux load chronic/mental failed, continuing with empty', e);
+        if (!ignore) {
+          setChronicReadings([]);
+          setMentalObservations([]);
+        }
+      }
+    };
+    load();
+    return () => { ignore = true; };
+  }, [revision, useMocks]);
 
   const refresh = () => setRevision((v) => v + 1);
 
@@ -340,6 +436,13 @@ export default function CrewHealthRecords() {
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
+    if (name === 'date' || name === 'nextDueDate') {
+      if (isPastDate(value)) {
+        setFormError('Date cannot be in the past. Please select today or a future date.');
+        return; // do not accept past dates
+      }
+      setFormError('');
+    }
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -500,6 +603,92 @@ export default function CrewHealthRecords() {
     );
   };
 
+  // ---------- Download helpers (component scope) ----------
+  const buildFlatColumns = (row) => {
+    const base = {
+      Date: row.date || '',
+      Type: TYPE_LABELS[row.recordType] || row.recordType || '',
+      Condition: row.condition || '',
+      Notes: row.notes || '',
+      Status: formatStatus(row.status || ''),
+      'Next Due': row.nextDueDate || '',
+    };
+    const mdEntries = getMetadataEntries(row.metadata || {});
+    const mtEntries = getMetricEntries(row.metrics || {});
+    const extra = {};
+    mdEntries.forEach(({ label, value }) => { extra[label] = String(value ?? ''); });
+    mtEntries.forEach(({ label, value }) => { extra[label] = String(value ?? ''); });
+    return { ...base, ...extra };
+  };
+
+  const downloadRowCSV = (row) => {
+    if (!row) return;
+    const cols = buildFlatColumns(row);
+    const headers = Object.keys(cols);
+    const values = headers.map((h) => {
+      const v = cols[h] ?? '';
+      const s = String(v);
+      if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    });
+    const csv = headers.join(',') + '\n' + values.join(',') + '\n';
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const name = (row.condition || row.recordType || 'record').toString().toLowerCase().replace(/\s+/g, '-');
+    a.download = `medical-record-${name}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadRowPDF = (row) => {
+    if (!row) return;
+    const ensureJsPDF = async () => {
+      if (window.jspdf && window.jspdf.jsPDF) return window.jspdf.jsPDF;
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+        s.onload = resolve; s.onerror = () => reject(new Error('Failed to load jsPDF'));
+        document.head.appendChild(s);
+      });
+      return window.jspdf.jsPDF;
+    };
+
+    (async () => {
+      const jsPDF = await ensureJsPDF();
+      const cols = buildFlatColumns(row);
+      const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+      const marginX = 40; const marginY = 50; const lineH = 18; const keyW = 180; const pageW = doc.internal.pageSize.getWidth();
+      let y = marginY;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
+      const title = `Medical Record - ${cols.Type || ''}`.trim();
+      doc.text(title, marginX, y); y += 8;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, marginX, y + 14);
+      y += 28; doc.setTextColor(0);
+
+      // Draw rows as key/value
+      Object.entries(cols).forEach(([k, v]) => {
+        if (y > doc.internal.pageSize.getHeight() - marginY) {
+          doc.addPage(); y = marginY;
+        }
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+        doc.text(String(k), marginX, y);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(11);
+        const text = doc.splitTextToSize(String(v ?? ''), pageW - marginX - keyW - 20);
+        doc.text(text, marginX + keyW, y);
+        y += Math.max(lineH, text.length * 14);
+      });
+
+      const name = (row.condition || row.recordType || 'record').toString().toLowerCase().replace(/\s+/g, '-');
+      doc.save(`medical-record-${name}.pdf`);
+    })().catch(() => alert('PDF export failed. Please try again.'));
+  };
+
   return (
     <div className="crew-dashboard">
       <div className="dashboard-container">
@@ -529,6 +718,26 @@ export default function CrewHealthRecords() {
               </div>
             </div>
 
+            {/* Quick tabs to filter by category (single row, no scrolling) */}
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'nowrap', overflowX: 'hidden', marginBottom: 10, paddingBottom: 0, justifyContent: 'space-between', width: '100%' }}>
+              {[
+                { v: 'all', label: 'All' },
+                { v: 'medical-history', label: 'Medical' },
+                { v: 'examination', label: 'Exam' },
+                { v: 'chronic', label: 'Chronic' },
+                { v: 'mental-health', label: 'Mental' },
+              ].map(t => (
+                <button
+                  key={t.v}
+                  className={`chip ${filters.recordType === t.v ? 'chip-primary' : ''}`}
+                  style={{ flex: '1 1 0', minWidth: 0, textAlign: 'center', padding: '4px 8px', fontSize: 12 }}
+                  onClick={() => setFilters(prev => ({ ...prev, recordType: t.v }))}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
             {error && <div className="empty" style={{ color: 'var(--danger)' }}>{error}</div>}
 
             {useMocks && (
@@ -547,6 +756,70 @@ export default function CrewHealthRecords() {
                 ))}
               </div>
             )}
+
+            {/* Existing things panels by category */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14, marginBottom: 16 }}>
+              <div className="card" style={{ padding: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontWeight: 600 }}>Examinations</div>
+                  <button className="btn btn-sm" onClick={() => setFilters(prev => ({ ...prev, recordType: 'examination' }))}>View</button>
+                </div>
+                <ul style={{ listStyle: 'none', paddingLeft: 0, marginTop: 10 }}>
+                  {(exams || []).slice(0, 5).map((e, i) => (
+                    <li key={i} style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+                      <div style={{ fontWeight: 600 }}>{e.type || e.condition || 'Examination'}</div>
+                      <div style={{ fontSize: 12, color: '#666' }}>{e.date || e.performedAt || e.scheduledAt || '—'} • {e.status || '—'}</div>
+                    </li>
+                  ))}
+                  {!auxLoading && exams && exams.length === 0 && <div className="hint-message">No examinations</div>}
+                </ul>
+              </div>
+              <div className="card" style={{ padding: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontWeight: 600 }}>Vaccinations</div>
+                  <button className="btn btn-sm" onClick={() => setFilters(prev => ({ ...prev, recordType: 'vaccination' }))}>View</button>
+                </div>
+                <ul style={{ listStyle: 'none', paddingLeft: 0, marginTop: 10 }}>
+                  {(vaccs || []).slice(0, 5).map((v, i) => (
+                    <li key={i} style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+                      <div style={{ fontWeight: 600 }}>{v.vaccine || v.metadata?.vaccineName || 'Vaccination'}</div>
+                      <div style={{ fontSize: 12, color: '#666' }}>{v.date || v.scheduledAt || v.nextDueDate || '—'} • {v.status || '—'}</div>
+                    </li>
+                  ))}
+                  {!auxLoading && vaccs && vaccs.length === 0 && <div className="hint-message">No vaccinations</div>}
+                </ul>
+              </div>
+              <div className="card" style={{ padding: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontWeight: 600 }}>Chronic Tracking</div>
+                  <button className="btn btn-sm" onClick={() => setFilters(prev => ({ ...prev, recordType: 'chronic' }))}>View</button>
+                </div>
+                <ul style={{ listStyle: 'none', paddingLeft: 0, marginTop: 10 }}>
+                  {(chronicReadings || []).slice(0, 5).map((c, i) => (
+                    <li key={i} style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+                      <div style={{ fontWeight: 600 }}>{c.type || c.metadata?.chronicType || 'Reading'}</div>
+                      <div style={{ fontSize: 12, color: '#666' }}>{c.at || c.date || '—'} • {c.value !== undefined ? c.value : c.notes || '—'}</div>
+                    </li>
+                  ))}
+                  {!auxLoading && chronicReadings && chronicReadings.length === 0 && <div className="hint-message">No chronic readings</div>}
+                </ul>
+              </div>
+              <div className="card" style={{ padding: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontWeight: 600 }}>Mental Health</div>
+                  <button className="btn btn-sm" onClick={() => setFilters(prev => ({ ...prev, recordType: 'mental-health' }))}>View</button>
+                </div>
+                <ul style={{ listStyle: 'none', paddingLeft: 0, marginTop: 10 }}>
+                  {(mentalObservations || []).slice(0, 5).map((m, i) => (
+                    <li key={i} style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+                      <div style={{ fontWeight: 600 }}>{m.title || m.sessionType || 'Observation'}</div>
+                      <div style={{ fontSize: 12, color: '#666' }}>{m.date || m.createdAt || '—'} • {m.status || m.wellnessLevel || '—'}</div>
+                    </li>
+                  ))}
+                  {!auxLoading && mentalObservations && mentalObservations.length === 0 && <div className="hint-message">No mental health entries</div>}
+                </ul>
+              </div>
+            </div>
 
             <div className="records-filter" style={{ display: 'flex', gap: 15, marginBottom: 20, flexWrap: 'wrap' }}>
               <div className="filter-group" style={{ flex: 2, minWidth: 240 }}>
@@ -626,6 +899,12 @@ export default function CrewHealthRecords() {
                           <button className="btn btn-outline btn-sm" onClick={() => openEdit(row.raw)}>Edit</button>
                           <button className="btn btn-outline btn-sm" onClick={() => handleDelete(row.raw)} disabled={deletingId === row.id}>
                             {deletingId === row.id ? 'Deleting…' : 'Delete'}
+                          </button>
+                          <button className="btn btn-sm btn-csv" title="Download CSV" onClick={() => downloadRowCSV(row)} style={{ marginLeft: 6 }}>
+                            <i className="fas fa-file-download"></i> CSV
+                          </button>
+                          <button className="btn btn-sm btn-pdf" title="Download PDF" onClick={() => downloadRowPDF(row)} style={{ marginLeft: 6 }}>
+                            <i className="fas fa-file-pdf"></i> PDF
                           </button>
                         </td>
                       </tr>
@@ -747,7 +1026,7 @@ export default function CrewHealthRecords() {
                 </div>
                 <div className="form-group">
                   <label>Date *</label>
-                  <input name="date" type="date" className="form-control" value={form.date} onChange={handleFormChange} required />
+                  <input name="date" type="date" className="form-control" value={form.date} onChange={handleFormChange} required min={today()} />
                 </div>
                 <div className="form-group">
                   <label>Status</label>
@@ -760,7 +1039,7 @@ export default function CrewHealthRecords() {
               </div>
               <div className="form-group">
                 <label>Next Due Date</label>
-                <input name="nextDueDate" type="date" className="form-control" value={form.nextDueDate} onChange={handleFormChange} />
+                <input name="nextDueDate" type="date" className="form-control" value={form.nextDueDate} onChange={handleFormChange} min={today()} />
               </div>
               <div className="form-group">
                 <label>Notes</label>

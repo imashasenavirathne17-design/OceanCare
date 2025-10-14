@@ -1,4 +1,5 @@
 const { randomUUID } = require('crypto');
+const bcrypt = require('bcryptjs');
 const { User } = require('../models/User');
 const { MedicalRecord } = require('../models/MedicalRecord');
 
@@ -177,7 +178,36 @@ exports.updateProfile = async (req, res) => {
     const extra = parseExtra(user.extra);
     const profile = extra.crewProfile || {};
 
-    const { personal, medical, emergencyContacts, settings, stats } = req.body || {};
+    const { personal, medical, emergencyContacts, settings, stats, currentPassword, newPassword } = req.body || {};
+    let passwordUpdated = false;
+
+    // Handle password change if requested
+    if (typeof newPassword === 'string') {
+      console.log('[PROFILE] Password change requested by user', user._id.toString());
+      const next = String(newPassword || '').trim();
+      if (!next) {
+        return res.status(400).json({ message: 'New password is required' });
+      }
+      if (!currentPassword) {
+        return res.status(400).json({ message: 'Current password is required' });
+      }
+      const ok = await bcrypt.compare(String(currentPassword), user.passwordHash);
+      if (!ok) {
+        return res.status(400).json({ message: 'Current password is incorrect' });
+      }
+      if (next.length < 8) {
+        return res.status(400).json({ message: 'New password must be at least 8 characters' });
+      }
+      // Prevent setting the same password
+      const sameAsOld = await bcrypt.compare(next, user.passwordHash);
+      if (sameAsOld) {
+        return res.status(400).json({ message: 'New password must be different from current password' });
+      }
+      const salt = await bcrypt.genSalt(10);
+      user.passwordHash = await bcrypt.hash(next, salt);
+      passwordUpdated = true;
+      console.log('[PROFILE] Password updated for user', user._id.toString());
+    }
 
     if (personal && typeof personal === 'object') {
       const firstName = (personal.firstName || '').trim();
@@ -280,8 +310,9 @@ exports.updateProfile = async (req, res) => {
     user.extra = encodeExtra(extra);
     await user.save();
 
+    // Build and return a consistent payload
     const freshPayload = await buildProfilePayload(user, extra);
-    return res.json(freshPayload);
+    return res.json({ ...freshPayload, passwordUpdated });
   } catch (error) {
     console.error('updateProfile error:', error);
     return res.status(500).json({ message: 'Failed to update crew profile' });
