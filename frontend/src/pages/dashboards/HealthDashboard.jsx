@@ -403,22 +403,6 @@ export default function HealthDashboard() {
         ))}
       </section>
 
-      {/* Dashboard Stats */}
-      <div className="stats-container">
-            {stats.map((s, i) => (
-              <div key={i} className="stat-card">
-                <div className={`stat-icon ${s.tone}`}>
-                  <i className={s.icon}></i>
-                </div>
-                <div className="stat-content">
-                  <div className="stat-value">{s.value}</div>
-                  <div className="stat-label">{s.label}</div>
-                  {!!s.detail && <div className="stat-detail">{s.detail}</div>}
-                </div>
-              </div>
-            ))}
-          </div>
-
       {/* Quick Actions */}
       <section className="dashboard-section">
         <div className="section-header">
@@ -489,111 +473,53 @@ export default function HealthDashboard() {
         </div>
       </div>
 
-      {/* Upcoming Examinations */}
-      <div className="dashboard-section">
-        <div className="section-header">
-          <div className="section-title">Upcoming Examinations</div>
-          <div className="section-actions"><button className="btn btn-primary" onClick={() => navigate('/dashboard/health/examinations')}>View All</button></div>
-        </div>
-        <div className="table-responsive">
-          <table>
-                <thead>
-                  <tr><th>Crew Member</th><th>Exam Type</th><th>Date</th><th>Status</th></tr>
-                </thead>
-                <tbody>
-                  {upcomingExams.map((exam, i) => {
-                    const statusLower = (exam.status || '').toLowerCase();
-                    const cls = statusLower.includes('pending') || statusLower.includes('schedule') ? 'status-pending' : 'status-warning';
-                    return (
-                      <tr key={`${exam.crewId}-${i}`}>
-                        <td>{`${exam.crewName || '—'} (${exam.crewId || '—'})`}</td>
-                        <td>{exam.examType}</td>
-                        <td>{shortDate(exam.scheduledFor)}</td>
-                        <td><span className={`status-indicator ${cls}`}></span> {exam.status}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-          </table>
-        </div>
-      </div>
-
-        {/* Vaccination Status */}
-        <div className="dashboard-section">
-          <div className="section-header">
-            <div className="section-title">Vaccination Status</div>
-            <div className="section-actions"><button className="btn btn-primary" onClick={() => navigate('/dashboard/health/vaccination')}>Manage</button></div>
-          </div>
-          <div className="table-responsive">
-            <table>
-                  <thead>
-                    <tr><th>Vaccine</th><th>Due Count</th><th>Overdue</th><th>Action</th></tr>
-                  </thead>
-                  <tbody>
-                    {vaccinationSummary.map((row, i) => (
-                      <tr key={`${row.vaccine}-${i}`}>
-                        <td>{row.vaccine}</td>
-                        <td>{row.dueCount}</td>
-                        <td>{row.overdue}</td>
-                        <td><button className="btn btn-action btn-sm" onClick={() => navigate('/dashboard/health/vaccination')}><i className="fas fa-calendar-plus"></i> Schedule</button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-            </table>
-          </div>
-        </div>
-
       {/* Health Metrics Charts */}
       <div className="dashboard-section">
         <div className="section-header"><div className="section-title">Health Metrics Overview</div></div>
         <div className="charts-container">
-          <div className="chart">
-            <div className="chart-title">Crew Health Status Distribution</div>
-            <div style={{ display: 'flex', height: 160, alignItems: 'flex-end', justifyContent: 'space-around' }}>
-              <div style={{ background: 'var(--success)', width: '20%', height: '80%', borderRadius: '4px 4px 0 0' }} title="Good: 65%"></div>
-              <div style={{ background: 'var(--warning)', width: '20%', height: '50%', borderRadius: '4px 4px 0 0' }} title="Needs Attention: 25%"></div>
-              <div style={{ background: 'var(--danger)', width: '20%', height: '30%', borderRadius: '4px 4px 0 0' }} title="Critical: 10%"></div>
+          <div className="chart-card">
+            <div className="chart-card-header">
+              <div className="chart-card-title">Crew Health Status Distribution</div>
+              <div className="chart-card-meta">Last 30 days</div>
             </div>
-          </div>
-          <div className="chart">
-            <div className="chart-title">Monthly Consultations</div>
-            <div style={{ display: 'flex', height: 160, alignItems: 'flex-end', justifyContent: 'space-around' }}>
+            <div className="chart-bars vertical">
               {[
-                { h: 40, m: 'Jul: 12' },
-                { h: 60, m: 'Aug: 18' },
-                { h: 55, m: 'Sep: 16' },
-                { h: 80, m: 'Oct: 24' },
-              ].map((b, i) => (
-                <div key={i} style={{ background: 'var(--primary)', width: '15%', height: `${b.h}%`, borderRadius: '4px 4px 0 0' }} title={b.m}></div>
+                { label: 'Good', value: '65%', height: 78, variant: 'bar-good', tooltip: 'Good: 65%' },
+                { label: 'Needs Attention', value: '25%', height: 48, variant: 'bar-attention', tooltip: 'Needs Attention: 25%' },
+                { label: 'Critical', value: '10%', height: 28, variant: 'bar-critical', tooltip: 'Critical: 10%' },
+              ].map((bar) => (
+                <div key={bar.label} className="chart-bar column">
+                  <div className="bar-stack">
+                    <div className={`bar-fill ${bar.variant}`} style={{ height: `${bar.height}%` }} title={bar.tooltip}></div>
+                  </div>
+                  <span className="bar-label">{bar.label}</span>
+                  <span className="bar-value">{bar.value}</span>
+                </div>
               ))}
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Critical Cases */}
-      <div className="dashboard-section">
-        <div className="section-header">
-          <div className="section-title">Cases Requiring Attention</div>
-          <div className="section-actions"><button className="btn btn-primary" onClick={() => open('emergency')}>Alert Emergency Officer</button></div>
-        </div>
-        <div className="table-responsive">
-          <table>
-                <thead>
-                  <tr><th>Crew Member</th><th>Condition</th><th>Last Update</th><th>Priority</th><th>Action</th></tr>
-                </thead>
-                <tbody>
-                  {criticalAlerts.map((alert, i) => (
-                    <tr key={`${alert.crewId}-${i}`}>
-                      <td>{`${alert.crewName || '—'} (${alert.crewId || '—'})`}</td>
-                      <td>{alert.summary}</td>
-                      <td>{shortDate(alert.updatedAt)}</td>
-                      <td><span style={{ color: alert.priority?.toLowerCase() === 'high' ? 'var(--danger)' : 'var(--warning)', fontWeight: 600 }}>{alert.priority}</span></td>
-                      <td><button className="btn btn-action btn-sm" onClick={() => navigate('/dashboard/health/emergency')}><i className="fas fa-eye"></i> Review</button></td>
-                    </tr>
-                  ))}
-                </tbody>
-          </table>
+          <div className="chart-card">
+            <div className="chart-card-header">
+              <div className="chart-card-title">Monthly Consultations</div>
+              <div className="chart-card-meta">Past four months</div>
+            </div>
+            <div className="chart-bars vertical">
+              {[
+                { label: 'Jul', value: '12', height: 36, variant: 'bar-mint', tooltip: 'Jul: 12 consultations' },
+                { label: 'Aug', value: '18', height: 58, variant: 'bar-good', tooltip: 'Aug: 18 consultations' },
+                { label: 'Sep', value: '16', height: 52, variant: 'bar-forest', tooltip: 'Sep: 16 consultations' },
+                { label: 'Oct', value: '24', height: 80, variant: 'bar-sea', tooltip: 'Oct: 24 consultations' },
+              ].map((bar) => (
+                <div key={bar.label} className="chart-bar column">
+                  <div className="bar-stack">
+                    <div className={`bar-fill ${bar.variant}`} style={{ height: `${bar.height}%` }} title={bar.tooltip}></div>
+                  </div>
+                  <span className="bar-label">{bar.label}</span>
+                  <span className="bar-value">{bar.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
