@@ -124,23 +124,69 @@ export default function InventoryExpiryTracking() {
     }
     setDisposal(s => ({ ...s, submitting: true }));
     try {
-      const body = {
+      // First, update inventory quantity
+      const inventoryBody = {
         qty: Math.max(0, disposal.available - amount),
         notes: disposal.notes || undefined,
       };
-      const res = await fetch(`${API}/api/inventory/${disposal.id}`, {
+      const inventoryRes = await fetch(`${API}/api/inventory/${disposal.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(inventoryBody),
       });
-      if (!res.ok) throw new Error('Failed to record disposal');
-      await res.json();
+      if (!inventoryRes.ok) throw new Error('Failed to update inventory');
+
+      // Then, create waste disposal record
+      const disposalBody = {
+        itemName: disposal.item,
+        disposalType: disposal.reason === 'Expired' ? 'expired' : 
+                     disposal.reason === 'Damaged' ? 'damaged' : 
+                     disposal.reason === 'Recall' ? 'recalled' : 'other',
+        quantity: amount,
+        unit: 'units',
+        method: disposal.method === 'Incineration' ? 'incineration' :
+                disposal.method === 'Chemical Treatment' ? 'medical-waste' :
+                disposal.method === 'Return to Supplier' ? 'recycling' :
+                disposal.method === 'Marine Disposal (Approved)' ? 'general-waste' : 'other',
+        status: 'pending', // Changed from 'completed' to 'pending' to match model default
+        reason: `Item ${disposal.reason.toLowerCase()} - disposed via expiry tracking`,
+        notes: disposal.notes || 'Disposed from expiry tracking',
+        location: 'Inventory Storage',
+        scheduledDate: new Date().toISOString(), // Changed from disposalDate to scheduledDate
+      };
+
+      const disposalRes = await fetch(`${API}/api/inventory/waste`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(disposalBody),
+      });
+
+      console.log('🚮 Waste disposal API response status:', disposalRes.status);
+
+      if (!disposalRes.ok) {
+        console.warn('Failed to create waste disposal record, but inventory was updated');
+        const errorText = await disposalRes.text();
+        console.error('Waste disposal API error:', disposalRes.status, errorText);
+      } else {
+        console.log('✅ Waste disposal record created successfully');
+        const responseData = await disposalRes.json();
+        console.log('📋 Created record:', responseData);
+      }
+
       alert('Disposal recorded successfully.');
       closeDispose();
       fetchInventory();
+
+      // Also refresh the waste disposal page if it's open
+      console.log('🔄 Refreshing waste disposal page data...');
+      // Dispatch a custom event to notify other components to refresh
+      window.dispatchEvent(new CustomEvent('wasteDisposalRefresh'));
     } catch (e) {
       alert(e.message || 'Failed to record disposal');
       setDisposal(s => ({ ...s, submitting: false }));
@@ -300,12 +346,11 @@ export default function InventoryExpiryTracking() {
             </div>
             <div className="search-box"><i className="fas fa-search"/><input type="text" placeholder="Search items..." value={filters.search} onChange={(e)=>setFilters(s=>({...s,search:e.target.value}))} /></div>
             <button className="btn btn-primary" onClick={applyFilters}><i className="fas fa-filter"/> Apply Filters</button>
-            <button className="btn btn-danger" onClick={()=>alert('Bulk disposal workflow is not yet implemented.')}><i className="fas fa-trash-alt"/> Bulk Disposal</button>
           </div>
 
           {/* Timeline */}
           <div className="expiry-timeline">
-            <div className="section-header"><div className="section-title">Expiry Timeline</div><a href="#" style={{color:'var(--primary)',textDecoration:'none',fontSize:14}}>View Calendar</a></div>
+            <div className="section-header"><div className="section-title">Expiry Timeline</div></div>
             <div className="timeline">
               <div className="timeline-item expired"><div className="timeline-date">Already Expired</div><div className="timeline-count">{stats.expired} items</div><div className="timeline-desc">Require immediate disposal</div></div>
               <div className="timeline-item expiring"><div className="timeline-date">Within 7 Days</div><div className="timeline-count">{Math.min(stats.exp30,5)} items</div><div className="timeline-desc">Critical priority</div></div>
@@ -317,29 +362,69 @@ export default function InventoryExpiryTracking() {
 
           {/* Table */}
           <div className="expiry-table-container">
-            <div className="table-header"><div className="table-title">Items by Expiry Status</div><div className="table-actions"><button className="btn btn-primary" onClick={handleExport}><i className="fas fa-download"/> Export</button></div></div>
-            <table className="expiry-table">
-              <thead><tr><th>Item Name</th><th>Category</th><th>Expiry Date</th><th>Days Remaining</th><th>Quantity</th><th>Status</th><th>Actions</th></tr></thead>
-              <tbody>
-                {filtered.map(it => { const d = daysTo(it.expiry); const status = d<=0?'EXPIRED': d<=30?'CRITICAL': d<=90?'1 MONTH':'SAFE';
-                  return (
-                    <tr key={it.id}>
-                      <td>{it.name}</td><td>{it.category}</td><td>{it.expiry}</td>
-                      <td style={{color: d<=0?'var(--danger)': d<=30?'var(--danger)': d<=90?'var(--info)':'inherit', fontWeight:600}}>{d} days</td>
-                      <td>{it.qty} units</td>
-                      <td><span className={`expiry-status ${d<=0?'status-expired': d<=30?'status-expiring': d<=90?'status-month':'status-safe'}`}>{status}</span></td>
-                      <td className="expiry-actions">
-                        {d<=30 && (
-                          <button className="btn btn-warning btn-sm" onClick={()=>openDispose(it)}><i className="fas fa-trash"/> Dispose</button>
-                        )}
-                        <button className="btn btn-primary btn-sm" onClick={()=>openEdit(it)} style={{ marginLeft: 8 }}><i className="fas fa-pen"/> Edit</button>
-                        <button className="btn btn-danger btn-sm" onClick={()=>deleteItem(it.id, it.name)} style={{ marginLeft: 8 }}><i className="fas fa-trash-alt"/> Delete</button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="table-header">
+              <div className="table-title">Items by Expiry Status</div>
+              <div className="table-actions">
+                <button className="btn btn-primary" onClick={handleExport}>
+                  <i className="fas fa-download"/> Export
+                </button>
+              </div>
+            </div>
+            <div style={{overflowX: 'auto'}}>
+              <table className="expiry-table">
+                <thead>
+                  <tr>
+                    <th style={{minWidth: '200px'}}>Item Name</th>
+                    <th style={{minWidth: '120px'}}>Category</th>
+                    <th style={{minWidth: '120px'}}>Expiry Date</th>
+                    <th style={{minWidth: '100px'}}>Days Remaining</th>
+                    <th style={{minWidth: '80px'}}>Quantity</th>
+                    <th style={{minWidth: '100px'}}>Status</th>
+                    <th style={{minWidth: '220px'}}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(it => {
+                    const d = daysTo(it.expiry);
+                    const status = d<=0?'EXPIRED': d<=30?'CRITICAL': d<=90?'1 MONTH':'SAFE';
+                    return (
+                      <tr key={it.id}>
+                        <td style={{fontWeight: '500'}}>{it.name}</td>
+                        <td>{it.category}</td>
+                        <td>{it.expiry || 'N/A'}</td>
+                        <td style={{
+                          color: d<=0?'var(--danger)': d<=30?'var(--warning)': d<=90?'var(--info)':'var(--success)',
+                          fontWeight: '600'
+                        }}>
+                          {Number.isFinite(d) ? `${d} days` : 'No expiry'}
+                        </td>
+                        <td style={{textAlign: 'center', fontWeight: '500'}}>
+                          {it.qty} {it.unit || 'units'}
+                        </td>
+                        <td>
+                          <span className={`expiry-status ${d<=0?'status-expired': d<=30?'status-expiring': d<=90?'status-month':'status-safe'}`}>
+                            {status}
+                          </span>
+                        </td>
+                        <td className="expiry-actions">
+                          {d<=30 && (
+                            <button className="btn btn-warning btn-sm" onClick={()=>openDispose(it)}>
+                              Dispose
+                            </button>
+                          )}
+                          <button className="btn btn-primary btn-sm" onClick={()=>openEdit(it)}>
+                            Edit
+                          </button>
+                          <button className="btn btn-danger btn-sm" onClick={()=>deleteItem(it.id, it.name)}>
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Disposal Log (static demo) */}

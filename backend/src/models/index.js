@@ -1,0 +1,31 @@
+// Import all models to register them with Mongoose
+require('./AdminAnnouncement');
+require('./AuditLog');
+require('./ChronicIllness');
+require('./ChronicReading');
+require('./ComplianceFramework');
+require('./CrewEmergencyAlert');
+require('./CrewLocation');
+require('./EmergencyAlert');
+require('./EmergencyIncident');
+require('./EmergencyMessage');
+require('./EmergencyProtocol');
+require('./EmergencyReport');
+require('./Examination');
+require('./HealthEducation');
+require('./HealthEmergency');
+require('./HealthReport');
+require('./InventoryAlert');
+require('./InventoryItem');
+require('./InventoryRestockOrder');
+require('./InventoryWasteRecord');
+require('./MedicalRecord');
+require('./MentalHealthObservation');
+require('./MentalHealthSession');
+require('./RegulatoryReport');
+require('./Reminder');
+require('./Role');
+require('./User');
+require('./Vaccination');
+
+console.log('✅ All models loaded and registered with Mongoose');

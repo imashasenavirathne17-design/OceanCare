@@ -107,12 +107,16 @@ export default function InventoryWasteDisposal() {
 
   const fetchRecords = useCallback(async (targetPage = 1) => {
     if (!token) {
+      console.error('❌ No authentication token found');
       setError('Missing authentication token. Please log in again.');
       return;
     }
     setLoading(true);
     setError('');
     try {
+      console.log('🔍 Fetching waste disposal records from:', `${API}/api/inventory/waste`);
+      console.log('🔑 Using token:', token.substring(0, 20) + '...');
+
       const params = new URLSearchParams({
         page: String(targetPage),
         limit: String(limit),
@@ -126,26 +130,46 @@ export default function InventoryWasteDisposal() {
       if (appliedFilters.from) params.set('from', appliedFilters.from);
       if (appliedFilters.to) params.set('to', appliedFilters.to);
 
+      console.log('📋 Request params:', Object.fromEntries(params));
+
       const res = await fetch(`${API}/api/inventory/waste?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error('Failed to load waste disposal records');
-      const data = await res.json();
-      setRecords(Array.isArray(data.records) ? data.records : []);
-      if (data.pagination) {
-        setPagination({
-          page: data.pagination.page,
-          pages: data.pagination.pages,
-          total: data.pagination.total,
-          limit: data.pagination.limit,
-        });
-        setPage(data.pagination.page);
-      } else {
-        setPagination((prev) => ({ ...prev, page: targetPage }));
-        setPage(targetPage);
+      console.log('📊 API Response status:', res.status);
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('❌ API Error response:', errorText);
+        throw new Error(`Failed to load waste disposal records: ${res.status}`);
       }
+
+      const data = await res.json();
+      console.log('✅ API Response data:', data);
+      console.log('📋 Records count:', Array.isArray(data.records) ? data.records.length : 0);
+
+      if (data.records && Array.isArray(data.records)) {
+        console.log('📋 First few records:', data.records.slice(0, 3));
+        console.log('📋 All record statuses:', data.records.map(r => ({ id: r._id, status: r.status, itemName: r.itemName })));
+        setRecords(data.records);
+        if (data.pagination) {
+          setPagination({
+            page: data.pagination.page,
+            pages: data.pagination.pages,
+            total: data.pagination.total,
+            limit: data.pagination.limit,
+          });
+          setPage(data.pagination.page);
+        }
+      } else {
+        console.warn('⚠️ No records array in response');
+        console.log('📋 Response structure:', Object.keys(data));
+        setRecords([]);
+      }
+
     } catch (err) {
+      console.error('💥 Fetch error:', err);
       setError(err.message || 'Unable to fetch waste disposal data');
+      setRecords([]);
     } finally {
       setLoading(false);
     }
@@ -153,6 +177,17 @@ export default function InventoryWasteDisposal() {
 
   useEffect(() => {
     fetchRecords(1);
+  }, [fetchRecords]);
+
+  // Listen for disposal creation events from other pages
+  useEffect(() => {
+    const handleWasteDisposalRefresh = () => {
+      console.log('🔄 Received waste disposal refresh event, fetching latest data...');
+      fetchRecords(1);
+    };
+
+    window.addEventListener('wasteDisposalRefresh', handleWasteDisposalRefresh);
+    return () => window.removeEventListener('wasteDisposalRefresh', handleWasteDisposalRefresh);
   }, [fetchRecords]);
 
   const fetchInventoryItems = useCallback(async () => {
@@ -227,6 +262,47 @@ export default function InventoryWasteDisposal() {
     [records],
   );
 
+  // Debug logging for records
+  useEffect(() => {
+    console.log('🔍 Records state updated:', {
+      totalRecords: records.length,
+      pendingRecords: pendingRecords.length,
+      historyRecords: historyRecords.length,
+      appliedFilters,
+      sampleRecord: records[0] ? {
+        id: records[0]._id,
+        itemName: records[0].itemName,
+        status: records[0].status,
+        disposalType: records[0].disposalType,
+      } : null
+    });
+  }, [records, pendingRecords.length, historyRecords.length, appliedFilters]);
+
+  // Debug: Check if filters are hiding records
+  useEffect(() => {
+    if (records.length === 0 && !loading) {
+      console.log('⚠️ No records displayed. Checking if filters are too restrictive...');
+      console.log('📋 Current appliedFilters:', appliedFilters);
+
+      // Try fetching without filters to see if records exist
+      if (appliedFilters.type !== 'all' || appliedFilters.status !== 'all' || appliedFilters.method !== 'all') {
+        console.log('🔍 Trying to fetch all records without filters...');
+        fetch(`${API}/api/inventory/waste?page=1&limit=50&sort=-createdAt`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        .then(res => res.json())
+        .then(data => {
+          console.log('📋 Records without filters:', data.records?.length || 0);
+          if (data.records && data.records.length > 0) {
+            console.log('⚠️ Records exist but are being filtered out!');
+            console.log('💡 Try clicking "Clear Filters & Refresh" button');
+          }
+        })
+        .catch(err => console.error('Error fetching without filters:', err));
+      }
+    }
+  }, [records.length, loading, appliedFilters, API, token]);
+
   const pageNumbers = useMemo(() => {
     const totalPages = Math.max(1, pagination.pages || 1);
     return Array.from({ length: totalPages }, (_, idx) => idx + 1);
@@ -236,9 +312,11 @@ export default function InventoryWasteDisposal() {
   const endEntry = pagination.total ? Math.min(pagination.page * pagination.limit, pagination.total) : 0;
 
   const openNewDisposal = () => {
+    console.log('Opening new disposal modal');
     setForm(INITIAL_FORM);
     setSubmitting(false);
     setModalOpen(true);
+    console.log('Modal state set to:', true);
   };
 
   const closeModal = () => {
@@ -299,6 +377,8 @@ export default function InventoryWasteDisposal() {
       scheduledDate: form.scheduledDate || undefined,
     };
 
+    console.log('Creating waste disposal record with payload:', payload);
+
     setSubmitting(true);
     try {
       const res = await fetch(`${API}/api/inventory/waste`, {
@@ -309,13 +389,25 @@ export default function InventoryWasteDisposal() {
         },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error('Failed to create waste disposal record');
+
+      console.log('Create API Response status:', res.status);
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('Create API Error response:', errorText);
+        throw new Error('Failed to create waste disposal record');
+      }
+
+      const responseData = await res.json();
+      console.log('Create API Response data:', responseData);
+
       closeModal();
+      // Reset filters to show all records including the newly created one
+      setAppliedFilters(INITIAL_FILTERS);
       await fetchRecords(1);
-      setAppliedFilters((prev) => ({ ...prev }));
       alert('Waste disposal record created successfully.');
     } catch (err) {
-      console.error(err);
+      console.error('Create disposal error:', err);
       alert(err.message || 'Unable to create disposal record.');
       setSubmitting(false);
     }
@@ -469,6 +561,15 @@ export default function InventoryWasteDisposal() {
             <button className="btn btn-primary" onClick={applyFilters}><i className="fas fa-filter"></i> Apply Filters</button>
             <button className="btn" onClick={resetFilters}><i className="fas fa-undo"></i> Reset</button>
             <button className="btn btn-danger" onClick={openNewDisposal}><i className="fas fa-plus"></i> New Disposal Record</button>
+            <button className="btn btn-info" onClick={() => {
+              console.log('🔄 Manual refresh triggered');
+              fetchRecords(1);
+            }}><i className="fas fa-refresh"></i> Refresh Data</button>
+            <button className="btn btn-warning" onClick={() => {
+              console.log('🔄 Clearing all filters and refreshing');
+              setAppliedFilters(INITIAL_FILTERS);
+              setTimeout(() => fetchRecords(1), 100);
+            }}><i className="fas fa-broom"></i> Clear Filters & Refresh</button>
           </div>
 
           <div className="pending-disposals">
@@ -573,7 +674,7 @@ export default function InventoryWasteDisposal() {
       </div>
 
       {modalOpen && (
-        <div className="modal" onClick={(e) => { if (e.target.classList.contains('modal')) closeModal(); }}>
+        <div className="modal inventory-waste-modal" onClick={(e) => { if (e.target.classList.contains('modal') || e.target.classList.contains('inventory-waste-modal')) closeModal(); }}>
           <div className="modal-content">
             <div className="modal-header">
               <div className="modal-title">Create New Disposal Record</div>
