@@ -12,6 +12,21 @@ import {
   updateVaccination,
 } from '../../lib/healthApi';
 
+const todayStr = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString().slice(0, 10);
+};
+
+const isPast = (val) => {
+  if (!val) return false;
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return false;
+  const t = new Date();
+  d.setHours(0,0,0,0); t.setHours(0,0,0,0);
+  return d.getTime() < t.getTime();
+};
+
 const statusLabels = {
   'up-to-date': 'Up to Date',
   'due-soon': 'Due Soon',
@@ -145,13 +160,6 @@ const toDateInputValue = (value) => {
 export default function HealthVaccination() {
   const navigate = useNavigate();
   const user = getUser();
-  const todayStr = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10); })();
-  const isPastDate = (value) => {
-    if (!value) return false;
-    const d = new Date(value); if (Number.isNaN(d.getTime())) return false;
-    const t = new Date(); d.setHours(0,0,0,0); t.setHours(0,0,0,0);
-    return d.getTime() < t.getTime();
-  };
 
   const [activeTab, setActiveTab] = useState('records');
   const [newVaccinationOpen, setNewVaccinationOpen] = useState(false);
@@ -253,6 +261,14 @@ export default function HealthVaccination() {
   };
 
   const handleFormChange = (key, value) => {
+    // Enforce today or future dates
+    if (['administeredAt', 'nextDoseAt', 'validUntil'].includes(key)) {
+      if (isPast(value)) {
+        setError('Date cannot be in the past. Please select today or a future date.');
+        return;
+      }
+      setError('');
+    }
     setVaccinationForm((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -327,16 +343,6 @@ export default function HealthVaccination() {
       validUntil: String(vaccinationForm.validUntil || '').trim() || undefined,
       notes: String(vaccinationForm.notes || '').trim() || undefined,
     };
-
-    // Validate future-only dates for upcoming/validity fields
-    if (payload.nextDoseAt && isPastDate(payload.nextDoseAt)) {
-      setError('Next dose date cannot be in the past. Please select today or a future date.');
-      return;
-    }
-    if (payload.validUntil && isPastDate(payload.validUntil)) {
-      setError('Valid until date cannot be in the past. Please select today or a future date.');
-      return;
-    }
 
     if (vaccinationForm.generateCertificate) {
       payload.certificate = {
@@ -434,10 +440,10 @@ export default function HealthVaccination() {
             <div className="page-header">
               <div className="page-title">Vaccination Overview</div>
               <div className="page-actions">
-                <button className="btn btn-action btn-sm">
+                <button className="btn btn-outline">
                   <i className="fas fa-file-import"></i> Import Records
                 </button>
-                <button className="btn btn-action btn-sm" onClick={openCreateModal}>
+                <button className="btn btn-vaccination" onClick={openCreateModal}>
                   <i className="fas fa-plus"></i> New Vaccination
                 </button>
               </div>
@@ -555,17 +561,17 @@ export default function HealthVaccination() {
                               <td>{rec.notes || '—'}</td>
                               <td className="action-buttons">
                                 <button
-                                  className="btn btn-action btn-sm"
+                                  className="btn btn-outline btn-sm"
                                   onClick={() => handleEditRecord(rec)}
                                 >
-                                  <i className="fas fa-pen"></i> Edit
+                                  Edit
                                 </button>
                                 <button
-                                  className="btn btn-action btn-sm delete"
+                                  className="btn btn-outline btn-sm"
                                   onClick={() => handleDeleteRecord(rec)}
                                   disabled={deletingId === key}
                                 >
-                                  <i className="fas fa-trash"></i> {deletingId === key ? 'Deleting…' : 'Delete'}
+                                  {deletingId === key ? 'Deleting…' : 'Delete'}
                                 </button>
                               </td>
                             </tr>
@@ -823,8 +829,8 @@ export default function HealthVaccination() {
                     required
                     value={vaccinationForm.administeredAt}
                     onChange={(e) => handleFormChange('administeredAt', e.target.value)}
+                    min={todayStr()}
                   />
-                  {/* Administered date can be in the past (recording past vaccination). */}
                 </div>
                 <div className="form-group">
                   <label htmlFor="batchNumber">Batch Number *</label>
@@ -866,7 +872,7 @@ export default function HealthVaccination() {
                     className="form-control"
                     value={vaccinationForm.nextDoseAt}
                     onChange={(e) => handleFormChange('nextDoseAt', e.target.value)}
-                    min={todayStr}
+                    min={todayStr()}
                   />
                 </div>
                 <div className="form-group">
@@ -878,7 +884,7 @@ export default function HealthVaccination() {
                     className="form-control"
                     value={vaccinationForm.validUntil}
                     onChange={(e) => handleFormChange('validUntil', e.target.value)}
-                    min={todayStr}
+                    min={todayStr()}
                   />
                 </div>
                 <div className="form-group">
@@ -913,9 +919,9 @@ export default function HealthVaccination() {
                   </div>
               </div>
 
-              <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
-                <button type="button" className="btn btn-action btn-sm" onClick={closeVaccinationModal} style={{ flex: 1 }}>
-                  <i className="fas fa-times"></i> Cancel
+              <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+                <button type="button" className="btn btn-outline" onClick={closeVaccinationModal} style={{ flex: 1 }}>
+                  Cancel
                 </button>
                 <button type="submit" className="btn btn-vaccination" style={{ flex: 1 }} disabled={saving}>
                   {saving ? 'Saving...' : modalMode === 'edit' ? 'Update Vaccination Record' : 'Save Vaccination Record'}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { NavLink } from 'react-router-dom';
 import './about.css';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -32,7 +33,7 @@ function AboutUs() {
               <p>Today, OCEANCARE serves over 200 shipping companies and protects the health of more than 50,000 seafarers across the globe. Our systems are designed to meet international maritime health regulations while providing compassionate care to those who spend their lives at sea.</p>
             </div>
             <div className="mission-image">
-              <img src="https://images.unsplash.com/photo-1467810563316-b5476525c0f9?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" alt="OCEANCARE Mission" />
+              <img src="https://plus.unsplash.com/premium_photo-1664300737634-9531e6d63308?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NXx8U2hpcCUyMHdvcmtlcnN8ZW58MHx8MHx8fDA%3D&auto=format&fit=crop&q=60&w=600" alt="OCEANCARE Mission" />
             </div>
           </div>
         </div>
@@ -86,69 +87,7 @@ function AboutUs() {
         </div>
       </section>
 
-      {/* Team Section */}
-      <section className="team">
-        <div className="container">
-          <div className="section-title">
-            <h2>Our Leadership Team</h2>
-            <p>Experienced professionals dedicated to maritime health</p>
-          </div>
-
-          <div className="team-grid">
-            <div className="team-member">
-              <div className="member-image" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1560250097-0b93528c311a?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')" }}></div>
-              <div className="member-info">
-                <h3>Dr. Sarah Chen</h3>
-                <div className="member-role">Chief Medical Officer</div>
-                <p>Former WHO public health specialist with 15 years of experience in maritime medicine.</p>
-                <div className="social-links">
-                  <a href="#"><i className="fab fa-linkedin-in" aria-hidden="true"></i></a>
-                  <a href="#"><i className="fab fa-twitter" aria-hidden="true"></i></a>
-                </div>
-              </div>
-            </div>
-
-            <div className="team-member">
-              <div className="member-image" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')" }}></div>
-              <div className="member-info">
-                <h3>Michael Robertson</h3>
-                <div className="member-role">CEO & Founder</div>
-                <p>Maritime technology entrepreneur with a background in naval engineering.</p>
-                <div className="social-links">
-                  <a href="#"><i className="fab fa-linkedin-in" aria-hidden="true"></i></a>
-                  <a href="#"><i className="fab fa-twitter" aria-hidden="true"></i></a>
-                </div>
-              </div>
-            </div>
-
-            <div className="team-member">
-              <div className="member-image" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')" }}></div>
-              <div className="member-info">
-                <h3>Elena Rodriguez</h3>
-                <div className="member-role">Head of Technology</div>
-                <p>Software engineer specializing in health informatics and remote monitoring systems.</p>
-                <div className="social-links">
-                  <a href="#"><i className="fab fa-linkedin-in" aria-hidden="true"></i></a>
-                  <a href="#"><i className="fab fa-twitter" aria-hidden="true"></i></a>
-                </div>
-              </div>
-            </div>
-
-            <div className="team-member">
-              <div className="member-image" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1552058544-f2b08422138a?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')" }}></div>
-              <div className="member-info">
-                <h3>Captain James Wilson</h3>
-                <div className="member-role">Maritime Operations</div>
-                <p>Former container ship captain with 25 years of experience in international shipping.</p>
-                <div className="social-links">
-                  <a href="#"><i className="fab fa-linkedin-in" aria-hidden="true"></i></a>
-                  <a href="#"><i className="fab fa-twitter" aria-hidden="true"></i></a>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      
 
       {/* Story Section */}
       <section className="story">
@@ -189,22 +128,22 @@ function AboutUs() {
 
           <div className="partners-grid">
             <div className="partner-logo">
-              <img src="https://via.placeholder.com/150x80/1a4b8c/ffffff?text=IMO" alt="International Maritime Organization" />
+              <div className="partner-name">International Maritime Organization</div>
             </div>
             <div className="partner-logo">
-              <img src="https://via.placeholder.com/150x80/2a9d8f/ffffff?text=WHO" alt="World Health Organization" />
+              <div className="partner-name">World Health Organization</div>
             </div>
             <div className="partner-logo">
-              <img src="https://via.placeholder.com/150x80/1a4b8c/ffffff?text=MAERSK" alt="Maersk" />
+              <div className="partner-name">Maersk</div>
             </div>
             <div className="partner-logo">
-              <img src="https://via.placeholder.com/150x80/2a9d8f/ffffff?text=MSC" alt="Mediterranean Shipping Company" />
+              <div className="partner-name">Mediterranean Shipping Company</div>
             </div>
             <div className="partner-logo">
-              <img src="https://via.placeholder.com/150x80/1a4b8c/ffffff?text=MITAG" alt="Maritime Health Research" />
+              <div className="partner-name">Maritime Health Research</div>
             </div>
             <div className="partner-logo">
-              <img src="https://via.placeholder.com/150x80/2a9d8f/ffffff?text=Telemed" alt="Telemedicine Association" />
+              <div className="partner-name">Telemedicine Association</div>
             </div>
           </div>
         </div>
@@ -215,7 +154,7 @@ function AboutUs() {
         <div className="container">
           <h2>Join the OCEANCARE Community</h2>
           <p>Become part of the movement to improve maritime health and safety standards worldwide</p>
-          <a href="#contact" className="btn btn-primary">Contact Us</a>
+          <NavLink to="/contact" className="btn btn-primary">Contact Us</NavLink>
           <a href="#demo" className="btn btn-outline">Request a Demo</a>
         </div>
       </section>

@@ -31,8 +31,19 @@
 .emergency-page .page-header p { font-size:1.2rem; max-width:700px; margin:0 auto; }
 
 /* Emergency Alert */
-.emergency-page .emergency-alert { background: var(--danger); color:#fff; padding:20px 0; text-align:center; }
-.emergency-page .alert-content { display:flex; justify-content:center; align-items:center; gap:20px; flex-wrap:wrap; }
+.emergency-page .emergency-alert { background: transparent; padding: 24px 0; }
+/* Center the alert bar within the container */
+.emergency-page .emergency-alert .container { display:flex; justify-content:center; }
+.emergency-page .alert-content { width: 100%; max-width: 980px; display:flex; justify-content:center; align-items:center; gap:16px; flex-wrap:wrap; color:#fff; background: var(--danger); border-radius: 16px; padding: 12px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.12); }
+.emergency-page .alert-content h3 { margin: 0; font-size: 1rem; letter-spacing: .3px; display:flex; align-items:center; gap:8px; font-weight: 800; }
+/* Neat emergency CTA button */
+.emergency-page .btn-emergency { height: 44px; padding: 0 20px; border-radius: 999px; font-size: 1rem; border-width: 2px; animation: pulse 2s infinite; display:inline-flex; align-items:center; gap:10px; }
+.emergency-page .btn-emergency i { font-size: 14px; }
+@media (max-width: 640px){
+  .emergency-page .alert-content { gap: 12px; padding: 10px 12px; border-radius: 14px; }
+  .emergency-page .alert-content h3 { font-size: .95rem; }
+  .emergency-page .btn-emergency { height: 42px; padding: 0 16px; font-size: .95rem; }
+}
 
 /* Procedures */
 .emergency-page .emergency-procedures { padding:80px 0; background:#fff; }

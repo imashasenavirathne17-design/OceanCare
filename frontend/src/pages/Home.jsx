@@ -90,7 +90,7 @@ function Home() {
 
           <div className="tips-grid">
             <div className="tip-card">
-              <div className="tip-img" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80')" }}></div>
+              <div className="tip-img" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1662926912257-514bbe9d4ba3?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&q=80&w=890')" }}></div>
               <div className="tip-content">
                 <h3>Staying Hydrated at Sea</h3>
                 <p>Learn the importance of hydration and strategies to ensure adequate water intake during long voyages.</p>
@@ -98,7 +98,7 @@ function Home() {
             </div>
 
             <div className="tip-card">
-              <div className="tip-img" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1571019614244-c5d3f6c86c84?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80')" }}></div>
+              <div className="tip-img" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1659366100463-9e29a63adcc2?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&q=80&w=1170')" }}></div>
               <div className="tip-content">
                 <h3>Managing Seasickness</h3>
                 <p>Effective techniques and remedies to prevent and manage seasickness for crew members.</p>
@@ -106,7 +106,7 @@ function Home() {
             </div>
 
             <div className="tip-card">
-              <div className="tip-img" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1534258936925-c58bed479fcb?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80')" }}></div>
+              <div className="tip-img" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1517836357463-d25dfeac3438?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTF8fEV4ZXJjaXNlfGVufDB8fDB8fHww&auto=format&fit=crop&q=60&w=600')" }}></div>
               <div className="tip-content">
                 <h3>Onboard Exercise routines</h3>
                 <p>Space-efficient workout routines designed specifically for the limited space available on ships.</p>

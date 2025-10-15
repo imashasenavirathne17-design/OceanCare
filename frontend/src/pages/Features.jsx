@@ -79,7 +79,7 @@ function Features() {
               </ul>
             </div>
             <div className="feature-image">
-              <img src="https://images.unsplash.com/photo-1582719471384-8946dc3c9f44?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" alt="Health Monitoring" />
+              <img src="https://plus.unsplash.com/premium_photo-1666299891137-453fa1f29644?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8aGVhbHRoJTIwbW9uaXRvcmluZ3xlbnwwfHwwfHx8MA%3D%3D&auto=format&fit=crop&q=60&w=600" alt="Health Monitoring" />
             </div>
           </div>
 
@@ -95,7 +95,7 @@ function Features() {
               </ul>
             </div>
             <div className="feature-image">
-              <img src="https://images.unsplash.com/photo-1576091160399-112ba8d25d15?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" alt="Telemedicine" />
+              <img src="https://images.unsplash.com/photo-1758691463620-188ca7c1a04f?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MjB8fFRlbGVtZWRpY2luZXxlbnwwfHwwfHx8MA%3D%3D&auto=format&fit=crop&q=60&w=600" alt="Telemedicine" />
             </div>
           </div>
 
@@ -111,7 +111,7 @@ function Features() {
               </ul>
             </div>
             <div className="feature-image">
-              <img src="https://images.unsplash.com/photo-1583309219338-a582f1f9ca6b?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" alt="Emergency Response" />
+              <img src="https://images.unsplash.com/photo-1753526372680-7d368f2f068e?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NHx8ZW1lcmdlbmN5JTIwcmVzcG9uc2UlMjBpbiUyMHNoaXB8ZW58MHx8MHx8fDA%3D&auto=format&fit=crop&q=60&w=600" alt="Emergency Response" />
             </div>
           </div>
         </div>
