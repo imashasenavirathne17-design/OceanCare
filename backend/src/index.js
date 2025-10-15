@@ -4,9 +4,14 @@ const path = require('path');
 const cors = require('cors');
 const { connectDB } = require('./config/db');
 
+// Import all models to register them with Mongoose
+require('./models');
+
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const inventoryWasteRoutes = require('./routes/inventoryWasteRoutes');
+const inventoryRestockRoutes = require('./routes/inventoryRestockRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const emergencyAlertRoutes = require('./routes/emergencyAlertRoutes');
 const emergencyProtocolRoutes = require('./routes/emergencyProtocolRoutes');
@@ -47,7 +52,9 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/inventory', inventoryRoutes);
+app.use('/api/inventory/waste', inventoryWasteRoutes); // Mount waste routes FIRST
+app.use('/api/inventory/restock-orders', inventoryRestockRoutes); // Mount restock routes
+app.use('/api/inventory', inventoryRoutes); // Mount inventory routes AFTER
 app.use('/api/emergency-alerts', emergencyAlertRoutes);
 app.use('/api/emergency-protocols', emergencyProtocolRoutes);
 app.use('/api/health/exams', examinationRoutes);

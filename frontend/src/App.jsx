@@ -37,16 +37,15 @@ import AdminMessaging from './pages/dashboards/AdminMessaging';
 import EmergencyIncidentLog from './pages/dashboards/EmergencyIncidentLog';
 import EmergencyReports from './pages/dashboards/EmergencyReports';
 import InventoryDashboard from './pages/dashboards/InventoryDashboard';
+import InventoryAlerts from './pages/dashboards/InventoryAlerts';
 import InventoryItems from './pages/dashboards/InventoryItems';
 import InventoryStockManagement from './pages/dashboards/InventoryStockManagement';
 import InventoryExpiryTracking from './pages/dashboards/InventoryExpiryTracking';
 import InventoryStorageZones from './pages/dashboards/InventoryStorageZones';
 import InventoryReports from './pages/dashboards/InventoryReports';
 import InventoryAuditTrail from './pages/dashboards/InventoryAuditTrail';
-import InventoryBarcodeScanning from './pages/dashboards/InventoryBarcodeScanning';
 import InventoryWasteDisposal from './pages/dashboards/InventoryWasteDisposal';
 import InventoryPredictiveRestocking from './pages/dashboards/InventoryPredictiveRestocking';
-import InventoryFleetTransfer from './pages/dashboards/InventoryFleetTransfer';
 import AdminDashboard from './pages/dashboards/AdminDashboard';
 import AdminUserManagement from './pages/dashboards/AdminUserManagement';
 import AdminPermissions from './pages/dashboards/AdminPermissions';
@@ -142,16 +141,15 @@ function App() {
 
         <Route element={<RequireAuth roles={["inventory"]} />}>
           <Route path="/dashboard/inventory" element={<InventoryDashboard />} />
+          <Route path="/dashboard/inventory/alerts" element={<InventoryAlerts />} />
           <Route path="/dashboard/inventory/items" element={<InventoryItems />} />
           <Route path="/dashboard/inventory/stock" element={<InventoryStockManagement />} />
           <Route path="/dashboard/inventory/expiry" element={<InventoryExpiryTracking />} />
           <Route path="/dashboard/inventory/zones" element={<InventoryStorageZones />} />
           <Route path="/dashboard/inventory/reports" element={<InventoryReports />} />
           <Route path="/dashboard/inventory/audit-trail" element={<InventoryAuditTrail />} />
-          <Route path="/dashboard/inventory/barcode" element={<InventoryBarcodeScanning />} />
           <Route path="/dashboard/inventory/waste" element={<InventoryWasteDisposal />} />
           <Route path="/dashboard/inventory/predict" element={<InventoryPredictiveRestocking />} />
-          <Route path="/dashboard/inventory/transfer" element={<InventoryFleetTransfer />} />
         </Route>
 
         <Route element={<RequireAuth roles={["admin"]} />}>

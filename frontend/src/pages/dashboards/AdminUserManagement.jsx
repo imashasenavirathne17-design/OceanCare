@@ -32,6 +32,7 @@ export default function AdminUserManagement() {
   const [viewUser, setViewUser] = useState(null);
   const [stats, setStats] = useState({ total: 0, active: 0, suspended: 0 });
   const [error, setError] = useState('');
+  const [toast, setToast] = useState({ show: false, message: '' });
 
   // Generate a Crew ID when missing (e.g., users who self-register)
   const generateCrewId = () => {
@@ -108,6 +109,11 @@ export default function AdminUserManagement() {
 
   return (
     <div className="admin-dashboard admin-user-mgmt">
+      {toast.show && (
+        <div style={{ position: 'fixed', top: 16, right: 16, background: '#333', color: '#fff', padding: '10px 14px', borderRadius: 8, zIndex: 2000, boxShadow: '0 8px 20px rgba(0,0,0,0.3)' }}>
+          {toast.message}
+        </div>
+      )}
       <div className="dashboard-container">
         <AdminSidebar onLogout={() => { clearSession(); navigate('/login'); }} />
 
@@ -288,6 +294,8 @@ export default function AdminUserManagement() {
             <div className="modal-footer">
               <button className="btn" onClick={() => setCreateUserOpen(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={async () => {
+                const allFilled = Object.values(newUser).every((v) => (typeof v === 'string' ? v.trim() !== '' : true));
+                if (!allFilled) { setToast({ show: true, message: 'Please fill all the rows of the form' }); setTimeout(() => setToast({ show: false, message: '' }), 2500); return; }
                 const fullName = `${newUser.firstName} ${newUser.lastName}`.trim();
                 const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUser.email);
                 const phoneOk = !newUser.phone || /^[+\d][\d\s()-]{6,}$/.test(newUser.phone);

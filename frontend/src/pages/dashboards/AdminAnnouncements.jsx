@@ -105,7 +105,16 @@ export default function AdminAnnouncements() {
 
   const handleCreateClick = () => {
     setIsEditing(false);
-    setFormData(defaultForm);
+    // Prefill for immediate visibility on public Announcements page
+    const nowLocal = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const localISO = `${nowLocal.getFullYear()}-${pad(nowLocal.getMonth()+1)}-${pad(nowLocal.getDate())}T${pad(nowLocal.getHours())}:${pad(nowLocal.getMinutes())}`;
+    setFormData({
+      ...defaultForm,
+      status: 'published',
+      publishAt: localISO,
+      audience: ['all']
+    });
     setModalOpen(true);
   };
 
@@ -143,8 +152,15 @@ export default function AdminAnnouncements() {
     try {
       if (isEditing && selected?._id && !selected._id.startsWith('demo')) {
         await updateAdminAnnouncement(selected._id, payload);
+        if (payload.status === 'published') {
+          await publishAdminAnnouncement(selected._id, payload.publishAt);
+        }
       } else {
-        await createAdminAnnouncement(payload);
+        const created = await createAdminAnnouncement(payload);
+        const createdId = created?._id || created?.id;
+        if (payload.status === 'published' && createdId) {
+          await publishAdminAnnouncement(createdId, payload.publishAt);
+        }
       }
       setModalOpen(false);
       setFormData(defaultForm);
