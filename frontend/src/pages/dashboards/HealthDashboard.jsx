@@ -68,16 +68,17 @@ export default function HealthDashboard() {
 
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState([
-    { icon: 'fas fa-exclamation-circle', value: 0, label: 'Pending Examinations', tone: 'danger' },
-    { icon: 'fas fa-heartbeat', value: 0, label: 'Chronic Patients', tone: 'warning' },
-    { icon: 'fas fa-syringe', value: 0, label: 'Vaccination Alerts', tone: 'primary' },
-    { icon: 'fas fa-pills', value: 0, label: 'Low Stock Items', tone: 'info' },
+    { icon: 'fas fa-exclamation-circle', value: 0, label: 'Pending Examinations', tone: 'danger', detail: 'Awaiting scheduling' },
+    { icon: 'fas fa-heartbeat', value: 0, label: 'Chronic Patients', tone: 'warning', detail: 'Monitor chronic plans' },
+    { icon: 'fas fa-syringe', value: 0, label: 'Vaccination Alerts', tone: 'primary', detail: 'Track overdue doses' },
+    { icon: 'fas fa-pills', value: 0, label: 'Low Stock Items', tone: 'info', detail: 'Review critical supplies' },
   ]);
   const [activities, setActivities] = useState(FALLBACK_ACTIVITIES);
   const [schedule, setSchedule] = useState(FALLBACK_SCHEDULE);
   const [upcomingExams, setUpcomingExams] = useState(FALLBACK_EXAMS);
   const [vaccinationSummary, setVaccinationSummary] = useState(FALLBACK_VACCINES);
   const [criticalAlerts, setCriticalAlerts] = useState(FALLBACK_ALERTS);
+  const [inventoryCritical, setInventoryCritical] = useState([]);
 
   useEffect(() => {
     let mounted = true;
@@ -94,7 +95,13 @@ export default function HealthDashboard() {
 
         if (!mounted) return;
 
-        const normalizedExams = Array.isArray(examData) && examData.length ? examData.slice(0, 4).map((exam) => ({
+        const examSource = Array.isArray(examData?.items) ? examData.items : (Array.isArray(examData) ? examData : []);
+        const vaccineSource = Array.isArray(vaccineData?.items) ? vaccineData.items : (Array.isArray(vaccineData) ? vaccineData : []);
+        const emergencySource = Array.isArray(emergencyData?.items) ? emergencyData.items : (Array.isArray(emergencyData) ? emergencyData : []);
+        const recordSource = Array.isArray(recordData?.items) ? recordData.items : (Array.isArray(recordData) ? recordData : []);
+        const inventorySource = Array.isArray(inventoryAlerts?.items) ? inventoryAlerts.items : (Array.isArray(inventoryAlerts) ? inventoryAlerts : []);
+
+        const normalizedExams = examSource.length ? examSource.slice(0, 4).map((exam) => ({
           crewName: exam.crewName || exam.crew?.fullName || '—',
           crewId: exam.crewId || exam.crew?.crewId || '—',
           examType: exam.examType || exam.type || 'General',
@@ -102,13 +109,28 @@ export default function HealthDashboard() {
           status: exam.status || 'Scheduled',
         })) : FALLBACK_EXAMS;
 
-        const normalizedVaccines = Array.isArray(vaccineData) && vaccineData.length ? vaccineData.slice(0, 4).map((v) => ({
+        const normalizedVaccines = vaccineSource.length ? vaccineSource.slice(0, 4).map((v) => ({
           vaccine: v.vaccine || v.name || 'Vaccine',
           dueCount: v.dueCount ?? v.dueSoon ?? 0,
           overdue: v.overdue ?? v.overdueCount ?? 0,
         })) : FALLBACK_VACCINES;
 
-        const normalizedAlerts = Array.isArray(emergencyData) && emergencyData.length ? emergencyData.slice(0, 3).map((alert) => ({
+        const priorityWeight = (value) => {
+          const normalized = (value || '').toString().toLowerCase();
+          if (normalized === 'critical') return 4;
+          if (normalized === 'high') return 3;
+          if (normalized === 'medium') return 2;
+          if (normalized === 'low') return 1;
+          return 0;
+        };
+
+        const emergencyOrdered = emergencySource.length ? [...emergencySource].sort((a, b) => {
+          const aScore = priorityWeight(a.priority || a.severity) + (a.updatedAt ? 0.1 : 0);
+          const bScore = priorityWeight(b.priority || b.severity) + (b.updatedAt ? 0.1 : 0);
+          return bScore - aScore;
+        }) : [];
+
+        const normalizedAlerts = emergencyOrdered.length ? emergencyOrdered.slice(0, 3).map((alert) => ({
           crewName: alert.crewName || alert.subject || '—',
           crewId: alert.crewId || alert.referenceId || '—',
           summary: alert.summary || alert.description || 'Critical issue',
@@ -119,21 +141,39 @@ export default function HealthDashboard() {
         setUpcomingExams(normalizedExams);
         setVaccinationSummary(normalizedVaccines);
         setCriticalAlerts(normalizedAlerts);
+        setInventoryCritical(inventorySource);
 
         const pendingExams = normalizedExams.filter((e) => (e.status || '').toLowerCase().includes('pending') || (e.status || '').toLowerCase().includes('schedule')).length;
-        const chronicPatients = Array.isArray(recordData) ? recordData.filter((r) => (r.chronicConditions || []).length).length : 0;
+        const chronicPatients = recordSource.filter((r) => Array.isArray(r?.chronicConditions) && r.chronicConditions.length).length;
         const vaccinationAlerts = normalizedVaccines.reduce((sum, v) => sum + (Number(v.overdue) || 0), 0);
-        const lowStockItems = Array.isArray(inventoryAlerts) ? inventoryAlerts.length : 0;
+        const lowStockItems = inventorySource.length;
+
+        const nextExam = normalizedExams[0];
+        const chronicSample = recordSource.find((record) => Array.isArray(record?.chronicConditions) && record.chronicConditions.length);
+        const vaccineTop = normalizedVaccines.reduce((best, item) => {
+          if (!best) return item;
+          const bestScore = (Number(best.overdue) || 0) * 10 + (Number(best.dueCount) || 0);
+          const currentScore = (Number(item.overdue) || 0) * 10 + (Number(item.dueCount) || 0);
+          return currentScore > bestScore ? item : best;
+        }, null);
+        const inventoryTop = inventorySource[0];
+        const emergencyTop = normalizedAlerts[0];
+
+        const examDetail = nextExam ? `${nextExam.crewName || 'Crew member'} • ${shortDate(nextExam.scheduledFor)}` : 'All exams up to date';
+        const chronicDetail = chronicSample ? `${chronicSample.crewName || chronicSample.crewId || 'Crew member'} • ${chronicSample.condition || chronicSample.recordType || 'Chronic monitoring'}` : 'No chronic alerts';
+        const vaccineDetail = vaccineTop ? `${vaccineTop.vaccine} • ${vaccineTop.overdue ?? 0} overdue` : 'Vaccinations current';
+        const inventoryDetail = inventoryTop ? `${inventoryTop.itemName || inventoryTop.crewName || 'Inventory item'} • ${inventoryTop.message || 'Critical levels'}` : 'Supplies within range';
+        const emergencyDetail = emergencyTop ? `${emergencyTop.crewName || 'Crew member'} • ${emergencyTop.summary}` : 'No open emergencies';
 
         setStats([
-          { icon: 'fas fa-exclamation-circle', value: pendingExams, label: 'Pending Examinations', tone: 'danger' },
-          { icon: 'fas fa-heartbeat', value: chronicPatients, label: 'Chronic Patients', tone: 'warning' },
-          { icon: 'fas fa-syringe', value: vaccinationAlerts, label: 'Vaccination Alerts', tone: 'primary' },
-          { icon: 'fas fa-pills', value: lowStockItems, label: 'Low Stock Items', tone: 'info' },
+          { icon: 'fas fa-exclamation-circle', value: pendingExams, label: 'Pending Examinations', tone: 'danger', detail: examDetail },
+          { icon: 'fas fa-heartbeat', value: chronicPatients, label: 'Chronic Patients', tone: 'warning', detail: chronicDetail },
+          { icon: 'fas fa-syringe', value: vaccinationAlerts, label: 'Vaccination Alerts', tone: 'primary', detail: vaccineDetail },
+          { icon: 'fas fa-pills', value: lowStockItems, label: 'Low Stock Items', tone: 'info', detail: lowStockItems ? inventoryDetail : emergencyDetail },
         ]);
 
-        if (Array.isArray(recordData) && recordData.length) {
-          const normalizedActivity = recordData.slice(0, 4).map((record) => ({
+        if (recordSource.length) {
+          const normalizedActivity = recordSource.slice(0, 4).map((record) => ({
             icon: 'fas fa-file-medical',
             title: record.title || record.recordType || 'Medical Record Update',
             desc: record.notes || record.summary || record.condition || 'Record updated.',
@@ -144,8 +184,8 @@ export default function HealthDashboard() {
           setActivities(FALLBACK_ACTIVITIES);
         }
 
-        if (Array.isArray(examData) && examData.length) {
-          const normalizedSchedule = examData.slice(0, 4).map((exam) => ({
+        if (examSource.length) {
+          const normalizedSchedule = examSource.slice(0, 4).map((exam) => ({
             time: exam.scheduledFor || exam.date || exam.performedAt,
             title: `${exam.crewName || exam.crew?.fullName || 'Crew Member'} - ${exam.examType || exam.type || 'Examination'}`,
             desc: exam.notes || exam.summary || 'Scheduled medical activity',
@@ -163,11 +203,12 @@ export default function HealthDashboard() {
         setCriticalAlerts(FALLBACK_ALERTS);
         setActivities(FALLBACK_ACTIVITIES);
         setSchedule(FALLBACK_SCHEDULE);
+        setInventoryCritical([]);
         setStats([
-          { icon: 'fas fa-exclamation-circle', value: FALLBACK_EXAMS.length, label: 'Pending Examinations', tone: 'danger' },
-          { icon: 'fas fa-heartbeat', value: 5, label: 'Chronic Patients', tone: 'warning' },
-          { icon: 'fas fa-syringe', value: FALLBACK_VACCINES.reduce((sum, v) => sum + v.overdue, 0), label: 'Vaccination Alerts', tone: 'primary' },
-          { icon: 'fas fa-pills', value: FALLBACK_ALERTS.length, label: 'Low Stock Items', tone: 'info' },
+          { icon: 'fas fa-exclamation-circle', value: FALLBACK_EXAMS.length, label: 'Pending Examinations', tone: 'danger', detail: 'Check examination pipeline' },
+          { icon: 'fas fa-heartbeat', value: 5, label: 'Chronic Patients', tone: 'warning', detail: 'Focus on chronic follow-up' },
+          { icon: 'fas fa-syringe', value: FALLBACK_VACCINES.reduce((sum, v) => sum + v.overdue, 0), label: 'Vaccination Alerts', tone: 'primary', detail: 'Address overdue vaccines' },
+          { icon: 'fas fa-pills', value: FALLBACK_ALERTS.length, label: 'Low Stock Items', tone: 'info', detail: 'Monitor supply alerts' },
         ]);
       } finally {
         if (mounted) setLoading(false);
@@ -200,6 +241,80 @@ export default function HealthDashboard() {
     { label: 'Vaccination Alerts', value: stats[2]?.value ?? 0, icon: 'fas fa-syringe', color: 'var(--danger)' },
     { label: 'Low Stock Alerts', value: stats[3]?.value ?? 0, icon: 'fas fa-pills', color: 'var(--primary)' },
   ]), [stats]);
+
+  const nextExamHighlight = useMemo(() => (
+    Array.isArray(upcomingExams) && upcomingExams.length ? upcomingExams[0] : null
+  ), [upcomingExams]);
+
+  const vaccinationHighlight = useMemo(() => {
+    if (!Array.isArray(vaccinationSummary) || !vaccinationSummary.length) return null;
+    return vaccinationSummary.reduce((best, item) => {
+      if (!best) return item;
+      const bestScore = (Number(best.overdue) || 0) * 10 + (Number(best.dueCount) || 0);
+      const currentScore = (Number(item.overdue) || 0) * 10 + (Number(item.dueCount) || 0);
+      return currentScore > bestScore ? item : best;
+    }, null);
+  }, [vaccinationSummary]);
+
+  const criticalHighlight = useMemo(() => {
+    if (!Array.isArray(criticalAlerts) || !criticalAlerts.length) return null;
+    const rank = (value) => {
+      const normalized = (value || '').toString().toLowerCase();
+      if (normalized === 'critical') return 4;
+      if (normalized === 'high') return 3;
+      if (normalized === 'medium') return 2;
+      if (normalized === 'low') return 1;
+      return 0;
+    };
+    return criticalAlerts.slice().sort((a, b) => rank(b.priority) - rank(a.priority))[0];
+  }, [criticalAlerts]);
+
+  const inventoryHighlight = useMemo(() => (
+    Array.isArray(inventoryCritical) && inventoryCritical.length ? inventoryCritical[0] : null
+  ), [inventoryCritical]);
+
+  const heroHighlights = useMemo(() => ([
+    {
+      title: 'Next Examination',
+      icon: 'fas fa-calendar-day',
+      value: nextExamHighlight ? shortDate(nextExamHighlight.scheduledFor) : 'All clear',
+      subtitle: nextExamHighlight ? `${nextExamHighlight.crewName || 'Crew member'} • ${nextExamHighlight.examType}` : 'No upcoming examinations scheduled',
+      badge: nextExamHighlight?.status,
+      tone: 'hero-info',
+      action: () => navigate('/dashboard/health/examinations'),
+      cta: 'View Exams',
+    },
+    {
+      title: 'Vaccination Focus',
+      icon: 'fas fa-syringe',
+      value: vaccinationHighlight ? `${vaccinationHighlight.overdue ?? 0} overdue` : '0 overdue',
+      subtitle: vaccinationHighlight ? `${vaccinationHighlight.vaccine} • ${vaccinationHighlight.dueCount ?? 0} due soon` : 'Vaccination schedule is on track',
+      badge: vaccinationHighlight ? `${vaccinationHighlight.dueCount ?? 0} due` : undefined,
+      tone: 'hero-warning',
+      action: () => navigate('/dashboard/health/vaccination'),
+      cta: 'Open Vaccinations',
+    },
+    {
+      title: 'Critical Case Watch',
+      icon: 'fas fa-heartbeat',
+      value: criticalHighlight ? (criticalHighlight.priority || 'High').toString().toUpperCase() : 'Stable',
+      subtitle: criticalHighlight ? `${criticalHighlight.crewName || 'Crew member'} • ${criticalHighlight.summary}` : 'No active critical emergencies',
+      badge: stats[0]?.value ? `${stats[0].value} pending exams` : undefined,
+      tone: 'hero-danger',
+      action: () => navigate('/dashboard/health/emergency'),
+      cta: 'Review Emergencies',
+    },
+    {
+      title: 'Inventory Pulse',
+      icon: 'fas fa-pills',
+      value: inventoryHighlight ? 'Replenish now' : 'Good capacity',
+      subtitle: inventoryHighlight ? `${inventoryHighlight.itemName || inventoryHighlight.crewName || 'Inventory item'} • ${inventoryHighlight.message || 'Critical stock level reached'}` : 'No critical stock alerts detected',
+      badge: stats[3]?.value ? `${stats[3].value} items` : undefined,
+      tone: 'hero-primary',
+      action: () => navigate('/dashboard/inventory/alerts'),
+      cta: 'Inventory Alerts',
+    },
+  ]), [criticalHighlight, inventoryHighlight, navigate, nextExamHighlight, stats, vaccinationHighlight]);
 
   // Medical Records form state
   const [recordForm, setRecordForm] = useState({
@@ -269,6 +384,25 @@ export default function HealthDashboard() {
         </div>
       )}
 
+      <section className="hero-overview">
+        {heroHighlights.map((card, index) => (
+          <div key={index} className={`hero-card ${card.tone}`}>
+            <div className="hero-card-top">
+              <div className="hero-icon">
+                <i className={card.icon}></i>
+              </div>
+              {card.badge && <span className="hero-badge">{card.badge}</span>}
+            </div>
+            <div className="hero-card-main">
+              <div className="hero-title">{card.title}</div>
+              <div className="hero-value">{card.value}</div>
+              <div className="hero-subtitle">{card.subtitle}</div>
+            </div>
+            <button type="button" className="btn btn-outline btn-sm" onClick={card.action}>{card.cta}</button>
+          </div>
+        ))}
+      </section>
+
       {/* Dashboard Stats */}
       <div className="stats-container">
             {stats.map((s, i) => (
@@ -279,6 +413,7 @@ export default function HealthDashboard() {
                 <div className="stat-content">
                   <div className="stat-value">{s.value}</div>
                   <div className="stat-label">{s.label}</div>
+                  {!!s.detail && <div className="stat-detail">{s.detail}</div>}
                 </div>
               </div>
             ))}

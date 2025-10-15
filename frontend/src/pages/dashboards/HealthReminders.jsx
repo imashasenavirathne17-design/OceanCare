@@ -16,16 +16,24 @@ import {
 } from '../../lib/reminderApi';
 import { listCrewMembers } from '../../lib/healthApi';
 
+const todayStr = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString().slice(0, 10);
+};
+
+const isPast = (val) => {
+  if (!val) return false;
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return false;
+  const t = new Date();
+  d.setHours(0,0,0,0); t.setHours(0,0,0,0);
+  return d.getTime() < t.getTime();
+};
+
 export default function HealthReminders() {
   const navigate = useNavigate();
   const user = getUser();
-  const todayStr = (() => { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10); })();
-  const isPastDate = (value) => {
-    if (!value) return false;
-    const d = new Date(value); if (Number.isNaN(d.getTime())) return false;
-    const t = new Date(); d.setHours(0,0,0,0); t.setHours(0,0,0,0);
-    return d.getTime() < t.getTime();
-  };
 
   const [activeTab, setActiveTab] = useState('medication');
   const [newReminderOpen, setNewReminderOpen] = useState(false);
@@ -183,6 +191,7 @@ export default function HealthReminders() {
   const handleReschedule = async (reminder) => {
     const newDate = prompt('Enter new scheduled date (YYYY-MM-DD):', reminder.scheduledDate?.slice(0, 10));
     if (!newDate) return;
+    if (isPast(newDate)) { alert('Date cannot be in the past. Please choose today or a future date.'); return; }
     const newTime = prompt('Enter new scheduled time (HH:MM):', reminder.scheduledTime || '08:00');
     try {
       await rescheduleReminder(reminder.id, newDate, newTime);
@@ -230,8 +239,8 @@ export default function HealthReminders() {
 
       const form = new FormData(e.target);
       const payload = buildReminderPayload(form, newReminderData);
-      // prevent past dates for medication or follow-up
-      if (payload.scheduledDate && isPastDate(payload.scheduledDate)) {
+      // Enforce date not in the past
+      if (isPast(payload.scheduledDate)) {
         alert('Scheduled date cannot be in the past. Please select today or a future date.');
         return;
       }
@@ -253,7 +262,7 @@ export default function HealthReminders() {
     try {
       const form = new FormData(e.target);
       const payload = buildReminderPayload(form, editingReminder, true);
-      if (payload.scheduledDate && isPastDate(payload.scheduledDate)) {
+      if (isPast(payload.scheduledDate)) {
         alert('Scheduled date cannot be in the past. Please select today or a future date.');
         return;
       }
@@ -439,21 +448,11 @@ export default function HealthReminders() {
                           <td className="nowrap">{reminder.displayTime}</td>
                           <td><span className={`status-badge ${reminder.statusClass}`}>{reminder.statusLabel}</span></td>
                           <td className="action-buttons">
-                            <button className="btn btn-action btn-sm" onClick={() => handleMarkCompleted(reminder)}>
-                              <i className="fas fa-check"></i> Mark Done
-                            </button>
-                            <button className="btn btn-action btn-sm" onClick={() => handleSnooze(reminder)}>
-                              <i className="fas fa-clock"></i> Snooze
-                            </button>
-                            <button className="btn btn-action btn-sm" onClick={() => handleReschedule(reminder)}>
-                              <i className="fas fa-calendar-alt"></i> Reschedule
-                            </button>
-                            <button className="btn btn-action btn-sm" onClick={() => handleEdit(reminder)}>
-                              <i className="fas fa-pen"></i> Edit
-                            </button>
-                            <button className="btn btn-action btn-sm delete" onClick={() => handleDelete(reminder)}>
-                              <i className="fas fa-trash"></i> Delete
-                            </button>
+                            <button className="btn btn-outline btn-sm" onClick={() => handleMarkCompleted(reminder)}>Mark Done</button>
+                            <button className="btn btn-outline btn-sm" onClick={() => handleSnooze(reminder)}>Snooze</button>
+                            <button className="btn btn-outline btn-sm" onClick={() => handleReschedule(reminder)}>Reschedule</button>
+                            <button className="btn btn-outline btn-sm" onClick={() => handleEdit(reminder)}>Edit</button>
+                            <button className="btn btn-outline btn-sm" onClick={() => handleDelete(reminder)}>Delete</button>
                           </td>
                         </tr>
                       ))}
@@ -537,18 +536,10 @@ export default function HealthReminders() {
                         <div className={`card-due ${reminder.statusClass}`}>{reminder.statusLabel}</div>
                       </div>
                       <div className="card-actions">
-                        <button className="btn btn-action btn-sm" onClick={() => handleReschedule(reminder)}>
-                          <i className="fas fa-calendar-alt"></i> Reschedule
-                        </button>
-                        <button className="btn btn-action btn-sm" onClick={() => handleMarkCompleted(reminder)}>
-                          <i className="fas fa-check"></i> Mark Complete
-                        </button>
-                        <button className="btn btn-action btn-sm" onClick={() => handleEdit(reminder)}>
-                          <i className="fas fa-pen"></i> Edit
-                        </button>
-                        <button className="btn btn-action btn-sm delete" onClick={() => handleDelete(reminder)}>
-                          <i className="fas fa-trash"></i> Delete
-                        </button>
+                        <button className="btn btn-outline btn-sm" onClick={() => handleReschedule(reminder)}>Reschedule</button>
+                        <button className="btn btn-outline btn-sm" onClick={() => handleMarkCompleted(reminder)}>Mark Complete</button>
+                        <button className="btn btn-outline btn-sm" onClick={() => handleEdit(reminder)}>Edit</button>
+                        <button className="btn btn-outline btn-sm" onClick={() => handleDelete(reminder)}>Delete</button>
                       </div>
                     </div>
                   ))}
@@ -592,18 +583,10 @@ export default function HealthReminders() {
                             <td><span className={`status-badge ${reminder.statusClass}`}>{reminder.statusLabel}</span></td>
                             <td className="nowrap">{reminder.followup?.priority || '—'}</td>
                             <td className="action-buttons">
-                              <button className="btn btn-action btn-sm" onClick={() => handleReschedule(reminder)}>
-                                <i className="fas fa-calendar-alt"></i> Reschedule
-                              </button>
-                              <button className="btn btn-action btn-sm" onClick={() => handleMarkCompleted(reminder)}>
-                                <i className="fas fa-check"></i> Complete
-                              </button>
-                              <button className="btn btn-action btn-sm" onClick={() => handleEdit(reminder)}>
-                                <i className="fas fa-pen"></i> Edit
-                              </button>
-                              <button className="btn btn-action btn-sm delete" onClick={() => handleDelete(reminder)}>
-                                <i className="fas fa-trash"></i> Delete
-                              </button>
+                              <button className="btn btn-outline btn-sm" onClick={() => handleReschedule(reminder)}>Reschedule</button>
+                              <button className="btn btn-outline btn-sm" onClick={() => handleMarkCompleted(reminder)}>Complete</button>
+                              <button className="btn btn-outline btn-sm" onClick={() => handleEdit(reminder)}>Edit</button>
+                              <button className="btn btn-outline btn-sm" onClick={() => handleDelete(reminder)}>Delete</button>
                             </td>
                           </tr>
                         ))}
@@ -690,12 +673,8 @@ export default function HealthReminders() {
                           <td>Weekly</td>
                           <td><span className="status-badge status-active">Active</span></td>
                           <td className="action-buttons">
-                            <button className="btn btn-action btn-sm">
-                              <i className="fas fa-pen"></i> Edit
-                            </button>
-                            <button className="btn btn-action btn-sm delete">
-                              <i className="fas fa-ban"></i> Disable
-                            </button>
+                            <button className="btn btn-outline btn-sm">Edit</button>
+                            <button className="btn btn-outline btn-sm">Disable</button>
                           </td>
                         </tr>
                         <tr>
@@ -704,12 +683,8 @@ export default function HealthReminders() {
                           <td>Weekly</td>
                           <td><span className="status-badge status-active">Active</span></td>
                           <td className="action-buttons">
-                            <button className="btn btn-action btn-sm">
-                              <i className="fas fa-pen"></i> Edit
-                            </button>
-                            <button className="btn btn-action btn-sm delete">
-                              <i className="fas fa-ban"></i> Disable
-                            </button>
+                            <button className="btn btn-outline btn-sm">Edit</button>
+                            <button className="btn btn-outline btn-sm">Disable</button>
                           </td>
                         </tr>
                         <tr>
@@ -718,12 +693,8 @@ export default function HealthReminders() {
                           <td>Monthly</td>
                           <td><span className="status-badge status-active">Active</span></td>
                           <td className="action-buttons">
-                            <button className="btn btn-action btn-sm">
-                              <i className="fas fa-pen"></i> Edit
-                            </button>
-                            <button className="btn btn-action btn-sm delete">
-                              <i className="fas fa-ban"></i> Disable
-                            </button>
+                            <button className="btn btn-outline btn-sm">Edit</button>
+                            <button className="btn btn-outline btn-sm">Disable</button>
                           </td>
                         </tr>
                       </tbody>
@@ -797,7 +768,7 @@ export default function HealthReminders() {
                   <div className="form-grid">
                     <div className="form-group">
                       <label htmlFor="medicationDate">Scheduled Date *</label>
-                      <input type="date" id="medicationDate" name="medicationDate" className="form-control" required min={todayStr} />
+                      <input type="date" id="medicationDate" name="medicationDate" className="form-control" required min={todayStr()} />
                     </div>
                     <div className="form-group">
                       <label htmlFor="medicationFrequency">Frequency *</label>
@@ -827,7 +798,7 @@ export default function HealthReminders() {
                     </div>
                     <div className="form-group">
                       <label htmlFor="followupDate">Date *</label>
-                      <input type="date" id="followupDate" name="followupDate" className="form-control" required min={todayStr} />
+                      <input type="date" id="followupDate" name="followupDate" className="form-control" required min={todayStr()} />
                     </div>
                   </div>
                   <div className="form-group">
@@ -912,7 +883,7 @@ export default function HealthReminders() {
                   <div className="form-grid">
                     <div className="form-group">
                       <label htmlFor="editMedicationDate">Scheduled Date *</label>
-                      <input type="date" id="editMedicationDate" name="editMedicationDate" className="form-control" defaultValue={editingReminder?.scheduledDate ? new Date(editingReminder.scheduledDate).toISOString().slice(0, 10) : ''} required min={todayStr} />
+                      <input type="date" id="editMedicationDate" name="editMedicationDate" className="form-control" defaultValue={editingReminder?.scheduledDate ? new Date(editingReminder.scheduledDate).toISOString().slice(0, 10) : ''} required min={todayStr()} />
                     </div>
                     <div className="form-group">
                       <label htmlFor="editMedicationFrequency">Frequency *</label>
@@ -942,7 +913,7 @@ export default function HealthReminders() {
                     </div>
                     <div className="form-group">
                       <label htmlFor="editFollowupDate">Date *</label>
-                      <input type="date" id="editFollowupDate" name="editFollowupDate" className="form-control" defaultValue={editingReminder?.followup?.nextDueDate ? new Date(editingReminder.followup.nextDueDate).toISOString().slice(0, 10) : editingReminder?.scheduledDate ? new Date(editingReminder.scheduledDate).toISOString().slice(0, 10) : ''} required min={todayStr} />
+                      <input type="date" id="editFollowupDate" name="editFollowupDate" className="form-control" defaultValue={editingReminder?.followup?.nextDueDate ? new Date(editingReminder.followup.nextDueDate).toISOString().slice(0, 10) : editingReminder?.scheduledDate ? new Date(editingReminder.scheduledDate).toISOString().slice(0, 10) : ''} required min={todayStr()} />
                     </div>
                   </div>
                   <div className="form-group">

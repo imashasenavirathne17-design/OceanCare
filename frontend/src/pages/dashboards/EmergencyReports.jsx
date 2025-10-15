@@ -10,27 +10,6 @@ import {
 } from '../../lib/emergencyReportApi';
 import './emergencyOfficerDashboard.css';
 
-// Lazy-load jsPDF from CDN/window only to avoid bundler resolution
-const loadJsPDF = async () => {
-  if (typeof window !== 'undefined' && window.jspdf && window.jspdf.jsPDF) {
-    return window.jspdf.jsPDF;
-  }
-  await new Promise((resolve, reject) => {
-    const existing = document.querySelector('script[data-jspdf]');
-    if (existing) { existing.addEventListener('load', resolve); existing.addEventListener('error', () => reject(new Error('Failed to load jsPDF'))); return; }
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
-    s.crossOrigin = 'anonymous';
-    s.async = true;
-    s.setAttribute('data-jspdf', 'true');
-    s.onload = resolve;
-    s.onerror = () => reject(new Error('Failed to load jsPDF'));
-    document.head.appendChild(s);
-  });
-  if (window.jspdf && window.jspdf.jsPDF) return window.jspdf.jsPDF;
-  throw new Error('jsPDF not available');
-};
-
 const STATUS_OPTIONS = [
   { value: 'ALL', label: 'All Statuses' },
   { value: 'DRAFT', label: 'Draft' },
@@ -118,6 +97,18 @@ export default function EmergencyReports() {
   const onLogout = () => {
     clearSession();
     navigate('/login');
+  };
+
+  // Lazy-load jsPDF from CDN to avoid bundling dependency
+  const ensureJsPDF = async () => {
+    if (window.jspdf && window.jspdf.jsPDF) return window.jspdf.jsPDF;
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+      s.onload = resolve; s.onerror = () => reject(new Error('Failed to load jsPDF'));
+      document.head.appendChild(s);
+    });
+    return window.jspdf.jsPDF;
   };
 
   const fetchReports = async () => {
@@ -302,9 +293,8 @@ export default function EmergencyReports() {
 
   const downloadReportPDF = async (report) => {
     if (!report) return;
-
-    const JsPDF = await loadJsPDF();
-    const doc = new JsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+    const jsPDF = await ensureJsPDF();
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const marginX = 48;
