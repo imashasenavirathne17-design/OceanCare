@@ -23,6 +23,7 @@ import CrewReminders from './pages/dashboards/CrewReminders';
 import CrewEmergency from './pages/dashboards/CrewEmergency';
 import CrewHealthEducation from './pages/dashboards/CrewHealthEducation';
 import CrewProfile from './pages/dashboards/CrewProfile';
+import CrewSymptoms from './pages/dashboards/CrewSymptoms';
 import HealthDashboard from './pages/dashboards/HealthDashboard';
 import EmergencyDashboard from './pages/dashboards/EmergencyDashboard';
 import EmergencyAlerts from './pages/dashboards/EmergencyAlerts';
@@ -87,7 +88,9 @@ function App() {
         {/* Protected dashboards */}
         <Route element={<RequireAuth roles={["crew"]} />}>
           <Route path="/dashboard/crew" element={<CrewDashboard />} />
+          <Route path="/dashboard/crew/health-check" element={<CrewHealthCheck />} />
           <Route path="/dashboard/crew/records" element={<CrewHealthRecords />} />
+          <Route path="/dashboard/crew/symptoms" element={<CrewSymptoms />} />
           <Route path="/dashboard/crew/reminders" element={<CrewReminders />} />
           <Route path="/dashboard/crew/emergency" element={<CrewEmergency />} />
           <Route path="/dashboard/crew/education" element={<CrewHealthEducation />} />

@@ -259,6 +259,7 @@ export default function CrewHealthRecords() {
   const [formError, setFormError] = useState('');
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [metricErrors, setMetricErrors] = useState({});
 
   useEffect(() => {
     let ignore = false;
@@ -454,6 +455,49 @@ export default function CrewHealthRecords() {
   const handleMetricsChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, metrics: { ...prev.metrics, [name]: value } }));
+    const nextErrors = { ...metricErrors };
+    const v = String(value).trim();
+    const intRe = /^-?\d+$/;
+    const oneDecRe = /^-?\d{1,3}(?:\.\d)?$/;
+    const setErr = (k, msg) => { if (msg) nextErrors[k] = msg; else delete nextErrors[k]; };
+    if (name === 'temperature') {
+      if (v === '' || !oneDecRe.test(v)) setErr('temperature', 'Temperature must be a number.');
+      else {
+        const num = parseFloat(v);
+        if (Number.isNaN(num) || num < 30.0 || num > 43.0) setErr('temperature', 'Temperature must be between 30.0 °C and 43.0 °C.');
+        else setErr('temperature', '');
+      }
+    } else if (name === 'heartRate') {
+      if (v === '' || !intRe.test(v)) setErr('heartRate', 'Heart rate must be an integer.');
+      else {
+        const num = parseInt(v, 10);
+        if (num < 20 || num > 220) setErr('heartRate', 'Heart rate must be between 20 and 220 bpm.');
+        else setErr('heartRate', '');
+      }
+    } else if (name === 'bpSystolic' || name === 'bpDiastolic') {
+      const sysStr = name === 'bpSystolic' ? v : String(form.metrics?.bpSystolic || '').trim();
+      const diaStr = name === 'bpDiastolic' ? v : String(form.metrics?.bpDiastolic || '').trim();
+      let sysErr = '', diaErr = '', crossErr = '';
+      if (sysStr === '' || !intRe.test(sysStr)) sysErr = 'Systolic must be an integer.';
+      if (diaStr === '' || !intRe.test(diaStr)) diaErr = 'Diastolic must be an integer.';
+      const sys = parseInt(sysStr, 10);
+      const dia = parseInt(diaStr, 10);
+      if (!sysErr && (sys < 70 || sys > 260)) sysErr = 'Values out of range.';
+      if (!diaErr && (dia < 30 || dia > 160)) diaErr = 'Values out of range.';
+      if (!sysErr && !diaErr && !(sys >= dia + 5)) crossErr = 'Systolic must be >= diastolic + 5.';
+      setErr('bpSystolic', sysErr || crossErr);
+      setErr('bpDiastolic', diaErr || '');
+    } else if (name === 'oxygen') {
+      if (v === '' || !intRe.test(v)) setErr('oxygen', 'SpO₂ must be between 50 and 100%.');
+      else {
+        const num = parseInt(v, 10);
+        if (num < 50 || num > 100) setErr('oxygen', 'SpO₂ must be between 50 and 100%.');
+        else setErr('oxygen', '');
+      }
+    } else if (name === 'weight') {
+      if (v !== '' && !oneDecRe.test(v)) setErr('weight', 'Weight must be a number with up to one decimal.'); else setErr('weight', '');
+    }
+    setMetricErrors(nextErrors);
   };
 
   const handleFileChange = (e) => {
@@ -464,6 +508,10 @@ export default function CrewHealthRecords() {
     e.preventDefault();
     if (!form.recordType || !form.condition) {
       setFormError('Record type and condition are required');
+      return;
+    }
+    if (Object.keys(metricErrors).length > 0) {
+      setFormError('Please fix the highlighted metric errors.');
       return;
     }
     setFormError('');
@@ -1059,12 +1107,24 @@ export default function CrewHealthRecords() {
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontWeight: 600, marginBottom: 8 }}>Health Metrics</div>
                 <div className="form-grid">
-                  {Object.entries(METRIC_LABELS).map(([key, label]) => (
-                    <div key={key} className="form-group">
-                      <label>{label}</label>
-                      <input name={key} className="form-control" value={form.metrics?.[key] || ''} onChange={handleMetricsChange} />
-                    </div>
-                  ))}
+                  {Object.entries(METRIC_LABELS).map(([key, label]) => {
+                    const props = {};
+                    if (key === 'temperature') { props.type = 'number'; props.step = '0.1'; props.min = '30'; props.max = '43'; }
+                    if (key === 'heartRate') { props.type = 'number'; props.step = '1'; props.min = '20'; props.max = '220'; }
+                    if (key === 'bpSystolic') { props.type = 'number'; props.step = '1'; props.min = '70'; props.max = '260'; }
+                    if (key === 'bpDiastolic') { props.type = 'number'; props.step = '1'; props.min = '30'; props.max = '160'; }
+                    if (key === 'oxygen') { props.type = 'number'; props.step = '1'; props.min = '50'; props.max = '100'; }
+                    if (key === 'weight') { props.type = 'number'; props.step = '0.1'; }
+                    return (
+                      <div key={key} className="form-group">
+                        <label>{label}</label>
+                        <input name={key} className="form-control" value={form.metrics?.[key] || ''} onChange={handleMetricsChange} {...props} />
+                        {metricErrors[key] && (
+                          <div className="error-message" style={{ marginTop: 6 }}><i className="fas fa-exclamation-circle"></i> {metricErrors[key]}</div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
               <div className="form-group">

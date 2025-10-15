@@ -9,7 +9,6 @@ import {
   deleteEmergencyReport,
 } from '../../lib/emergencyReportApi';
 import './emergencyOfficerDashboard.css';
-import { jsPDF } from 'jspdf';
 
 const STATUS_OPTIONS = [
   { value: 'ALL', label: 'All Statuses' },
@@ -98,6 +97,18 @@ export default function EmergencyReports() {
   const onLogout = () => {
     clearSession();
     navigate('/login');
+  };
+
+  // Lazy-load jsPDF from CDN to avoid bundling dependency
+  const ensureJsPDF = async () => {
+    if (window.jspdf && window.jspdf.jsPDF) return window.jspdf.jsPDF;
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+      s.onload = resolve; s.onerror = () => reject(new Error('Failed to load jsPDF'));
+      document.head.appendChild(s);
+    });
+    return window.jspdf.jsPDF;
   };
 
   const fetchReports = async () => {
@@ -280,9 +291,9 @@ export default function EmergencyReports() {
     URL.revokeObjectURL(url);
   };
 
-  const downloadReportPDF = (report) => {
+  const downloadReportPDF = async (report) => {
     if (!report) return;
-
+    const jsPDF = await ensureJsPDF();
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
