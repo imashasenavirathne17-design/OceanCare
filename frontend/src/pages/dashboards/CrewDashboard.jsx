@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearSession, getUser } from '../../lib/token';
 import './crewDashboard.css';
 import CrewSidebar from './CrewSidebar';
+import { listMyMedicalRecords } from '../../lib/crewMedicalRecordsApi';
 
 export default function CrewDashboard() {
   const navigate = useNavigate();
@@ -13,16 +14,70 @@ export default function CrewDashboard() {
     navigate('/login');
   };
 
+  const [latestCheck, setLatestCheck] = useState(null);
+  const [weeklyData, setWeeklyData] = useState([]); // [{date, tempC, hr}]
+  const [loadingVitals, setLoadingVitals] = useState(false);
+
+  useEffect(() => {
+    const fetchVitals = async () => {
+      setLoadingVitals(true);
+      try {
+        const items = await listMyMedicalRecords({ type: 'Daily Check' });
+        const arr = Array.isArray(items) ? items : [];
+        // Normalize: pick latest by date
+        const sorted = [...arr].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+        setLatestCheck(sorted[0] || null);
+
+        // Build last 7 days dataset
+        const byDate = new Map();
+        arr.forEach((it) => {
+          const d = String(it.date || '').slice(0, 10);
+          const m = it.metadata || {};
+          const unit = (m.temperatureUnit || 'C').toUpperCase();
+          let t = parseFloat(m.temperature);
+          if (!Number.isNaN(t) && unit === 'F') t = ((t - 32) * 5) / 9;
+          const hr = m.heartRate ? parseInt(m.heartRate, 10) : undefined;
+          if (d) {
+            byDate.set(d, {
+              date: d,
+              tempC: Number.isFinite(t) ? parseFloat(t.toFixed(1)) : undefined,
+              hr: Number.isFinite(hr) ? hr : undefined,
+            });
+          }
+        });
+        const today = new Date();
+        const days = [];
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date(today);
+          d.setDate(today.getDate() - i);
+          const key = d.toISOString().slice(0, 10);
+          const label = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+          const rec = byDate.get(key) || { date: key, tempC: undefined, hr: undefined };
+          days.push({ ...rec, label });
+        }
+        setWeeklyData(days);
+      } catch (e) {
+        setLatestCheck(null);
+        setWeeklyData([]);
+      } finally {
+        setLoadingVitals(false);
+      }
+    };
+    fetchVitals();
+  }, []);
+
   const chart = useMemo(() => {
-    const temperatures = [36.5, 36.7, 36.6, 36.8, 37.0, 36.9, 36.8];
-    const heartRates = [70, 72, 68, 75, 74, 72, 72];
-    const dates = ['10/09', '10/10', '10/11', '10/12', '10/13', '10/14', '10/15'];
-    const maxTemp = Math.max(...temperatures);
-    const maxHR = Math.max(...heartRates);
-    const maxValue = Math.max(maxTemp, maxHR);
+    const temps = weeklyData.map((d) => d.tempC).filter((v) => typeof v === 'number');
+    const hrs = weeklyData.map((d) => d.hr).filter((v) => typeof v === 'number');
+    const temperatures = weeklyData.map((d) => (typeof d.tempC === 'number' ? d.tempC : 0));
+    const heartRates = weeklyData.map((d) => (typeof d.hr === 'number' ? d.hr : 0));
+    const dates = weeklyData.map((d) => d.label || '');
+    const maxTemp = temps.length ? Math.max(...temps) : 1;
+    const maxHR = hrs.length ? Math.max(...hrs) : 1;
+    const maxValue = Math.max(maxTemp, maxHR, 1);
     const scale = (v) => (v / maxValue) * 150; // 150px chart height
     return { temperatures, heartRates, dates, scale };
-  }, []);
+  }, [weeklyData]);
 
   return (
     <div className="crew-dashboard">
@@ -134,19 +189,31 @@ export default function CrewDashboard() {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20, marginTop: 20 }}>
               <div style={{ textAlign: 'center', padding: 15, borderRadius: 8, background: '#f8f9fa' }}>
-                <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 5, color: 'var(--primary)' }}>36.8°C</div>
+                <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 5, color: 'var(--primary)' }}>
+                  {latestCheck && latestCheck.metadata && latestCheck.metadata.temperature
+                    ? `${latestCheck.metadata.temperatureUnit === 'F' ? (((parseFloat(latestCheck.metadata.temperature) - 32) * 5 / 9).toFixed(1)) : parseFloat(latestCheck.metadata.temperature).toFixed(1)}°C`
+                    : '—'}
+                </div>
                 <div style={{ fontSize: 14, color: '#777' }}>Temperature</div>
               </div>
               <div style={{ textAlign: 'center', padding: 15, borderRadius: 8, background: '#f8f9fa' }}>
-                <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 5, color: 'var(--primary)' }}>72 BPM</div>
+                <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 5, color: 'var(--primary)' }}>
+                  {latestCheck && latestCheck.metadata && latestCheck.metadata.heartRate ? `${latestCheck.metadata.heartRate} BPM` : '—'}
+                </div>
                 <div style={{ fontSize: 14, color: '#777' }}>Heart Rate</div>
               </div>
               <div style={{ textAlign: 'center', padding: 15, borderRadius: 8, background: '#f8f9fa' }}>
-                <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 5, color: 'var(--primary)' }}>118/76</div>
+                <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 5, color: 'var(--primary)' }}>
+                  {latestCheck && latestCheck.metadata && (latestCheck.metadata.systolic || latestCheck.metadata.diastolic)
+                    ? `${latestCheck.metadata.systolic || '—'}/${latestCheck.metadata.diastolic || '—'}`
+                    : '—'}
+                </div>
                 <div style={{ fontSize: 14, color: '#777' }}>Blood Pressure</div>
               </div>
               <div style={{ textAlign: 'center', padding: 15, borderRadius: 8, background: '#f8f9fa' }}>
-                <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 5, color: 'var(--success)' }}>98%</div>
+                <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 5, color: 'var(--success)' }}>
+                  {latestCheck && latestCheck.metadata && latestCheck.metadata.oxygen ? `${latestCheck.metadata.oxygen}%` : '—'}
+                </div>
                 <div style={{ fontSize: 14, color: '#777' }}>Oxygen Saturation</div>
               </div>
             </div>
