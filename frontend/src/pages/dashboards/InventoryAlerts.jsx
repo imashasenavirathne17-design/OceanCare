@@ -11,7 +11,6 @@ import {
 } from '../../lib/healthApi';
 import InventorySidebar from './InventorySidebar';
 import './inventoryDashboard.css';
-import './healthOfficerDashboard.css';
 
 const makeDefaultAlertForm = () => ({
   itemName: '',
@@ -251,7 +250,7 @@ export default function InventoryAlerts() {
   const actionsDisabled = Boolean(processing);
 
   return (
-    <div className="inventory-dashboard health-dashboard">
+    <div className="inventory-dashboard">
       <div className="dashboard-container">
         <InventorySidebar onLogout={onLogout} />
 

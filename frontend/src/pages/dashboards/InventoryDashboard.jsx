@@ -1,24 +1,81 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { clearSession, getUser } from '../../lib/token';
+import { clearSession, getUser, getToken } from '../../lib/token';
 import './inventoryDashboard.css';
 import InventorySidebar from './InventorySidebar';
 
 export default function InventoryDashboard() {
   const navigate = useNavigate();
   const user = getUser();
+  const token = getToken();
+  const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-  // Add item state
-  const [item, setItem] = useState({ supplier: '', name: '', qty: '', exp: '', location: '', zone: 'medical-room' });
+  // Hardcoded fallback data
   const [items, setItems] = useState([
     { id: 'I-1001', name: 'Bandages', qty: 12, exp: '2026-01-10', location: 'Med Room Shelf A', zone: 'medical-room' },
     { id: 'I-1002', name: 'Insulin', qty: 4, exp: '2025-10-12', location: 'Fridge B', zone: 'medical-room' },
     { id: 'I-1003', name: 'Flu Vaccine', qty: 30, exp: '2026-05-01', location: 'Med Room Shelf C', zone: 'medical-room' },
   ]);
+
+  // Real inventory data state
+  const [realItems, setRealItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
   const [history, setHistory] = useState([]);
 
   // Offline sync flag (demo)
   const [offline, setOffline] = useState(false);
+
+  // Fetch real inventory data from API
+  const fetchInventory = useCallback(async () => {
+    if (!token) return;
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const params = new URLSearchParams({ limit: '200' });
+      const res = await fetch(`${API}/api/inventory?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        throw new Error(`Failed to load inventory: ${res.status}`);
+      }
+
+      const data = await res.json();
+      const mappedItems = (data.items || []).map((item) => ({
+        id: item._id || item.id,
+        name: item.name,
+        qty: item.qty || 0,
+        min: item.min || 0,
+        exp: item.expiry ? new Date(item.expiry).toISOString().slice(0, 10) : '',
+        location: item.zone || 'General storage',
+        zone: item.zone || 'general',
+        category: item.category || 'General',
+        supplier: item.supplier || '',
+        barcode: item.barcode || '',
+        notes: item.notes || '',
+      }));
+
+      setRealItems(mappedItems);
+      // Optionally update the main items state with real data
+      // setItems(mappedItems);
+    } catch (err) {
+      setError(err.message || 'Error loading inventory');
+      console.error('Error fetching inventory:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [API, token]);
+
+  // Initial data fetch
+  useEffect(() => {
+    if (token) {
+      fetchInventory();
+    }
+  }, [fetchInventory, token]);
 
   // Auto logout
   useEffect(() => {
@@ -32,25 +89,93 @@ export default function InventoryDashboard() {
   const onLogout = () => { clearSession(); navigate('/login'); };
   const scrollToId = (id) => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth' }); };
 
-  // Derived
-  const lowThresholds = useMemo(() => ({ Bandages: 20, Insulin: 10, 'Flu Vaccine': 15 }), []);
-  const lowStock = items.filter(it => (lowThresholds[it.name] ?? 10) > it.qty);
-  const nearExpiry = items.filter(it => {
-    const diff = (new Date(it.exp) - new Date()) / (1000 * 60 * 60 * 24);
-    return diff <= 30;
-  });
-  const expiredCount = items.filter(it => (new Date(it.exp) - new Date()) <= 0).length;
+  // Derived calculations - use real data when available, fallback to hardcoded
+  const currentItems = realItems.length > 0 ? realItems : items;
 
-  const navigateTo = (page) => {
-    // In real app, route to specific page. For now, mimic original behavior.
-    alert(`Navigating to ${page} page...`);
+  const lowThresholds = useMemo(() => {
+    if (realItems.length > 0) {
+      // Create dynamic thresholds based on real item minimum stock levels
+      const thresholds = {};
+      realItems.forEach(item => {
+        if (item.name && item.min > 0) {
+          thresholds[item.name] = item.min;
+        }
+      });
+      return thresholds;
+    } else {
+      // Fallback to hardcoded thresholds
+      return { Bandages: 20, Insulin: 10, 'Flu Vaccine': 15 };
+    }
+  }, [realItems, items]);
+
+  const lowStock = useMemo(() => {
+    return currentItems.filter(item => {
+      const threshold = lowThresholds[item.name] ?? 10;
+      return item.qty <= (item.min || threshold);
+    });
+  }, [currentItems, lowThresholds]);
+
+  const nearExpiry = useMemo(() => {
+    return currentItems.filter(item => {
+      if (!item.exp) return false;
+      const diff = (new Date(item.exp) - new Date()) / (1000 * 60 * 60 * 24);
+      return diff <= 30 && diff > 0;
+    });
+  }, [currentItems]);
+
+  const expiredCount = useMemo(() => {
+    return currentItems.filter(item => {
+      if (!item.exp) return false;
+      return (new Date(item.exp) - new Date()) <= 0;
+    }).length;
+  }, [currentItems]);
+
+  const totalItems = useMemo(() => currentItems.length, [currentItems]);
+
+  const totalQuantity = useMemo(() => {
+    return currentItems.reduce((sum, item) => sum + (item.qty || 0), 0);
+  }, [currentItems]);
+
+  const categoriesCount = useMemo(() => {
+    const categories = {};
+    currentItems.forEach(item => {
+      categories[item.category] = (categories[item.category] || 0) + 1;
+    });
+    return categories;
+  }, [currentItems]);
+
+  const getCategoryIcon = (category) => {
+    const categoryIcons = {
+      'Medical': 'stethoscope',
+      'Medication': 'pills',
+      'Equipment': 'tools',
+      'Supplies': 'boxes',
+      'Emergency': 'ambulance',
+      'Surgical': 'syringe',
+      'Diagnostic': 'microscope',
+      'General': 'box',
+      'Pharmaceutical': 'capsules',
+      'Consumables': 'clipboard-list',
+      'Instruments': 'wrench',
+      'Linens': 'tshirt',
+      'Cleaning': 'broom',
+      'Office': 'file-alt',
+      'IT': 'laptop',
+      'Safety': 'shield-alt',
+      'Food': 'utensils',
+      'Beverages': 'coffee',
+      'Chemicals': 'flask',
+      'Electrical': 'bolt'
+    };
+
+    return categoryIcons[category] || 'box';
   };
 
-  // Simulate real-time updates (demo)
+  // Simulate real-time updates (demo) - can be enhanced to use WebSocket for live updates
   useEffect(() => {
     const t = setTimeout(() => {
       setHistory(h => [
-        { ts: new Date().toISOString(), user: user?.fullName || 'Inventory', action: 'fleet_transfer_initiated', payload: { note: 'Medical supplies requested from MV Ocean Voyager' } },
+        { ts: new Date().toISOString(), user: user?.fullName || 'Inventory', action: 'system_update', payload: { note: 'Dashboard refreshed with latest data' } },
         ...h,
       ]);
     }, 10000);
@@ -58,15 +183,6 @@ export default function InventoryDashboard() {
   }, [user]);
 
   const addHistory = (action, payload) => setHistory(h => [{ ts: new Date().toISOString(), user: user?.fullName || 'Inventory', action, payload }, ...h]);
-
-  const onAddItem = (e) => {
-    e.preventDefault();
-    if (!item.name || !item.qty || !item.exp) return alert('Name, quantity and expiry are required');
-    const newItem = { ...item, id: 'I-' + Math.floor(Math.random() * 90000 + 10000) };
-    setItems((is) => [newItem, ...is]);
-    addHistory('add', newItem);
-    setItem({ supplier: '', name: '', qty: '', exp: '', location: '', zone: 'medical-room' });
-  };
 
   const onUpdateQty = (id, delta) => {
     setItems((is) => is.map((it) => it.id === id ? { ...it, qty: Math.max(0, it.qty + delta) } : it));
@@ -92,293 +208,118 @@ export default function InventoryDashboard() {
             </div>
           </div>
 
-          {/* Dashboard Stats */}
-          <div className="stats-container">
-            <div className="stat-card">
-              <div className="stat-icon danger"><i className="fas fa-exclamation-circle"></i></div>
-              <div className="stat-content"><div className="stat-value">{lowStock.length}</div><div className="stat-label">Low Stock Items</div></div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon warning"><i className="fas fa-calendar-times"></i></div>
-              <div className="stat-content"><div className="stat-value">{nearExpiry.length}</div><div className="stat-label">Expiring Soon</div></div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon primary"><i className="fas fa-boxes"></i></div>
-              <div className="stat-content"><div className="stat-value">{items.length}</div><div className="stat-label">Total Items</div></div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-icon info"><i className="fas fa-sync-alt"></i></div>
-              <div className="stat-content"><div className="stat-value">12</div><div className="stat-label">Pending Transfers</div></div>
-            </div>
-          </div>
+          
 
-          {/* Quick Actions - cards */}
-          <div className="quick-actions">
-            <div className="action-card" onClick={() => scrollToId('add-item')}>
-              <div className="action-icon"><i className="fas fa-plus-circle"></i></div>
-              <div className="action-title">Add New Item</div>
-              <div className="action-desc">Add supplier info, item details, and storage location</div>
-            </div>
-            <div className="action-card" onClick={() => scrollToId('update-qty')}>
-              <div className="action-icon"><i className="fas fa-edit"></i></div>
-              <div className="action-title">Update Quantities</div>
-              <div className="action-desc">Adjust stock levels based on usage or deliveries</div>
-            </div>
-            <div className="action-card" onClick={() => navigateTo('barcode-scan')}>
-              <div className="action-icon"><i className="fas fa-barcode"></i></div>
-              <div className="action-title">Barcode Scan</div>
-              <div className="action-desc">Quick check-in/check-out with QR/barcode</div>
-            </div>
-            <div className="action-card" onClick={() => scrollToId('expiry')}>
-              <div className="action-icon"><i className="fas fa-calendar-alt"></i></div>
-              <div className="action-title">Expiry Tracking</div>
-              <div className="action-desc">Monitor expired and near-expiry items</div>
-            </div>
-            <div className="action-card" onClick={() => scrollToId('zones')}>
-              <div className="action-icon"><i className="fas fa-map-marked-alt"></i></div>
-              <div className="action-title">Storage Zones</div>
-              <div className="action-desc">Assign items to medical rooms, lockers, kits</div>
-            </div>
-            <div className="action-card" onClick={() => scrollToId('reports')}>
-              <div className="action-icon"><i className="fas fa-file-pdf"></i></div>
-              <div className="action-title">Generate Reports</div>
-              <div className="action-desc">Stock, expiry, and usage reports in PDF/CSV</div>
-            </div>
-          </div>
-
-          {/* Recent activity and Expiring items side by side */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 30, marginBottom: 30 }}>
-            <div className="activity-container">
-              <div className="section-header">
-                <div className="section-title">Recent Inventory Activity</div>
-                <a href="#history" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: 14 }}>View All</a>
-              </div>
-              <ul className="activity-list">
-                {history.length > 0 ? history.slice(0, 5).map((h, i) => (
-                  <li className="activity-item" key={i}>
-                    <div className="activity-icon"><i className="fas fa-sync-alt"></i></div>
-                    <div className="activity-content">
-                      <div className="activity-title">{h.action}</div>
-                      <div className="activity-desc"><code>{JSON.stringify(h.payload)}</code></div>
-                      <div className="activity-time">{new Date(h.ts).toLocaleString()}</div>
-                    </div>
-                  </li>
-                )) : (
-                  <>
-                    <li className="activity-item">
-                      <div className="activity-icon"><i className="fas fa-plus"></i></div>
-                      <div className="activity-content"><div className="activity-title">New Item Added</div><div className="activity-desc">Insulin vials (50 units) - Medical Storage A</div><div className="activity-time">Today</div></div>
-                    </li>
-                    <li className="activity-item">
-                      <div className="activity-icon"><i className="fas fa-minus"></i></div>
-                      <div className="activity-content"><div className="activity-title">Stock Updated</div><div className="activity-desc">Bandages reduced by 12 units - Medical Event</div><div className="activity-time">Yesterday</div></div>
-                    </li>
-                    <li className="activity-item">
-                      <div className="activity-icon"><i className="fas fa-sync-alt"></i></div>
-                      <div className="activity-content"><div className="activity-title">Inventory Synced</div><div className="activity-desc">Offline changes synchronized with main system</div><div className="activity-time">This week</div></div>
-                    </li>
-                  </>
-                )}
-              </ul>
-            </div>
-
+          {/* Inventory Summary */}
+          <div style={{ marginBottom: 30 }}>
             <div className="expiring-container">
               <div className="section-header">
-                <div className="section-title">Expiring Items</div>
-                <a href="#expiry" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: 14 }}>View All</a>
-              </div>
-              <ul className="expiring-list">
-                {items
-                  .map(it => ({
-                    ...it,
-                    days: Math.ceil((new Date(it.exp) - new Date()) / (1000 * 60 * 60 * 24)),
-                  }))
-                  .sort((a, b) => (a.days) - (b.days))
-                  .slice(0, 5)
-                  .map(it => (
-                    <li className="expiring-item" key={it.id}>
-                      <div className="expiring-time">{it.days <= 0 ? 'EXPIRED' : `${it.days} Days`}</div>
-                      <div className="expiring-content">
-                        <div className="expiring-title">{it.name}</div>
-                        <div className="expiring-desc">{it.location || 'General storage'}</div>
-                      </div>
-                      <div className={`expiring-status ${it.days <= 0 ? 'status-expired' : 'status-warning'}`}>{it.days <= 0 ? 'EXPIRED' : 'WARNING'}</div>
-                    </li>
-                  ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* 1. Add New Inventory Item */}
-          <section className="panel" id="add-item">
-            <h3 className="form-title">Add New Inventory Item</h3>
-            <form onSubmit={onAddItem}>
-              <div className="form-grid">
-                <div className="form-group"><label>Supplier</label><input className="form-control" value={item.supplier} onChange={(e) => setItem((s) => ({ ...s, supplier: e.target.value }))} placeholder="Supplier name" /></div>
-                <div className="form-group"><label>Item Name</label><input className="form-control" value={item.name} onChange={(e) => setItem((s) => ({ ...s, name: e.target.value }))} placeholder="e.g., Insulin" required /></div>
-                <div className="form-group"><label>Quantity</label><input type="number" min="0" className="form-control" value={item.qty} onChange={(e) => setItem((s) => ({ ...s, qty: e.target.valueAsNumber || 0 }))} required /></div>
-                <div className="form-group"><label>Expiry</label><input type="date" className="form-control" value={item.exp} onChange={(e) => setItem((s) => ({ ...s, exp: e.target.value }))} required /></div>
-                <div className="form-group"><label>Storage Location</label><input className="form-control" value={item.location} onChange={(e) => setItem((s) => ({ ...s, location: e.target.value }))} placeholder="e.g., Med Room Shelf A" /></div>
-                <div className="form-group"><label>Zone</label>
-                  <select className="form-control" value={item.zone} onChange={(e) => setItem((s) => ({ ...s, zone: e.target.value }))}>
-                    <option value="medical-room">Main Medical Room</option>
-                    <option value="life-raft">Life Raft Kits</option>
-                    <option value="crew-locker">Crew Deck Lockers</option>
-                  </select>
+                <div className="section-title">Inventory Summary</div>
+                <div style={{ color: 'var(--primary)', fontSize: 14 }}>
+                  {Object.keys(categoriesCount).length} Categories • {totalItems} Total Items
                 </div>
               </div>
-              <button className="btn btn-primary" type="submit">Add Item</button>
-            </form>
-          </section>
-
-          {/* 2. Update Inventory Quantities */}
-          <section className="panel" id="update-qty">
-            <h3 className="form-title">Update Inventory Quantities</h3>
-            <div className="table-responsive">
-              <table>
-                <thead><tr><th>ID</th><th>Name</th><th>Qty</th><th>Expiry</th><th>Location</th><th>Zone</th><th>Actions</th></tr></thead>
-                <tbody>
-                  {items.map((it) => (
-                    <tr key={it.id}>
-                      <td>{it.id}</td><td>{it.name}</td><td>{it.qty}</td><td>{it.exp}</td><td>{it.location}</td><td>{it.zone}</td>
-                      <td>
-                        <button className="btn btn-success" onClick={() => onUpdateQty(it.id, +1)}>+1</button>
-                        <button className="btn btn-danger" onClick={() => onUpdateQty(it.id, -1)} style={{ marginLeft: 8 }}>-1</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="category-summary">
+                {Object.keys(categoriesCount).length > 0 ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 15 }}>
+                    {Object.entries(categoriesCount).map(([category, count]) => (
+                      <div key={category} className="category-card">
+                        <div className="category-icon">
+                          <i className={`fas fa-${getCategoryIcon(category)}`}></i>
+                        </div>
+                        <div className="category-content">
+                          <div className="category-name">{category}</div>
+                          <div className="category-count">{count} items</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="empty-categories">
+                    <div className="empty-icon">
+                      <i className="fas fa-box-open"></i>
+                    </div>
+                    <div className="empty-content">
+                      <div className="empty-title">No Categories Found</div>
+                      <div className="empty-desc">Categories will appear as items are added to inventory</div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-          </section>
+          </div>
 
           {/* 3. Low Stock Alerts */}
           <section className="panel" id="alerts">
             <h3 className="form-title">Low Stock Alerts</h3>
-            {lowStock.length === 0 ? <div>No low stock items.</div> : (
+            {loading && <div className="info-banner">Loading inventory data...</div>}
+            {error && <div className="error-banner">{error}</div>}
+            {lowStock.length === 0 ? (
+              <div>No low stock items.</div>
+            ) : (
               <ul className="alert-list">
-                {lowStock.map((it) => (
-                  <li key={it.id}><span className="badge badge-warning">Low</span> {it.name}: {it.qty} (threshold {(lowThresholds[it.name] ?? 10)})</li>
-                ))}
+                {lowStock.map((it) => {
+                  const threshold = lowThresholds[it.name] ?? it.min ?? 10;
+                  return (
+                    <li key={it.id}>
+                      <span className="badge badge-warning">Low</span>
+                      {it.name}: {it.qty} units (threshold: {threshold})
+                      {realItems.length > 0 && <small style={{ marginLeft: 10, color: '#666' }}>Real-time data</small>}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </section>
 
           {/* 4. Expired / Near-Expiry */}
           <section className="panel" id="expiry">
-            <h3 className="form-title">Expired and Near-Expiry Items</h3>
+            <h3 className="form-title">Expired and Nearly Expired Items</h3>
             <div className="table-responsive">
               <table>
                 <thead><tr><th>Name</th><th>Expiry</th><th>Status</th></tr></thead>
                 <tbody>
-                  {items.map((it) => {
-                    const d = new Date(it.exp);
-                    const diff = (d - new Date()) / (1000 * 60 * 60 * 24);
-                    let status = 'ok';
-                    if (diff <= 0) status = 'expired'; else if (diff <= 30) status = 'near';
-                    return (
-                      <tr key={it.id} className={`row-${status}`}>
-                        <td>{it.name}</td><td>{it.exp}</td>
-                        <td>{status === 'ok' ? '-' : <span className={`badge ${status === 'expired' ? 'badge-danger' : 'badge-warning'}`}>{status}</span>}</td>
-                      </tr>
-                    );
-                  })}
+                  {currentItems
+                    .filter(it => it.exp)
+                    .map(it => ({
+                      ...it,
+                      days: Math.ceil((new Date(it.exp) - new Date()) / (1000 * 60 * 60 * 24)),
+                    }))
+                    .filter(it => it.days <= 30) // Only show items expiring within 30 days or already expired
+                    .map((it) => {
+                      const d = new Date(it.exp);
+                      const diff = (d - new Date()) / (1000 * 60 * 60 * 24);
+                      let status = 'ok';
+                      if (diff <= 0) status = 'expired'; else if (diff <= 30) status = 'near';
+                      return (
+                        <tr key={it.id} className={`row-${status}`}>
+                          <td>{it.name}</td><td>{it.exp}</td>
+                          <td>{status === 'ok' ? '-' : <span className={`badge ${status === 'expired' ? 'badge-danger' : 'badge-warning'}`}>{status}</span>}</td>
+                        </tr>
+                      );
+                    })}
+                  {currentItems.filter(it => it.exp && Math.ceil((new Date(it.exp) - new Date()) / (1000 * 60 * 60 * 24)) <= 30).length === 0 && (
+                    <tr>
+                      <td colSpan={3} style={{ textAlign: 'center', padding: 20, color: '#777' }}>
+                        No items expiring within 30 days.
+                        {realItems.length > 0 && <small style={{ display: 'block', marginTop: 5 }}>Using real-time data</small>}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
           </section>
 
-          {/* 5. Storage Zones */}
-          <section className="panel" id="zones">
-            <h3 className="form-title">Storage Zones</h3>
-            <div className="zones-grid">
-              {['medical-room', 'life-raft', 'crew-locker'].map((z) => (
-                <div key={z} className="zone-card">
-                  <div className="zone-title">{z.replace('-', ' ')}</div>
-                  <div className="zone-list">
-                    {items.filter(it => it.zone === z).map(it => <div key={it.id} className="zone-item">{it.name} <span className="qty">{it.qty}</span></div>)}
-                    {items.filter(it => it.zone === z).length === 0 && <div className="muted">No items</div>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+          
 
-          {/* 6. Usage monitor (linked to medical events) */}
-          <section className="panel" id="usage">
-            <h3 className="form-title">Usage Monitor</h3>
-            <p>When medical treatments are logged, linked inventory will decrement automatically. (Integration placeholder)</p>
-          </section>
+          
 
-          {/* 7. Reports */}
-          <section className="panel" id="reports">
-            <h3 className="form-title">Reports</h3>
-            <div className="form-grid">
-              <div className="form-group"><label>Type</label>
-                <select className="form-control">
-                  <option>Stock</option>
-                  <option>Expiry</option>
-                  <option>Usage</option>
-                </select>
-              </div>
-              <div className="form-group"><label>From</label><input type="date" className="form-control" /></div>
-              <div className="form-group"><label>To</label><input type="date" className="form-control" /></div>
-            </div>
-            <div>
-              <button className="btn btn-success"><i className="fas fa-file-excel"></i> Export CSV</button>
-              <button className="btn btn-primary" style={{ marginLeft: 10 }}><i className="fas fa-file-pdf"></i> Export PDF</button>
-            </div>
-          </section>
+          
 
-          {/* 8. History / Audit */}
-          <section className="panel" id="history">
-            <h3 className="form-title">History / Audit Trail</h3>
-            <div className="table-responsive">
-              <table>
-                <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Payload</th></tr></thead>
-                <tbody>
-                  {history.map((h, i) => (
-                    <tr key={i}><td>{new Date(h.ts).toLocaleString()}</td><td>{h.user}</td><td>{h.action}</td><td><code>{JSON.stringify(h.payload)}</code></td></tr>
-                  ))}
-                  {history.length === 0 && <tr><td colSpan={4}>No history yet.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          
 
-          {/* 9. Offline Sync */}
-          <section className="panel" id="sync">
-            <h3 className="form-title">Offline Sync</h3>
-            <p>{offline ? 'You are offline. Changes will be queued and synced when connection resumes.' : 'You are online. Changes sync in real-time.'}</p>
-          </section>
-
-          {/* 10-11. Predictive & Thresholds */}
-          <section className="panel" id="predict">
-            <h3 className="form-title">Predictive Restocking</h3>
-            <p>Recommendations based on past voyages and disease trends (placeholder).</p>
-          </section>
-          <section className="panel" id="thresholds">
-            <h3 className="form-title">Auto-reorder Threshold Adjustment</h3>
-            <p>Automatically adjusts ordering levels using historical consumption and trip length (placeholder).</p>
-          </section>
-
-          {/* 12. Transfer Between Ships */}
-          <section className="panel" id="transfer">
-            <h3 className="form-title">Inventory Transfer</h3>
-            <p>Share or transfer stock between ships if multiple vessels are connected (placeholder).</p>
-          </section>
-
-          {/* 13. Barcode / QR Scanning */}
-          <section className="panel" id="scan">
-            <h3 className="form-title">Barcode / QR Scanning</h3>
-            <p>Quick check-in/out and expiry validation integration (placeholder).</p>
-          </section>
-
-          {/* 14. Waste & Disposal */}
-          <section className="panel" id="waste">
-            <h3 className="form-title">Waste & Disposal Logging</h3>
-            <p>Log damaged/expired goods and disposal details for audits (placeholder).</p>
-          </section>
+          
 
         </main>
       </div>

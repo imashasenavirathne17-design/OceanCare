@@ -99,7 +99,7 @@ function HealthLibrary() {
 
           <div className="articles-grid">
             <div className="article-card">
-              <div className="article-image" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1599901860904-17e6ed7083a0?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80')" }}></div>
+              <div className="article-image" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1659366100362-d4547c23ceeb?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&q=80&w=1170')" }}></div>
               <div className="article-content">
                 <div className="article-meta">
                   <span><i className="far fa-calendar" aria-hidden="true"></i> June 15, 2023</span>
@@ -112,7 +112,7 @@ function HealthLibrary() {
             </div>
 
             <div className="article-card">
-              <div className="article-image" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1571019614244-c5d3f6c86c84?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80')" }}></div>
+              <div className="article-image" style={{ backgroundImage: "url('https://plus.unsplash.com/premium_photo-1670426501176-d772b7bcca4d?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NXx8aHlkcmF0aW9ufGVufDB8fDB8fHww&auto=format&fit=crop&q=60&w=600')" }}></div>
               <div className="article-content">
                 <div className="article-meta">
                   <span><i className="far fa-calendar" aria-hidden="true"></i> May 28, 2023</span>
@@ -125,7 +125,7 @@ function HealthLibrary() {
             </div>
 
             <div className="article-card">
-              <div className="article-image" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1505576399279-565b52d4ac71?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80')" }}></div>
+              <div className="article-image" style={{ backgroundImage: "url('https://plus.unsplash.com/premium_photo-1681823529814-20ffe7df85f2?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8OXx8SW5qdXJ5fGVufDB8fDB8fHww&auto=format&fit=crop&q=60&w=600')" }}></div>
               <div className="article-content">
                 <div className="article-meta">
                   <span><i className="far fa-calendar" aria-hidden="true"></i> May 10, 2023</span>
@@ -161,7 +161,7 @@ function HealthLibrary() {
               </ol>
             </div>
             <div className="guide-image">
-              <img src="https://images.unsplash.com/photo-1551601651-2a8555f1a136?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" alt="Blood Pressure Monitoring" />
+              <img src="https://images.unsplash.com/photo-1640249306698-28854d875b76?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NHx8YSUyMEJsb29kJTIwUHJlc3N1cmUlMjBNb25pdG9yfGVufDB8fDB8fHww&auto=format&fit=crop&q=60&w=600" alt="Blood Pressure Monitoring" />
             </div>
           </div>
 
@@ -179,7 +179,7 @@ function HealthLibrary() {
               </ol>
             </div>
             <div className="guide-image">
-              <img src="https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80" alt="CPR Procedure" />
+              <img src="https://media.istockphoto.com/id/174225235/photo/cpr-chest-compressions.webp?a=1&b=1&s=612x612&w=0&k=20&c=kYaFv5_p5tiV-DE6-Nt9Bdkrf0KrhfY0iVwi9VyEI4A=" alt="CPR Procedure" />
             </div>
           </div>
         </div>

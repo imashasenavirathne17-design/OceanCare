@@ -23,8 +23,18 @@ export default function CrewSidebar({ onLogout }) {
           </NavLink>
         </li>
         <li>
+          <NavLink to="/dashboard/crew/health-check" className={({ isActive }) => (isActive ? 'active' : '')}>
+            <i className="fas fa-heartbeat"></i> Daily Health Check
+          </NavLink>
+        </li>
+        <li>
           <NavLink to="/dashboard/crew/records" className={({ isActive }) => (isActive ? 'active' : '')}>
             <i className="fas fa-file-medical"></i> Health Records
+          </NavLink>
+        </li>
+        <li>
+          <NavLink to="/dashboard/crew/symptoms" className={({ isActive }) => (isActive ? 'active' : '')}>
+            <i className="fas fa-notes-medical"></i> Symptom Report
           </NavLink>
         </li>
         <li>

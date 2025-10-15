@@ -1,0 +1,86 @@
+/* Public Modern UI Theme */
+:root{
+  --bg:#f5f7fb;
+  --surface:#ffffff;
+  --text:#1f2937;
+  --muted:#6b7280;
+  --primary:#3A86FF;
+  --primary-600:#2f6ed1;
+  --accent:#2AA2A6;
+  --accent-600:#208287;
+  --warning:#f59e0b;
+  --success:#16a34a;
+  --radius:12px;
+  --shadow:0 8px 24px rgba(15,23,42,0.06);
+}
+
+/* Layout */
+.container{width:min(1200px,92%);margin-inline:auto}
+body{background:var(--bg);color:var(--text)}
+section{padding:56px 0}
+.section-title{text-align:center;margin-bottom:22px}
+.section-title h2{margin:0 0 8px;font-size:clamp(22px,2.6vw,32px)}
+.section-title p{color:var(--muted);margin:0}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:10px;padding:11px 18px;border-radius:12px;border:2px solid transparent;font-weight:700;cursor:pointer;transition:.2s}
+.btn-primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+.btn-primary:hover{background:var(--primary-600);border-color:var(--primary-600)}
+.btn-outline{background:transparent;color:var(--primary);border-color:var(--primary)}
+.btn-outline:hover{background:rgba(58,134,255,.08)}
+.btn-ghost{background:transparent;color:var(--text)}
+.btn-lg{padding:14px 22px;border-radius:14px}
+.btn-sm{padding:7px 12px;border-radius:10px}
+
+/* Cards */
+.card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow)}
+
+/* Header (existing markup) overrides for modern look handled in header.css; add subtle backdrop */
+header{backdrop-filter:saturate(180%) blur(6px);}
+
+/* Hero */
+.hero{padding:84px 0;background:linear-gradient(180deg, rgba(58,134,255,.12), rgba(42,162,166,.08));}
+.hero .container{display:grid;grid-template-columns:1.1fr .9fr;align-items:center;gap:24px}
+.hero h2{font-size:clamp(28px,4.5vw,44px);margin:0 0 10px}
+.hero p{color:var(--muted);max-width:56ch;margin:0 0 18px}
+.hero .visual{position:relative;height:300px;border-radius:18px;overflow:hidden;background:#dbeafe}
+.hero .visual img{width:100%;height:100%;object-fit:cover}
+
+@media (max-width: 900px){.hero .container{grid-template-columns:1fr}.hero .visual{height:220px}}
+
+/* KPI strip */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.kpi{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);padding:16px;text-align:center}
+.kpi .value{font-weight:800;font-size:22px}
+.kpi .label{color:var(--muted);font-size:13px}
+@media (max-width: 900px){.kpis{grid-template-columns:repeat(2,1fr)}}
+
+/* Feature grid (used by Home, Features page) */
+.features-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:18px}
+.feature-card{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);padding:18px}
+.feature-card i{font-size:22px;color:var(--primary)}
+.feature-card h3{margin:10px 0 6px}
+.feature-card p{color:var(--muted);margin:0}
+
+/* Announcement list */
+.announcements-list{display:grid;grid-template-columns:1fr;gap:14px}
+.announcement-card{background:var(--surface);border-radius:14px;box-shadow:var(--shadow);padding:18px;border:1px solid rgba(2,6,23,.06)}
+.announcement-card .tag{display:inline-block;padding:4px 10px;border-radius:999px;background:rgba(58,134,255,.12);color:var(--primary);font-weight:700;margin-bottom:8px}
+.announcement-card h3{margin:6px 0 4px}
+.announcement-card .meta{color:var(--muted);font-size:13px;margin-bottom:8px}
+
+/* Health Library grid */
+.library-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:18px}
+.library-card{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);padding:18px}
+
+/* Emergency CTA */
+.emergency-cta{background:linear-gradient(135deg, rgba(250,204,21,.12), rgba(58,134,255,.08));border:1px dashed rgba(250,204,21,.5);padding:18px;border-radius:14px}
+
+/* Footer modernized */
+footer{background:#0b1b3a;color:#cbd5e1;padding:46px 0 24px;margin-top:40px}
+.footer-content{display:grid;grid-template-columns:2fr 1fr 1fr 1.2fr;gap:22px}
+footer h3{color:#fff;margin-top:0}
+footer a{color:#cbd5e1}
+footer .social-links a{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.08);margin-right:8px}
+footer .copyright{border-top:1px solid rgba(255,255,255,.08);margin-top:20px;padding-top:16px;text-align:center;color:#94a3b8}
+@media (max-width: 900px){.footer-content{grid-template-columns:1fr 1fr}.footer-content>div:nth-child(1){grid-column:span 2}}

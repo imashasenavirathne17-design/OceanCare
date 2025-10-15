@@ -89,7 +89,7 @@ function Emergency() {
 
           <div className="aid-grid">
             <div className="aid-card">
-              <div className="aid-image" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1576091160557-22c4d2c4c6c9?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80')" }}></div>
+              <div className="aid-image" style={{ backgroundImage: "url('https://media.istockphoto.com/id/174225235/photo/cpr-chest-compressions.webp?a=1&b=1&s=612x612&w=0&k=20&c=kYaFv5_p5tiV-DE6-Nt9Bdkrf0KrhfY0iVwi9VyEI4A=')" }}></div>
               <div className="aid-content">
                 <h3>CPR for Adults</h3>
                 <p>Learn the proper technique for cardiopulmonary resuscitation on adults in emergency situations.</p>
@@ -98,7 +98,7 @@ function Emergency() {
             </div>
 
             <div className="aid-card">
-              <div className="aid-image" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1551601651-2a8555f1a136?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80')" }}></div>
+              <div className="aid-image" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1728607727695-efb7a89f1530?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Nnx8Y2hva2luZyUyMGZvb2R8ZW58MHx8MHx8fDA%3D&auto=format&fit=crop&q=60&w=600')" }}></div>
               <div className="aid-content">
                 <h3>Choking Response</h3>
                 <p>How to perform the Heimlich maneuver and assist someone who is choking.</p>
@@ -107,7 +107,7 @@ function Emergency() {
             </div>
 
             <div className="aid-card">
-              <div className="aid-image" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1582719471384-8946dc3c9f44?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80')" }}></div>
+              <div className="aid-image" style={{ backgroundImage: "url('https://plus.unsplash.com/premium_photo-1726880466207-d85def51628f?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8RnJhY3R1cmV8ZW58MHx8MHx8fDA%3D&auto=format&fit=crop&q=60&w=600')" }}></div>
               <div className="aid-content">
                 <h3>Fracture Management</h3>
                 <p>How to stabilize fractures and sprains until professional medical help is available.</p>
